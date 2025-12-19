@@ -1,0 +1,225 @@
+{% extends "taller/base.html" %}
+
+{% block title %}Vehículo {{ vehiculo.patente }} – Taller Mecánico Ale Gavilan{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+  <div>
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
+        <i class="bi bi-car-front me-1"></i> Ficha de vehículo
+      </span>
+
+      {% if vehiculo.cliente %}
+        <span class="badge rounded-pill bg-primary-soft text-uppercase small">
+          Cliente: {{ vehiculo.cliente.nombre_completo }}
+        </span>
+      {% endif %}
+
+      {# Chip de estado de service si tengo datos #}
+      {% if vehiculo.kilometraje_actual is not None and vehiculo.proximo_service_km %}
+        {% if vehiculo.kilometraje_actual >= vehiculo.proximo_service_km %}
+          <span class="badge rounded-pill bg-danger bg-opacity-25 text-danger text-uppercase small">
+            Service vencido / próximo
+          </span>
+        {% else %}
+          <span class="badge rounded-pill bg-success bg-opacity-25 text-success text-uppercase small">
+            Service en rango
+          </span>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <h1 class="h4 mb-1 gradient-text">
+      {{ vehiculo.patente }}
+    </h1>
+    <p class="text-secondary small mb-0">
+      {{ vehiculo.marca }} {{ vehiculo.modelo }}
+      {% if vehiculo.anio %}· Año {{ vehiculo.anio }}{% endif %}
+      {% if vehiculo.color %}· Color {{ vehiculo.color }}{% endif %}
+    </p>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2">
+    {% if vehiculo.cliente %}
+      <a href="{% url 'taller:cliente_detail' vehiculo.cliente.pk %}" class="btn btn-outline-premium btn-sm">
+        <i class="bi bi-person me-1"></i> Ver cliente
+      </a>
+    {% endif %}
+    <a href="{% url 'taller:vehiculo_update' vehiculo.pk %}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-pencil-square me-1"></i> Editar vehículo
+    </a>
+    <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm">
+      <i class="bi bi-clipboard-plus me-1"></i> Nuevo trabajo
+    </a>
+    <a href="{% url 'taller:vehiculo_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left-short me-1"></i> Volver al listado
+    </a>
+  </div>
+</div>
+
+{# STAT PILLS RÁPIDAS #}
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-4">
+    <div class="stat-pill h-100">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="stat-label">Km actual</span>
+        <i class="bi bi-speedometer2 text-muted"></i>
+      </div>
+      <div class="stat-value">
+        {% if vehiculo.kilometraje_actual is not None %}
+          {{ vehiculo.kilometraje_actual }}
+        {% else %}
+          0
+        {% endif %}
+      </div>
+      <div class="small text-secondary mt-1">
+        Kilometraje registrado en la última visita / actualización.
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="stat-pill h-100">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="stat-label">Próximo service</span>
+        <i class="bi bi-wrench-adjustable text-muted"></i>
+      </div>
+      <div class="stat-value">
+        {% if vehiculo.proximo_service_km %}
+          {{ vehiculo.proximo_service_km }}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+      <div class="small text-secondary mt-1">
+        Kilometraje sugerido para el próximo service.
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="stat-pill h-100">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="stat-label">Estado de cubiertas</span>
+        <i class="bi bi-circle-half text-muted"></i>
+      </div>
+      <div class="stat-value" style="font-size: 1.4rem;">
+        {% if vehiculo.estado_cubiertas %}
+          {{ vehiculo.estado_cubiertas|truncatechars:18 }}
+        {% else %}
+          N/D
+        {% endif %}
+      </div>
+      <div class="small text-secondary mt-1">
+        Referencia general tomada de las últimas revisiones.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  {# DATOS DEL VEHÍCULO #}
+  <div class="col-12 col-lg-6">
+    <div class="card-premium p-4 h-100">
+      <h2 class="h6 text-uppercase text-secondary mb-3">
+        <i class="bi bi-card-text me-2"></i>Datos principales
+      </h2>
+      <dl class="row small mb-0">
+        <dt class="col-4 text-secondary">Patente</dt>
+        <dd class="col-8 fw-semibold">{{ vehiculo.patente }}</dd>
+
+        <dt class="col-4 text-secondary">Marca / modelo</dt>
+        <dd class="col-8">
+          {{ vehiculo.marca|default:"" }} {{ vehiculo.modelo|default:"" }}
+        </dd>
+
+        {% if vehiculo.anio %}
+          <dt class="col-4 text-secondary">Año</dt>
+          <dd class="col-8">{{ vehiculo.anio }}</dd>
+        {% endif %}
+
+        {% if vehiculo.color %}
+          <dt class="col-4 text-secondary">Color</dt>
+          <dd class="col-8">{{ vehiculo.color }}</dd>
+        {% endif %}
+
+        {% if vehiculo.cliente %}
+          <dt class="col-4 text-secondary">Cliente</dt>
+          <dd class="col-8">
+            <a href="{% url 'taller:cliente_detail' vehiculo.cliente.pk %}"
+               class="link-light link-underline-opacity-0 link-underline-opacity-100-hover">
+              {{ vehiculo.cliente.nombre_completo }}
+            </a>
+          </dd>
+        {% endif %}
+
+        <dt class="col-4 text-secondary">Kilometraje actual</dt>
+        <dd class="col-8">
+          {% if vehiculo.kilometraje_actual is not None %}
+            {{ vehiculo.kilometraje_actual }} km
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+
+        <dt class="col-4 text-secondary">Próximo service</dt>
+        <dd class="col-8">
+          {% if vehiculo.proximo_service_km %}
+            {{ vehiculo.proximo_service_km }} km
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+
+        <dt class="col-4 text-secondary">Cubiertas</dt>
+        <dd class="col-8">
+          {{ vehiculo.estado_cubiertas|default:"—" }}
+        </dd>
+      </dl>
+
+      {% if vehiculo.notas %}
+        <hr class="border-secondary-subtle my-3">
+        <div class="small">
+          <div class="text-secondary text-uppercase mb-1">Notas del vehículo</div>
+          <p class="mb-0">{{ vehiculo.notas }}</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# USO EN EL TALLER + ACCIONES RÁPIDAS #}
+  <div class="col-12 col-lg-6">
+    <div class="card-premium p-4 h-100">
+      <h2 class="h6 text-uppercase text-secondary mb-3">
+        <i class="bi bi-activity me-2"></i>Uso en el taller
+      </h2>
+      <p class="small text-secondary mb-3">
+        Desde esta ficha podés ver la información clave del vehículo y acceder rápido
+        a las acciones más usadas del día a día.
+      </p>
+
+      <ul class="small text-secondary mb-4">
+        <li>Recordar el <strong>kilometraje actual</strong> al ingreso y cuándo debería volver.</li>
+        <li>Ver rápidamente quién es el <strong>dueño</strong> y abrir su ficha para ver más datos.</li>
+        <li>Usar el estado de <strong>cubiertas</strong> como referencia para futuras recomendaciones.</li>
+      </ul>
+
+      <div class="border-top border-secondary-subtle pt-3 mt-2">
+        <p class="small text-secondary mb-2">Accesos rápidos:</p>
+        <div class="d-flex flex-wrap gap-2">
+          <a href="{% url 'taller:trabajo_create' %}" class="btn btn-outline-premium btn-sm">
+            <i class="bi bi-clipboard-plus me-1"></i> Nuevo trabajo
+          </a>
+          <a href="{% url 'taller:trabajo_list' %}" class="btn btn-outline-premium btn-sm">
+            <i class="bi bi-clipboard-data me-1"></i> Ver trabajos
+          </a>
+          <a href="{% url 'taller:cliente_list' %}" class="btn btn-outline-premium btn-sm">
+            <i class="bi bi-people me-1"></i> Ver clientes
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

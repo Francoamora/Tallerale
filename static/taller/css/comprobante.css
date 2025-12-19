@@ -1,0 +1,307 @@
+/* ==========================================================
+   COMPROBANTE PRO – INVOICE MODE (Screen contrast FIX + Print OK)
+========================================================== */
+
+.comprobante-wrapper{
+  max-width:1200px;
+  margin:0 auto;
+}
+
+.comprobante-card{
+  background: linear-gradient(180deg, #0b1120, #0f172a);
+  border:1px solid rgba(148,163,184,.35);
+  border-radius:18px;
+  padding:1rem 1.1rem 1.1rem;
+  box-shadow: var(--shadow-xl);
+}
+
+/* ==========================================================
+   HEADER
+========================================================== */
+.comp-head{
+  display:flex;
+  justify-content:space-between;
+  gap:1rem;
+  padding-bottom:.75rem;
+  margin-bottom:.85rem;
+  border-bottom:1px solid rgba(148,163,184,.35);
+}
+
+.comp-brand{ display:flex; gap:.75rem; align-items:center; }
+
+.comp-mark{
+  width:42px;
+  height:42px;
+  border-radius:999px;
+  background: linear-gradient(135deg, #22c55e, #86efac);
+  display:grid;
+  place-items:center;
+  color:#022c22;
+  font-weight:900;
+  box-shadow: 0 0 0 2px rgba(2,6,23,.65);
+}
+
+.comp-title{
+  font-size:1.2rem;
+  font-weight:950;
+  color:#f9fafb;
+  line-height:1.05;
+}
+
+.comp-sub{
+  font-size:.72rem;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:#a7b0bf;
+}
+
+/* BLOQUE “taller / datos” (antes gris apagado) */
+.comp-shop{
+  text-align:right;
+  font-size:.80rem;
+  color:#e5e7eb;
+  line-height:1.35;
+  padding:.55rem .7rem;
+  border:1px solid rgba(148,163,184,.25);
+  border-radius:14px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(56,189,248,.12), transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(249,115,22,.10), transparent 60%),
+    rgba(15,23,42,.55);
+}
+
+.comp-shop .nro{
+  font-size:.72rem;
+  text-transform:uppercase;
+  letter-spacing:.10em;
+  color:#cbd5e1;
+  margin-bottom:.25rem;
+}
+
+.comp-shop .nro strong{
+  font-size:1.05rem;
+  letter-spacing:.02em;
+  color:#ffffff;
+}
+
+.comp-shop .shop-name strong{
+  color:#ffffff;
+}
+
+.comp-chips{ display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.45rem; }
+.comp-pill{
+  border-radius:999px;
+  padding:.16rem .62rem;
+  font-size:.68rem;
+  text-transform:uppercase;
+  letter-spacing:.10em;
+  border:1px solid rgba(148,163,184,.30);
+  color:#e5e7eb;
+  background: rgba(2,6,23,.35);
+  display:inline-flex;
+  align-items:center;
+  gap:.25rem;
+  white-space:nowrap;
+}
+.comp-pill.main{ border-color: rgba(34,197,94,.60); background: rgba(22,163,74,.18); }
+.comp-pill.status{ border-color: rgba(56,189,248,.55); background: rgba(56,189,248,.14); }
+
+/* ==========================================================
+   GRID
+========================================================== */
+.comp-grid{
+  display:grid;
+  grid-template-columns:1fr 360px;
+  gap:.9rem;
+}
+@media(max-width:992px){
+  .comp-grid{ grid-template-columns:1fr; }
+  .comp-shop{ text-align:left; }
+}
+
+/* ==========================================================
+   BOXES CLAROS (legibles)
+========================================================== */
+.comp-section{ margin-bottom:.75rem; }
+
+.comp-h{
+  font-size:.72rem;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:#b6bfce;
+  margin-bottom:.3rem;
+}
+
+.comp-box{
+  background:#f8fafc;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  padding:.7rem .8rem;
+  color:#111827;
+}
+
+.comp-meta{ color:#334155; font-size:.85rem; line-height:1.35; }
+.comp-meta strong{ color:#0f172a; font-weight:800; }
+
+.comp-text{
+  font-size:.90rem;
+  line-height:1.45;
+  color:#0f172a;
+}
+
+/* KV */
+.kv{
+  display:grid;
+  grid-template-columns:120px 1fr;
+  gap:.25rem .7rem;
+}
+.kv .k{
+  font-size:.7rem;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  color:#64748b;
+}
+.kv .v{
+  font-size:.92rem;
+  font-weight:800;
+  color:#0f172a;
+}
+.kv .v.muted{
+  font-weight:700;
+  color:#1f2937;
+  opacity:.95;
+}
+
+.comp-rule{
+  border:0;
+  border-top:1px solid rgba(148,163,184,.35);
+  margin:.55rem 0;
+}
+
+/* ==========================================================
+   TABLA – PAPER REAL (siempre legible)
+========================================================== */
+.comp-table{
+  background:#ffffff;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  overflow:hidden;
+}
+
+.comp-table table{
+  margin:0;
+  background:transparent !important;
+  color:#111827 !important;
+  --bs-table-color:#111827;
+  --bs-table-bg:transparent;
+  --bs-table-striped-bg:#f3f4f6;
+  --bs-table-hover-bg:#e9eef5;
+}
+
+.comp-table thead tr{
+  background: linear-gradient(90deg, #1e3a8a, #2563eb);
+}
+
+.comp-table thead th{
+  color:#ffffff !important;
+  font-size:.72rem;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  padding:.5rem .6rem !important;
+  border-bottom:1px solid rgba(255,255,255,.18) !important;
+}
+
+.comp-table td{
+  font-size:.86rem;
+  padding:.45rem .6rem !important;
+  color:#111827 !important;
+  border-color:#e5e7eb !important;
+}
+
+.comp-table tbody tr:nth-child(2n){
+  background:#f8fafc !important;
+}
+
+.comp-table td.text-end{
+  font-variant-numeric: tabular-nums;
+  font-weight:700;
+  color:#0f172a !important;
+}
+
+/* ==========================================================
+   RESUMEN ECONÓMICO – FIX de contraste EN PANTALLA
+   (esto es lo que te estaba fallando)
+========================================================== */
+.comp-tot{
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  border:1px solid rgba(37,99,235,.30);
+  border-radius:14px;
+  padding:.75rem .85rem;
+  box-shadow: 0 10px 25px rgba(2,6,23,.15);
+  color:#0f172a; /* base */
+}
+
+/* fuerza legibilidad aunque Bootstrap meta .small o .text-muted */
+.comp-tot,
+.comp-tot *{
+  color:#0f172a;
+}
+
+.comp-tot .small{
+  color:#334155 !important;
+  font-weight:700;
+}
+
+.comp-tot .small span:last-child{
+  color:#0f172a !important;
+  font-weight:900;
+}
+
+.comp-total{
+  font-size:1.25rem;
+  font-weight:950;
+  color:#1d4ed8 !important; /* total bien “impactante” */
+  letter-spacing:.01em;
+}
+
+/* ==========================================================
+   FOOTER / FIRMAS
+========================================================== */
+.comp-line{
+  border-top:1px solid rgba(203,213,225,.75);
+  width:240px;
+}
+
+.comp-sign-t{
+  font-size:.7rem;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:#cbd5e1;
+}
+
+.comp-foot{
+  margin-top:.85rem;
+  padding-top:.55rem;
+  border-top:1px dashed rgba(148,163,184,.45);
+  font-size:.80rem;
+  color:#e5e7eb;
+  line-height:1.45;
+}
+.comp-foot strong{ color:#ffffff; }
+.comp-foot em{ color:#cbd5e1; }
+
+/* ==========================================================
+   PRINT
+========================================================== */
+@media print{
+  html,body{
+    background:#ffffff!important;
+    color:#000;
+    font-size:10.5px;
+  }
+  nav,.btn-print-toolbar{ display:none!important; }
+  .comprobante-card{
+    box-shadow:none;
+    border-radius:10px;
+  }
+}

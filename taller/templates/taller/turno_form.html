@@ -1,0 +1,186 @@
+{% extends "taller/base.html" %}
+
+{% block title %}
+  {% if object %}Editar turno{% else %}Nuevo turno{% endif %} – Taller Mecánico Ale Gavilan
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+  <div>
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
+        <i class="bi bi-calendar-check me-1"></i> Turnos
+      </span>
+      <span class="badge rounded-pill bg-primary-soft text-uppercase small">
+        {% if object %}Editar turno{% else %}Nuevo turno{% endif %}
+      </span>
+      {% if object %}
+        <span class="badge rounded-pill bg-info bg-opacity-25 text-uppercase small">
+          {{ object.get_estado_display }}
+        </span>
+      {% endif %}
+    </div>
+    <h1 class="h5 mb-1">
+      {% if object %}
+        Editar turno · {{ object.fecha_hora|date:"d/m/Y H:i" }}
+      {% else %}
+        Nuevo turno
+      {% endif %}
+    </h1>
+    <p class="text-secondary small mb-0">
+      Organizá el ingreso de vehículos al taller con fecha, hora y motivo claros.
+    </p>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2">
+    {% if object %}
+      <a href="{% url 'taller:turno_detail' object.pk %}" class="btn btn-outline-premium btn-sm">
+        <i class="bi bi-eye me-1"></i> Ver detalle
+      </a>
+    {% endif %}
+    <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-list-ul me-1"></i> Volver al listado
+    </a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Columna principal -->
+  <div class="col-12 col-xl-8">
+    <div class="card-premium p-4 h-100">
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        {# Errores generales #}
+        {% if form.errors or form.non_field_errors %}
+          <div class="alert alert-danger small mb-3">
+            <strong>Revisá los campos marcados en rojo.</strong>
+            Asegurate de seleccionar cliente, fecha y hora válidas y cargar el motivo del turno.
+          </div>
+        {% endif %}
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger small mb-3">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <!-- Bloque: datos principales -->
+        <div class="mb-4">
+          <h2 class="h6 text-uppercase text-secondary mb-3">
+            <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 1</span>
+            Datos principales
+          </h2>
+
+          <div class="row g-3 small">
+            <!-- Cliente -->
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Cliente</label>
+              <div class="form-text small text-secondary mb-1">
+                Escribí nombre, apellido o DNI para buscar más rápido.
+              </div>
+              {{ form.cliente }}
+              {% for error in form.cliente.errors %}
+                <div class="invalid-feedback d-block small">{{ error }}</div>
+              {% endfor %}
+            </div>
+
+            <!-- Vehículo -->
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Vehículo</label>
+              {{ form.vehiculo }}
+              <div class="form-text small text-secondary">
+                Podés dejarlo vacío si todavía no cargaste el vehículo.
+              </div>
+              {% for error in form.vehiculo.errors %}
+                <div class="invalid-feedback d-block small">{{ error }}</div>
+              {% endfor %}
+            </div>
+
+            <!-- Fecha y hora -->
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Fecha y hora</label>
+              {{ form.fecha_hora }}
+              {% for error in form.fecha_hora.errors %}
+                <div class="invalid-feedback d-block small">{{ error }}</div>
+              {% endfor %}
+            </div>
+
+            <!-- Estado -->
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Estado del turno</label>
+              {{ form.estado }}
+              {% for error in form.estado.errors %}
+                <div class="invalid-feedback d-block small">{{ error }}</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloque: detalle -->
+        <div class="mb-4">
+          <h2 class="h6 text-uppercase text-secondary mb-3">
+            <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 2</span>
+            Detalle del turno
+          </h2>
+
+          <div class="row g-3 small">
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Motivo</label>
+              {{ form.motivo }}
+              {% for error in form.motivo.errors %}
+                <div class="invalid-feedback d-block small">{{ error }}</div>
+              {% endfor %}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Notas internas</label>
+              {{ form.notas }}
+              <div class="form-text small text-secondary">
+                Solo para uso interno del taller (no se muestra al cliente).
+              </div>
+              {% for error in form.notas.errors %}
+                <div class="invalid-feedback d-block small">{{ error }}</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-secondary-subtle my-3">
+
+        <!-- Botones -->
+        <div class="d-flex justify-content-end gap-2 mt-2">
+          <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-secondary btn-sm">
+            Cancelar
+          </a>
+          <button type="submit" class="btn btn-brand btn-sm">
+            <i class="bi bi-save2 me-1"></i>
+            {% if object %}Guardar cambios{% else %}Crear turno{% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Columna lateral: contexto / ayuda -->
+  <div class="col-12 col-xl-4">
+    <div class="card-premium p-4 h-100">
+      <h2 class="h6 text-uppercase text-secondary mb-3">
+        <i class="bi bi-lightbulb me-2"></i>Consejo rápido
+      </h2>
+      <p class="small text-secondary mb-2">
+        Usá los turnos para que el taller nunca se te descontrole:
+      </p>
+      <ul class="small text-secondary mb-3">
+        <li>Siempre cargá el <strong>motivo</strong> para saber qué viene a hacer el cliente.</li>
+        <li>Si ya existe el vehículo, asociarlo te ayuda a ver su historial al instante.</li>
+        <li>Las <strong>notas internas</strong> son ideales para aclarar detalles entre el equipo.</li>
+      </ul>
+      <p class="small text-secondary mb-0">
+        Cuanto más claros sean los turnos, más ordenado y profesional se siente el taller
+        para vos y para tus clientes.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

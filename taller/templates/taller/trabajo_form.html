@@ -1,0 +1,385 @@
+{% extends "taller/base.html" %}
+
+{% block title %}
+  {% if trabajo %}Editar trabajo{% else %}Nuevo trabajo{% endif %} – Ale Gavilan Cars Solutions
+{% endblock %}
+
+{% block content %}
+<style>
+  /* =========================
+     TRABAJO FORM (PRO)
+     - Base oscura: texto blanco
+     - Inputs legibles en tabla dark
+  ========================= */
+
+  /* ocultar flechas de input number */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+  .table-dark-custom .form-control,
+  .table-dark-custom .form-select{
+    min-height: 38px;
+    padding: .55rem .75rem;
+    background: rgba(2, 6, 23, .35);
+    color: rgba(255,255,255,.92);
+    border: 1px solid rgba(148,163,184,.35);
+  }
+  .table-dark-custom .form-control::placeholder{ color: rgba(226,232,240,.55); }
+  .table-dark-custom .form-control:focus,
+  .table-dark-custom .form-select:focus{
+    background: rgba(2, 6, 23, .45);
+    color: rgba(255,255,255,.92);
+    border-color: rgba(59,130,246,.55);
+    box-shadow: 0 0 0 .2rem rgba(59,130,246,.18);
+  }
+</style>
+
+<div class="row g-4 align-items-start">
+  <!-- COLUMNA PRINCIPAL -->
+  <div class="col-12 col-xl-8">
+    <div class="card-premium p-4 mb-4">
+
+      <!-- HEADER -->
+      <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-3">
+        <div>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
+              <i class="bi bi-tools me-1"></i>
+              {% if trabajo %}Editar trabajo{% else %}Nuevo trabajo{% endif %}
+            </span>
+            {% if trabajo %}
+              <span class="badge rounded-pill bg-info bg-opacity-25 text-uppercase small">
+                #{{ trabajo.id }} · {{ trabajo.get_estado_display }}
+              </span>
+            {% endif %}
+          </div>
+
+          <h1 class="h5 mb-1">
+            {% if trabajo and trabajo.vehiculo %}
+              {{ trabajo.vehiculo.patente }} · {{ trabajo.vehiculo.marca }} {{ trabajo.vehiculo.modelo }}
+            {% else %}
+              Datos del trabajo
+            {% endif %}
+          </h1>
+
+          <p class="text-secondary small mb-0">
+            Completá los datos principales y cargá los ítems necesarios para dejar el trabajo correctamente detallado.
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 justify-content-end">
+          {% if trabajo %}
+            <a href="{% url 'taller:trabajo_detail' trabajo.pk %}" class="btn btn-sm btn-outline-premium">
+              <i class="bi bi-eye me-1"></i> Ver detalle
+            </a>
+          {% endif %}
+          <a href="{% url 'taller:trabajo_list' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-list-ul me-1"></i> Volver al listado
+          </a>
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        {% if form.errors or form.non_field_errors or formset.errors or formset.non_form_errors %}
+          <div class="alert alert-danger py-2 small mb-3">
+            <strong>Revisá los campos marcados en rojo.</strong>
+            Confirmá que los datos principales estén completos y que exista al menos un ítem válido (con cantidad y precio).
+          </div>
+        {% endif %}
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 small mb-3">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <!-- PASO 1 -->
+        <div class="mb-4">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h2 class="h6 text-uppercase text-secondary mb-0">
+              <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 1</span>
+              Datos principales
+            </h2>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-lg-6">
+              <label class="form-label small fw-semibold">Cliente</label>
+              <div class="form-text small text-secondary mb-1">
+                Escribí nombre, apellido o DNI para buscar más rápido.
+              </div>
+              {{ form.cliente }}
+              {% for error in form.cliente.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-lg-6">
+              <label class="form-label small fw-semibold">Vehículo</label>
+              <div class="form-text small text-secondary mb-1">
+                Se filtra según el cliente. Si tiene varios, elegí el correcto.
+              </div>
+              {{ form.vehiculo }}
+              {% for error in form.vehiculo.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="form-label small fw-semibold">Estado del trabajo</label>
+              {{ form.estado }}
+              {% for error in form.estado.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="form-label small fw-semibold">Kilometraje al ingreso</label>
+              {{ form.kilometraje }}
+              {% if form.kilometraje.help_text %}
+                <div class="form-text small text-secondary">{{ form.kilometraje.help_text }}</div>
+              {% endif %}
+              {% for error in form.kilometraje.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="form-label small fw-semibold">Estado general</label>
+              {{ form.estado_general }}
+              {% if form.estado_general.help_text %}
+                <div class="form-text small text-secondary">{{ form.estado_general.help_text }}</div>
+              {% endif %}
+              {% for error in form.estado_general.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 2 -->
+        <div class="mb-4">
+          <h2 class="h6 text-uppercase text-secondary mb-2">
+            <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 2</span>
+            Descripción del trabajo
+          </h2>
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Resumen de lo realizado</label>
+            {{ form.resumen_trabajos }}
+            {% if form.resumen_trabajos.help_text %}
+              <div class="form-text small text-secondary">{{ form.resumen_trabajos.help_text }}</div>
+            {% endif %}
+            {% for error in form.resumen_trabajos.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Observaciones del cliente</label>
+              {{ form.observaciones_cliente }}
+              {% for error in form.observaciones_cliente.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Observaciones internas</label>
+              {{ form.observaciones_internas }}
+              {% for error in form.observaciones_internas.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 3 -->
+        <div class="mb-4">
+          <h2 class="h6 text-uppercase text-secondary mb-2">
+            <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 3</span>
+            Estado del vehículo
+          </h2>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Estado de cubiertas (este trabajo)</label>
+              {{ form.estado_cubiertas_trabajo }}
+              {% if form.estado_cubiertas_trabajo.help_text %}
+                <div class="form-text small text-secondary">{{ form.estado_cubiertas_trabajo.help_text }}</div>
+              {% endif %}
+              {% for error in form.estado_cubiertas_trabajo.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Próximo control (km)</label>
+              {{ form.proximo_control_km }}
+              {% if form.proximo_control_km.help_text %}
+                <div class="form-text small text-secondary">{{ form.proximo_control_km.help_text }}</div>
+              {% endif %}
+              {% for error in form.proximo_control_km.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Recomendaciones para la próxima visita</label>
+              {{ form.recomendaciones_proximo_service }}
+              {% if form.recomendaciones_proximo_service.help_text %}
+                <div class="form-text small text-secondary">{{ form.recomendaciones_proximo_service.help_text }}</div>
+              {% endif %}
+              {% for error in form.recomendaciones_proximo_service.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 4 -->
+        <div class="mb-4">
+          <h2 class="h6 text-uppercase text-secondary mb-2">
+            <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 4</span>
+            Resumen económico
+          </h2>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <label class="form-label small fw-semibold">Descuento ($)</label>
+              {{ form.descuento }}
+              <div class="form-text small text-secondary">Si no hay descuento, dejá el valor en 0.</div>
+              {% for error in form.descuento.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-md-8">
+              <div class="small text-secondary mt-md-1">
+                <p class="mb-0">
+                  Para guardar sin errores, asegurate de cargar al menos un ítem con <strong>cantidad (mínimo 1)</strong> y <strong>precio</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FECHAS (SOLO EDICIÓN) -->
+        {% if trabajo %}
+          <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h2 class="h6 text-uppercase text-secondary mb-0">
+                <i class="bi bi-calendar-event me-2"></i>Fechas del trabajo (opcional)
+              </h2>
+              <button
+                class="btn btn-outline-premium btn-sm"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#fechasTrabajo"
+                aria-expanded="false"
+                aria-controls="fechasTrabajo"
+              >
+                Mostrar / ocultar
+              </button>
+            </div>
+
+            <div class="collapse" id="fechasTrabajo">
+              <div class="row g-3 mt-1">
+                <div class="col-12 col-md-4">
+                  <label class="form-label small fw-semibold">Fecha/hora de ingreso</label>
+                  {{ form.fecha_ingreso }}
+                  {% for error in form.fecha_ingreso.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label small fw-semibold">Egreso estimado</label>
+                  {{ form.fecha_egreso_estimado }}
+                  {% for error in form.fecha_egreso_estimado.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label small fw-semibold">Egreso real</label>
+                  {{ form.fecha_egreso_real }}
+                  {% for error in form.fecha_egreso_real.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+
+        <hr class="border-secondary-subtle my-4">
+
+        <!-- ÍTEMS -->
+        <div class="mb-3 d-flex justify-content-between align-items-center gap-2 flex-wrap">
+          <h2 class="h6 text-uppercase text-secondary mb-0">
+            <i class="bi bi-list-check me-2"></i>Ítems del trabajo
+          </h2>
+          <span class="small text-secondary">
+            Si agregás una fila nueva, recordá cargar <strong>cantidad (mínimo 1)</strong> y <strong>precio</strong>.
+          </span>
+        </div>
+
+        {% if formset.non_form_errors %}
+          <div class="alert alert-danger py-2 small mb-3">
+            {{ formset.non_form_errors }}
+          </div>
+        {% endif %}
+
+        {{ formset.management_form }}
+
+        <div class="table-responsive mb-3">
+          <table class="table table-dark table-sm align-middle table-dark-custom mb-0 small">
+            <thead>
+              <tr class="text-white">
+                <th style="width: 16%;">Tipo</th>
+                <th>Descripción</th>
+                <th style="width: 10%;" class="text-end">Cant.</th>
+                <th style="width: 18%;" class="text-end">Precio unit.</th>
+                <th style="width: 8%;" class="text-center">Borrar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for form_item in formset %}
+                <tr>
+                  <td>
+                    {% for hidden in form_item.hidden_fields %}{{ hidden }}{% endfor %}
+                    {{ form_item.tipo }}
+                  </td>
+                  <td>{{ form_item.descripcion }}</td>
+                  <td class="text-end">{{ form_item.cantidad }}</td>
+                  <td class="text-end">{{ form_item.precio_unitario }}</td>
+                  <td class="text-center text-white-50">
+                    {% if form_item.instance.pk %}
+                      <div class="form-check d-flex justify-content-center">
+                        {{ form_item.DELETE }}
+                      </div>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                </tr>
+
+                {% for field in form_item.visible_fields %}
+                  {% for error in field.errors %}
+                    <tr>
+                      <td colspan="5">
+                        <div class="invalid-feedback d-block small">{{ error }}</div>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- BOTONES -->
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <a href="{% url 'taller:trabajo_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-brand">
+            <i class="bi bi-save2 me-1"></i> Guardar trabajo
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- COLUMNA LATERAL -->
+  <div class="col-12 col-xl-4">
+    <div class="card-premium p-4 mb-4">
+      <h2 class="h6 text-uppercase text-secondary mb-3">
+        <i class="bi bi-lightbulb me-2"></i>Tip rápido
+      </h2>
+
+      <p class="small text-secondary mb-2">
+        Para guardar sin errores:
+      </p>
+      <ul class="small text-secondary mb-3">
+        <li>Cargá <strong>al menos 1 ítem</strong> con descripción.</li>
+        <li>En ese ítem, poné <strong>cantidad mínimo 1</strong> y un <strong>precio unitario</strong>.</li>
+        <li>Si agregaste filas por error, marcá <strong>Borrar</strong> o dejalas completamente vacías.</li>
+      </ul>
+
+      <p class="small text-secondary mb-0">
+        Un buen resumen y recomendaciones te ahorran tiempo y dejan el trabajo más claro para el cliente.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,329 @@
+{% extends "taller/base.html" %}
+
+{% block title %}Panel – Ale Gavilan Cars Solutions{% endblock %}
+
+{% block content %}
+
+<div class="card-premium p-4 p-lg-5 mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div class="pe-lg-3">
+      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+        <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
+          <i class="bi bi-speedometer2 me-1"></i> Panel
+        </span>
+        <span class="badge rounded-pill bg-light bg-opacity-10 text-uppercase small">
+          Resumen operativo
+        </span>
+        <span class="badge rounded-pill bg-light bg-opacity-10 text-light border border-light border-opacity-25 small">
+          <i class="bi bi-clock me-1"></i> {% now "d/m/Y" %} · {% now "H:i" %} hs
+        </span>
+      </div>
+
+      <h1 class="h4 mb-1 gradient-text">Estado general del taller</h1>
+      <p class="text-secondary small mb-0">
+        Clientes, vehículos, trabajos y turnos — todo en un vistazo.
+      </p>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-lg-end">
+      <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm">
+        <i class="bi bi-clipboard-plus me-1"></i> Nuevo trabajo
+      </a>
+      <a href="{% url 'taller:turno_create' %}" class="btn btn-outline-premium btn-sm">
+        <i class="bi bi-calendar-plus me-1"></i> Nuevo turno
+      </a>
+      <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-outline-premium btn-sm">
+        <i class="bi bi-car-front me-1"></i> Vehículo
+      </a>
+      <a href="{% url 'taller:cliente_create' %}" class="btn btn-outline-premium btn-sm">
+        <i class="bi bi-person-plus me-1"></i> Cliente
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-12 col-md-3">
+    <div class="stat-pill h-100">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="stat-label">Clientes</span>
+        <i class="bi bi-people text-muted"></i>
+      </div>
+      <div class="stat-value">{{ total_clientes }}</div>
+      <div class="small text-secondary mt-1">Registrados y activos en el sistema.</div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="stat-pill h-100">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="stat-label">Vehículos</span>
+        <i class="bi bi-car-front text-muted"></i>
+      </div>
+      <div class="stat-value">{{ total_vehiculos }}</div>
+      <div class="small text-secondary mt-1">Unidades para seguimiento y servicios.</div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="stat-pill h-100">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="stat-label">Trabajos activos</span>
+        <i class="bi bi-wrench-adjustable text-muted"></i>
+      </div>
+      <div class="stat-value">{{ trabajos_activos }}</div>
+      <div class="small text-secondary mt-1">Ingresados, en proceso o listos.</div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="stat-pill h-100">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="stat-label">Turnos próximos</span>
+        <i class="bi bi-calendar-event text-muted"></i>
+      </div>
+      <div class="stat-value">{{ turnos_proximos_count }}</div>
+      <div class="small text-secondary mt-1">En agenda (máx. 5).</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+
+  <div class="col-12 col-lg-6">
+    <div class="card-premium p-4 h-100">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <div>
+          <h2 class="h6 text-uppercase text-secondary mb-1">
+            <i class="bi bi-calendar-week me-2"></i>Próximos turnos
+          </h2>
+          <p class="small text-secondary mb-0">Agenda de corto plazo.</p>
+        </div>
+        <div class="text-end">
+          <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small mb-1">
+            {{ turnos_proximos_count }} en agenda
+          </span>
+          <div>
+            <a href="{% url 'taller:turno_list' %}" class="small text-decoration-none text-secondary">
+              Ver agenda <i class="bi bi-arrow-right-short"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {% if turnos_proximos %}
+        <ul class="list-unstyled mb-0 small">
+          {% for turno in turnos_proximos %}
+            <li class="py-2 border-bottom border-secondary-subtle">
+              <div class="d-flex justify-content-between align-items-start gap-3">
+                <div class="flex-grow-1">
+                  <div class="fw-semibold">
+                    <i class="bi bi-clock-history me-1"></i>
+                    {{ turno.fecha_hora|date:"d/m/Y H:i" }}
+                  </div>
+
+                  <div class="text-secondary mt-1">
+                    {{ turno.motivo|default:"Sin motivo detallado" }}
+                  </div>
+
+                  <div class="text-secondary mt-1">
+                    {% if turno.vehiculo %}
+                      <span class="fw-semibold">{{ turno.vehiculo.patente }}</span> – {{ turno.vehiculo.marca }} {{ turno.vehiculo.modelo }}
+                    {% endif %}
+                    {% if turno.cliente %}
+                      · {{ turno.cliente.nombre_completo }}
+                    {% endif %}
+                  </div>
+                </div>
+
+                <div class="text-end">
+                  {# Badge por estado (no rompe: si no matchea, cae al neutro) #}
+                  {% with e=turno.estado %}
+                    {% if e == "CANCELADO" or e == "CANCELADA" %}
+                      <span class="badge rounded-pill bg-danger bg-opacity-25 text-uppercase">Cancelado</span>
+                    {% elif e == "CONFIRMADO" or e == "CONFIRMADA" %}
+                      <span class="badge rounded-pill bg-success bg-opacity-25 text-uppercase">Confirmado</span>
+                    {% elif e == "COMPLETADO" or e == "COMPLETADA" %}
+                      <span class="badge rounded-pill bg-success bg-opacity-25 text-uppercase">Completado</span>
+                    {% elif e == "PENDIENTE" %}
+                      <span class="badge rounded-pill bg-warning bg-opacity-25 text-uppercase">Pendiente</span>
+                    {% else %}
+                      <span class="badge rounded-pill bg-light bg-opacity-10 text-uppercase">
+                        {{ turno.get_estado_display }}
+                      </span>
+                    {% endif %}
+                  {% endwith %}
+                </div>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-secondary small mb-0">
+          No hay turnos cargados todavía.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card-premium p-4 h-100">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <div>
+          <h2 class="h6 text-uppercase text-secondary mb-1">
+            <i class="bi bi-clipboard-data me-2"></i>Trabajos recientes
+          </h2>
+          <p class="small text-secondary mb-0">Últimos movimientos del taller.</p>
+        </div>
+        <div class="text-end">
+          <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small mb-1">
+            {{ trabajos_recientes_count }} últimos
+          </span>
+          <div>
+            <a href="{% url 'taller:trabajo_list' %}" class="small text-decoration-none text-secondary">
+              Ver todos <i class="bi bi-arrow-right-short"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {% if trabajos_recientes %}
+        <ul class="list-unstyled mb-0 small">
+          {% for trabajo in trabajos_recientes %}
+            <li class="py-2 border-bottom border-secondary-subtle">
+              <div class="d-flex justify-content-between align-items-center gap-3">
+                <div class="flex-grow-1">
+                  <div class="fw-semibold">
+                    #{{ trabajo.id }}
+                    {% if trabajo.vehiculo %} · <span class="fw-semibold">{{ trabajo.vehiculo.patente }}</span>{% endif %}
+                  </div>
+
+                  <div class="text-secondary mt-1">
+                    {{ trabajo.fecha_ingreso|date:"d/m/Y H:i" }}
+                    {% if trabajo.vehiculo %} · {{ trabajo.vehiculo.marca }} {{ trabajo.vehiculo.modelo }}{% endif %}
+                    {% if trabajo.cliente %} · {{ trabajo.cliente.nombre_completo }}{% endif %}
+                  </div>
+
+                  <div class="mt-2 d-flex align-items-center flex-wrap gap-2">
+                    {# Badge por estado (si no matchea, deja el display) #}
+                    {% with e=trabajo.estado %}
+                      {% if e == "CANCELADO" or e == "CANCELADA" %}
+                        <span class="badge rounded-pill bg-danger bg-opacity-25 text-uppercase small">Cancelado</span>
+                      {% elif e == "FINALIZADO" or e == "FINALIZADA" or e == "COMPLETADO" or e == "COMPLETADA" %}
+                        <span class="badge rounded-pill bg-success bg-opacity-25 text-uppercase small">Finalizado</span>
+                      {% elif e == "EN_PROCESO" %}
+                        <span class="badge rounded-pill bg-warning bg-opacity-25 text-uppercase small">En proceso</span>
+                      {% else %}
+                        <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
+                          {{ trabajo.get_estado_display }}
+                        </span>
+                      {% endif %}
+                    {% endwith %}
+
+                    {% if trabajo.total_safe %}
+                      <span class="small text-secondary">
+                        <span class="text-muted">Total:</span> <span class="fw-semibold">$ {{ trabajo.total_safe }}</span>
+                      </span>
+                    {% endif %}
+                  </div>
+                </div>
+
+                <div class="text-end">
+                  <a href="{% url 'taller:trabajo_detail' trabajo.pk %}" class="btn btn-outline-premium btn-sm">
+                    Ver
+                  </a>
+                </div>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-secondary small mb-0">
+          Todavía no hay trabajos registrados.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<div class="row g-4">
+
+  <div class="col-12 col-lg-6">
+    <div class="card-premium p-4 h-100">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h6 text-uppercase text-secondary mb-0">
+          <i class="bi bi-star me-2"></i>Clientes con más vehículos
+        </h2>
+        {% if clientes_top %}
+          <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
+            Top {{ clientes_top|length }}
+          </span>
+        {% endif %}
+      </div>
+
+      {% if clientes_top %}
+        <ul class="list-unstyled mb-0 small">
+          {% for c in clientes_top %}
+            <li class="py-2 border-bottom border-secondary-subtle d-flex justify-content-between align-items-center gap-3">
+              <div class="flex-grow-1">
+                <div class="fw-semibold">{{ c.nombre_completo }}</div>
+                <div class="text-secondary mt-1">
+                  <i class="bi bi-telephone me-1"></i>{{ c.telefono|default:"Sin teléfono" }}
+                </div>
+              </div>
+              <div class="text-end">
+                <span class="badge rounded-pill bg-light text-dark">
+                  {{ c.cant_vehiculos }} vehículo{{ c.cant_vehiculos|pluralize }}
+                </span>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-secondary small mb-0">
+          Todavía no hay vehículos asociados a clientes.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card-premium p-4 h-100">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <div>
+          <h2 class="h6 text-uppercase text-secondary mb-1">
+            <i class="bi bi-lightning-charge me-2"></i>Atajos
+          </h2>
+          <p class="small text-secondary mb-0">Centro de control para operar rápido.</p>
+        </div>
+      </div>
+
+      <div class="panel-soft p-3 mb-3">
+        <ul class="small text-secondary mb-0">
+          <li>Creá un <strong>trabajo</strong> al ingresar un vehículo.</li>
+          <li>Revisá <strong>turnos</strong> del día y reprogramá si hace falta.</li>
+          <li>Usá <strong>clientes</strong> para teléfonos y datos a mano.</li>
+        </ul>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'taller:trabajo_create' %}" class="btn btn-outline-premium btn-sm">
+          <i class="bi bi-clipboard-plus me-1"></i> Cargar trabajo
+        </a>
+        <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-premium btn-sm">
+          <i class="bi bi-calendar-week me-1"></i> Ver agenda
+        </a>
+        <a href="{% url 'taller:cliente_list' %}" class="btn btn-outline-premium btn-sm">
+          <i class="bi bi-people me-1"></i> Ver clientes
+        </a>
+        <a href="{% url 'taller:presupuesto_list' %}" class="btn btn-outline-premium btn-sm">
+          <i class="bi bi-file-earmark-text me-1"></i> Presupuestos
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

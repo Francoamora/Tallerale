@@ -1,0 +1,317 @@
+{% extends "taller/base.html" %}
+
+{% block title %}Presupuesto #{{ presupuesto.id }} – Ale Gavilan Cars Solutions{% endblock %}
+
+{% block content %}
+
+{# Alerta: presupuesto eliminado #}
+{% if not presupuesto.activo %}
+  <div class="alert alert-warning border-0 shadow-sm d-flex align-items-start gap-3 mb-4">
+    <div class="d-flex align-items-center justify-content-center rounded-circle bg-dark bg-opacity-10" style="width:42px;height:42px;">
+      <i class="bi bi-archive-fill fs-5 text-dark"></i>
+    </div>
+    <div class="flex-grow-1">
+      <div class="fw-semibold">Este presupuesto está en “Eliminados”.</div>
+      <div class="small text-muted">
+        {% if presupuesto.eliminado_en %}
+          Se envió a eliminados el {{ presupuesto.eliminado_en|date:"d/m/Y H:i" }}.
+        {% endif %}
+        Podés restaurarlo para que vuelva a aparecer en listados normales.
+      </div>
+    </div>
+    <form method="post" action="{% url 'taller:presupuesto_restore' presupuesto.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button type="submit" class="btn btn-sm btn-dark">
+        <i class="bi bi-arrow-counterclockwise me-1"></i> Restaurar
+      </button>
+    </form>
+  </div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+
+  <!-- IZQ: Identidad -->
+  <div class="flex-grow-1" style="min-width: 280px;">
+    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+      <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
+        <i class="bi bi-file-earmark-text me-1"></i> Presupuesto #{{ presupuesto.id }}
+      </span>
+
+      <span class="badge rounded-pill bg-info bg-opacity-25 text-uppercase small">
+        {{ presupuesto.get_estado_display }}
+      </span>
+
+      <span class="badge rounded-pill bg-secondary bg-opacity-25 text-uppercase small">
+        <i class="bi bi-lightning-charge me-1"></i> {{ presupuesto.get_tipo_display }}
+      </span>
+
+      {% if presupuesto.valido_hasta %}
+        <span class="badge rounded-pill bg-warning bg-opacity-25 text-uppercase small">
+          <i class="bi bi-hourglass-split me-1"></i> Válido hasta {{ presupuesto.valido_hasta|date:"d/m/Y" }}
+        </span>
+      {% endif %}
+
+      {% if not presupuesto.activo %}
+        <span class="badge rounded-pill bg-danger bg-opacity-25 text-uppercase small">
+          <i class="bi bi-archive me-1"></i> ELIMINADO
+        </span>
+      {% endif %}
+    </div>
+
+    <h1 class="h4 mb-1">
+      {% if presupuesto.vehiculo %}
+        {{ presupuesto.vehiculo.patente }}
+      {% else %}
+        {{ presupuesto.cliente.nombre_completo }}
+      {% endif %}
+    </h1>
+
+    <p class="text-secondary small mb-1">
+      {% if presupuesto.vehiculo %}
+        {{ presupuesto.vehiculo.marca }} {{ presupuesto.vehiculo.modelo }}
+      {% else %}
+        <i class="bi bi-info-circle me-1"></i> Sin vehículo asignado
+      {% endif %}
+      · Cliente:
+      <a href="{% url 'taller:cliente_detail' presupuesto.cliente.pk %}"
+         class="link-light link-underline-opacity-0 link-underline-opacity-100-hover">
+        {{ presupuesto.cliente.nombre_completo }}
+      </a>
+    </p>
+
+    <p class="text-muted small mb-0">
+      <i class="bi bi-calendar3 me-1"></i>
+      Fecha: {{ presupuesto.fecha|date:"d/m/Y" }}
+      <span class="text-muted">{{ presupuesto.fecha|time:"H:i" }}</span>
+    </p>
+  </div>
+
+  <!-- DER: Total + Acciones -->
+  <div class="text-end" style="min-width: 320px; max-width: 520px;">
+    <div class="total-box mb-3">
+      <div class="total-label">Total del presupuesto</div>
+      <div class="total-value">
+        $ {{ presupuesto.total|default:"0"|floatformat:2 }}
+      </div>
+      {% if presupuesto.valido_hasta %}
+        <div class="total-meta mt-2">
+          <i class="bi bi-hourglass-split me-1"></i> Válido hasta {{ presupuesto.valido_hasta|date:"d/m/Y" }}
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="action-bar d-flex flex-wrap gap-2 justify-content-end">
+      <a href="{% url 'taller:presupuesto_comprobante' presupuesto.pk %}"
+         target="_blank" rel="noopener"
+         class="btn btn-sm btn-brand">
+        <i class="bi bi-printer-fill me-1"></i> Comprobante / Imprimir
+      </a>
+
+      {% if presupuesto.activo %}
+        <a href="{% url 'taller:presupuesto_update' presupuesto.pk %}"
+           class="btn btn-sm btn-outline-premium">
+          <i class="bi bi-pencil-square me-1"></i> Editar
+        </a>
+      {% else %}
+        <button type="button" class="btn btn-sm btn-outline-premium" disabled
+                title="Restaurá el presupuesto para poder editarlo.">
+          <i class="bi bi-pencil-square me-1"></i> Editar
+        </button>
+      {% endif %}
+
+      <a href="{% url 'taller:presupuesto_list' %}"
+         class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left-short me-1"></i> Volver
+      </a>
+    </div>
+
+    {# Zona de riesgo separada #}
+    <div class="danger-zone mt-3 pt-3">
+      {% if presupuesto.activo %}
+        <form method="post" action="{% url 'taller:presupuesto_delete' presupuesto.pk %}" class="d-inline">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger w-100"
+                  onclick="return confirm('¿Enviar este presupuesto a eliminados? (No se borra definitivo)');">
+            <i class="bi bi-archive me-1"></i> Enviar a eliminados
+          </button>
+        </form>
+      {% else %}
+        <form method="post" action="{% url 'taller:presupuesto_restore' presupuesto.pk %}" class="d-inline">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <button type="submit" class="btn btn-sm btn-outline-success w-100">
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Restaurar presupuesto
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+
+  <!-- CLIENTE / RESUMEN -->
+  <div class="col-12 col-lg-6">
+    <div class="card-premium p-4 h-100">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="h6 text-uppercase text-secondary mb-0">Cliente y resumen</h2>
+        <span class="badge rounded-pill bg-secondary bg-opacity-25 text-uppercase small">
+          <i class="bi bi-person-circle me-1"></i> Cliente
+        </span>
+      </div>
+
+      <div class="mb-2">
+        <div class="fw-semibold">
+          <i class="bi bi-person-check me-2"></i>{{ presupuesto.cliente.nombre_completo }}
+        </div>
+        <div class="text-muted small">
+          {% if presupuesto.cliente.telefono %}<i class="bi bi-telephone me-1"></i>{{ presupuesto.cliente.telefono }}{% endif %}
+          {% if presupuesto.cliente.dni %}<span class="ms-2"><i class="bi bi-person-vcard me-1"></i>{{ presupuesto.cliente.dni }}</span>{% endif %}
+        </div>
+        {% if presupuesto.cliente.direccion %}
+          <div class="text-muted small mt-1">
+            <i class="bi bi-geo-alt me-1"></i>{{ presupuesto.cliente.direccion }}
+          </div>
+        {% endif %}
+      </div>
+
+      <hr class="border-secondary-subtle">
+
+      <div class="small">
+        <div class="text-secondary text-uppercase mb-1">Título</div>
+        <p class="mb-0" style="white-space: pre-wrap;">{{ presupuesto.titulo|default:"—" }}</p>
+      </div>
+
+      <hr class="border-secondary-subtle">
+
+      <div class="small">
+        <div class="text-secondary text-uppercase mb-1">Resumen para el cliente</div>
+        <p class="mb-0" style="white-space: pre-wrap;">{{ presupuesto.resumen|default:"—" }}</p>
+      </div>
+
+      {% if presupuesto.notas_internas %}
+        <hr class="border-secondary-subtle">
+        <div class="small">
+          <div class="text-secondary text-uppercase mb-1">Notas internas</div>
+          <p class="mb-0" style="white-space: pre-wrap;">{{ presupuesto.notas_internas }}</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- VEHÍCULO + TOTALES -->
+  <div class="col-12 col-lg-6">
+    <div class="card-premium p-4 h-100">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="h6 text-uppercase text-secondary mb-0">Vehículo y totales</h2>
+
+        {% if presupuesto.vehiculo %}
+          <a href="{% url 'taller:vehiculo_detail' presupuesto.vehiculo.pk %}"
+             class="btn btn-sm btn-outline-premium">
+            <i class="bi bi-car-front-fill me-1"></i> Ver ficha
+          </a>
+        {% endif %}
+      </div>
+
+      <dl class="row small mb-3">
+        <dt class="col-5 text-secondary">Vehículo</dt>
+        <dd class="col-7 mb-2">
+          {% if presupuesto.vehiculo %}
+            {{ presupuesto.vehiculo.patente }} · {{ presupuesto.vehiculo.marca }} {{ presupuesto.vehiculo.modelo }}
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+
+        <dt class="col-5 text-secondary">Ítems</dt>
+        <dd class="col-7 mb-2">{{ presupuesto.items.count }}</dd>
+
+        <dt class="col-5 text-secondary">Descuento</dt>
+        <dd class="col-7 mb-2">
+          {% if presupuesto.descuento and presupuesto.descuento > 0 %}
+            − $ {{ presupuesto.descuento|floatformat:2 }}
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+
+        <dt class="col-5 text-secondary">Total</dt>
+        <dd class="col-7 fw-semibold">$ {{ presupuesto.total|default:"0"|floatformat:2 }}</dd>
+      </dl>
+
+      <div class="small text-secondary">
+        <i class="bi bi-printer me-1"></i> Podés imprimir el comprobante o guardarlo como PDF desde el navegador.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ÍTEMS -->
+<div class="card-premium p-4">
+  {% with items_count=presupuesto.items.count %}
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+      <h2 class="h6 text-uppercase text-secondary mb-0">Detalle de ítems</h2>
+      {% if items_count > 0 %}
+        <span class="small text-secondary">Ítems cargados: {{ items_count }}</span>
+      {% endif %}
+    </div>
+
+    {% if items_count > 0 %}
+      <div class="table-responsive">
+        <table class="table table-dark table-sm align-middle table-dark-custom mb-0 small">
+          <thead>
+            <tr>
+              <th>Descripción</th>
+              <th class="text-end" style="width: 12%;">Cant.</th>
+              <th class="text-end" style="width: 18%;">Precio unit.</th>
+              <th class="text-end" style="width: 18%;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in presupuesto.items.all %}
+              <tr>
+                <td class="fw-semibold">{{ it.descripcion }}</td>
+                <td class="text-end">{{ it.cantidad|floatformat:2 }}</td>
+                <td class="text-end">$ {{ it.precio_unitario|default:"0"|floatformat:2 }}</td>
+                <td class="text-end fw-semibold">$ {{ it.subtotal|default:"0"|floatformat:2 }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <hr class="border-secondary-subtle my-4">
+
+      <div class="d-flex justify-content-end">
+        <div class="totals-mini">
+          {% if presupuesto.descuento and presupuesto.descuento > 0 %}
+            <div class="d-flex justify-content-between">
+              <span class="text-secondary">Descuento</span>
+              <span class="fw-semibold">- $ {{ presupuesto.descuento|floatformat:2 }}</span>
+            </div>
+          {% endif %}
+          <div class="d-flex justify-content-between mt-2">
+            <span class="text-secondary">Total</span>
+            <span class="fs-5 fw-bold">$ {{ presupuesto.total|default:"0"|floatformat:2 }}</span>
+          </div>
+        </div>
+      </div>
+
+    {% else %}
+      <p class="text-secondary small mb-0">
+        Este presupuesto todavía no tiene ítems cargados.
+        {% if presupuesto.activo %}
+          <a class="link-light link-underline-opacity-0 link-underline-opacity-100-hover"
+             href="{% url 'taller:presupuesto_update' presupuesto.pk %}">
+            Cargar ítems
+          </a>
+        {% endif %}
+      </p>
+    {% endif %}
+  {% endwith %}
+</div>
+
+{% endblock %}

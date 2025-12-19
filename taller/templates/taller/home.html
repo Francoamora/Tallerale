@@ -1,0 +1,77 @@
+{% extends "taller/base.html" %}
+
+{% block title %}Inicio – Taller Mecánico Ale Gavilan{% endblock %}
+
+{% block content %}
+<div class="row g-4 align-items-stretch">
+  <div class="col-12 col-lg-7">
+    <div class="card-premium p-4 h-100">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="badge bg-primary bg-opacity-25 text-light border border-primary border-opacity-50">
+          Sistema de gestión
+        </span>
+      </div>
+
+      <h1 class="h4 mb-2">Bienvenido al panel del Taller Mecánico Ale Gavilan</h1>
+      <p class="text-secondary small mb-3">
+        Desde acá vas a poder registrar clientes, vehículos, trabajos, turnos y todo el historial de cada unidad.
+      </p>
+
+      <div class="row g-3 mb-3 small">
+        <div class="col-12 col-md-6">
+          <div class="border border-secondary-subtle rounded-4 p-3 h-100 bg-dark bg-opacity-25">
+            <div class="fw-semibold mb-1">
+              <i class="bi bi-clipboard-check me-1"></i>Trabajos
+            </div>
+            <div class="text-secondary">
+              Cargá cada laburo con detalle: repuestos, mano de obra y estado del vehículo.
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <div class="border border-secondary-subtle rounded-4 p-3 h-100 bg-dark bg-opacity-25">
+            <div class="fw-semibold mb-1">
+              <i class="bi bi-people-fill me-1"></i>Clientes y vehículos
+            </div>
+            <div class="text-secondary">
+              Tené a mano quién es el dueño, qué autos tiene y el historial de trabajos realizados.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'taller:dashboard' %}" class="btn btn-brand btn-sm">
+          <i class="bi bi-speedometer2 me-1"></i> Ir al panel
+        </a>
+        <a href="{% url 'taller:trabajo_create' %}" class="btn btn-outline-premium btn-sm">
+          <i class="bi bi-clipboard-plus me-1"></i> Cargar primer trabajo
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card-premium p-4 h-100">
+      <h2 class="h6 text-uppercase text-secondary mb-3">Primeros pasos</h2>
+
+      <ol class="small text-secondary mb-0">
+        <li class="mb-1">
+          Asegurate de correr <code>python manage.py makemigrations</code> y
+          <code>python manage.py migrate</code> cuando cambiemos modelos.
+        </li>
+        <li class="mb-1">
+          Creá un usuario administrador con <code>python manage.py createsuperuser</code>.
+        </li>
+        <li class="mb-1">
+          Cargá los primeros <strong>clientes</strong>, <strong>vehículos</strong> y <strong>trabajos</strong>.
+        </li>
+        <li class="mb-1">
+          Generá un <strong>comprobante</strong> y revisá la salida en PDF.
+        </li>
+      </ol>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "taller/base.html" %}
+
+{% block title %}Enviar a eliminados – Ale Gavilan Cars Solutions{% endblock %}
+
+{% block content %}
+<div class="card-premium p-4" style="max-width:720px;margin:0 auto;">
+  <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+    <div>
+      <h1 class="h5 mb-1">Enviar a eliminados</h1>
+      <div class="text-muted small">
+        Esto <strong>no borra definitivamente</strong>. Solo oculta el registro y vas a poder restaurarlo.
+      </div>
+    </div>
+    <span class="badge text-bg-danger">
+      <i class="bi bi-trash3 me-1"></i> Eliminados
+    </span>
+  </div>
+
+  <hr class="border-secondary-subtle my-4">
+
+  <div class="mb-3">
+    <div class="text-secondary small text-uppercase mb-1">Registro</div>
+    <div class="fw-semibold">{{ object }}</div>
+  </div>
+
+  <form method="post" class="d-flex gap-2 flex-wrap">
+    {% csrf_token %}
+    <button class="btn btn-danger">
+      <i class="bi bi-trash3 me-1"></i> Enviar a eliminados
+    </button>
+    <a class="btn btn-outline-secondary" href="{{ cancel_url }}">
+      Cancelar
+    </a>
+  </form>
+
+  <div class="text-muted small mt-3">
+    Tip pro: si este trabajo afecta saldos, primero ajustá los movimientos de cuenta o marcá el trabajo como <strong>Anulado</strong>.
+  </div>
+</div>
+{% endblock %}

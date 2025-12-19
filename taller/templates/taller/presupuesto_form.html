@@ -1,0 +1,361 @@
+{% extends "taller/base.html" %}
+{% load static %}
+
+{% block title %}
+  {% if presupuesto %}Editar presupuesto{% else %}Nuevo presupuesto{% endif %} – Ale Gavilan Cars Solutions
+{% endblock %}
+
+{% block content %}
+<style>
+  /* =========================
+     PRESUPUESTO FORM (PRO)
+     - Base oscura: texto blanco
+     - Inputs legibles en tabla dark
+  ========================= */
+
+  .page-wide .card-premium { overflow: hidden; }
+
+  /* ocultar flechas de input number */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+  /* tabla */
+  .items-table th { white-space: nowrap; }
+  .items-table td { vertical-align: middle; }
+  .items-table .cell-desc { min-width: 320px; }
+  .items-table .cell-qty  { width: 120px; }
+  .items-table .cell-price{ width: 180px; }
+  .items-table .cell-del  { width: 90px; }
+
+  /* inputs dentro de tabla dark: que se vean */
+  .table-dark-custom .form-control,
+  .table-dark-custom .form-select{
+    min-height: 38px;
+    padding: .55rem .75rem;
+    background: rgba(2, 6, 23, .35);
+    color: rgba(255,255,255,.92);
+    border: 1px solid rgba(148,163,184,.35);
+  }
+  .table-dark-custom .form-control::placeholder{ color: rgba(226,232,240,.55); }
+  .table-dark-custom .form-control:focus,
+  .table-dark-custom .form-select:focus{
+    background: rgba(2, 6, 23, .45);
+    color: rgba(255,255,255,.92);
+    border-color: rgba(59,130,246,.55);
+    box-shadow: 0 0 0 .2rem rgba(59,130,246,.18);
+  }
+
+  /* layout: ganar ancho */
+  @media (min-width: 1200px){
+    .page-wide .col-xl-9{ flex: 0 0 auto; width: 72%; }
+    .page-wide .col-xl-3{ flex: 0 0 auto; width: 28%; }
+  }
+</style>
+
+<div class="row g-4 align-items-start page-wide">
+  <!-- COLUMNA PRINCIPAL -->
+  <div class="col-12 col-xl-9">
+    <div class="card-premium p-4 mb-4">
+
+      <!-- HEADER -->
+      <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-3">
+        <div>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
+              <i class="bi bi-file-earmark-text me-1"></i>
+              {% if presupuesto %}Editar presupuesto{% else %}Nuevo presupuesto{% endif %}
+            </span>
+
+            {% if presupuesto %}
+              <span class="badge rounded-pill bg-info bg-opacity-25 text-uppercase small">
+                #{{ presupuesto.id }} · {{ presupuesto.get_estado_display }}
+              </span>
+            {% endif %}
+          </div>
+
+          <h1 class="h5 mb-1">
+            {% if presupuesto and presupuesto.vehiculo %}
+              {{ presupuesto.vehiculo.patente }} · {{ presupuesto.vehiculo.marca }} {{ presupuesto.vehiculo.modelo }}
+            {% elif presupuesto and presupuesto.cliente %}
+              {{ presupuesto.cliente.nombre_completo }}
+            {% else %}
+              Datos del presupuesto
+            {% endif %}
+          </h1>
+
+          <p class="text-secondary small mb-0">
+            Completá cliente/vehículo, armá el resumen para entregar y cargá los ítems del presupuesto.
+          </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 justify-content-end">
+          {% if presupuesto %}
+            <a href="{% url 'taller:presupuesto_detail' presupuesto.pk %}" class="btn btn-sm btn-outline-premium">
+              <i class="bi bi-eye me-1"></i> Ver detalle
+            </a>
+            <a href="{% url 'taller:presupuesto_comprobante' presupuesto.pk %}" class="btn btn-sm btn-outline-premium" target="_blank">
+              <i class="bi bi-printer me-1"></i> Comprobante
+            </a>
+          {% endif %}
+          <a href="{% url 'taller:presupuesto_list' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-list-ul me-1"></i> Volver
+          </a>
+        </div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        {# ✅ Tipo no se muestra: siempre manejado por backend #}
+        {% if form.tipo %}{{ form.tipo.as_hidden }}{% endif %}
+
+        {% if form.errors or form.non_field_errors or formset.errors or formset.non_form_errors %}
+          <div class="alert alert-danger py-2 small mb-3">
+            <strong>Revisá los campos marcados en rojo.</strong>
+            Para guardar sin errores, asegurate de cargar al menos un ítem con cantidad (mínimo 1) y precio.
+          </div>
+        {% endif %}
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 small mb-3">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        {% if formset.non_form_errors %}
+          <div class="alert alert-danger py-2 small mb-3">
+            {{ formset.non_form_errors }}
+          </div>
+        {% endif %}
+
+        <!-- PASO 1 -->
+        <div class="mb-4">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h2 class="h6 text-uppercase text-secondary mb-0">
+              <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 1</span>
+              Datos principales
+            </h2>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-lg-6">
+              <label class="form-label small fw-semibold">Cliente</label>
+              <div class="form-text small text-secondary mb-1">Buscá por nombre, apellido, teléfono o DNI.</div>
+              {{ form.cliente }}
+              {% for error in form.cliente.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-lg-6">
+              <label class="form-label small fw-semibold">Vehículo (opcional)</label>
+              <div class="form-text small text-secondary mb-1">Si no está definido todavía, dejalo vacío.</div>
+              {{ form.vehiculo }}
+              {% for error in form.vehiculo.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="form-label small fw-semibold">Estado</label>
+              {{ form.estado }}
+              {% for error in form.estado.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="form-label small fw-semibold">Fecha</label>
+              {{ form.fecha }}
+              {% for error in form.fecha.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-4">
+              <label class="form-label small fw-semibold">Válido hasta (opcional)</label>
+              {{ form.valido_hasta }}
+              {% for error in form.valido_hasta.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 2 -->
+        <div class="mb-4">
+          <h2 class="h6 text-uppercase text-secondary mb-2">
+            <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 2</span>
+            Descripción para entregar
+          </h2>
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Título</label>
+            {{ form.titulo }}
+            {% for error in form.titulo.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Resumen para el cliente</label>
+            {{ form.resumen }}
+            {% for error in form.resumen.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label small fw-semibold">Notas internas (opcional)</label>
+            {{ form.notas_internas }}
+            {% for error in form.notas_internas.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+          </div>
+        </div>
+
+        <!-- PASO 3 -->
+        <div class="mb-4">
+          <h2 class="h6 text-uppercase text-secondary mb-2">
+            <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 3</span>
+            Resumen económico
+          </h2>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <label class="form-label small fw-semibold">Descuento ($)</label>
+              {{ form.descuento }}
+              <div class="form-text small text-secondary">Si no hay descuento, dejá 0.</div>
+              {% for error in form.descuento.errors %}<div class="invalid-feedback d-block small">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-12 col-md-8">
+              <div class="small text-secondary mt-md-1">
+                <p class="mb-0">
+                  Para guardar sin errores, cargá al menos un ítem con <strong>cantidad (mínimo 1)</strong> y <strong>precio</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-secondary-subtle my-4">
+
+        <!-- ÍTEMS -->
+        <div class="mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div>
+            <h2 class="h6 text-uppercase text-secondary mb-0">
+              <i class="bi bi-list-check me-2"></i>Ítems del presupuesto
+            </h2>
+            <div class="small text-secondary">
+              Si agregás una fila nueva, recordá completar cantidad (mínimo 1) y precio.
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-premium" id="btnAddItemPresu">
+            <i class="bi bi-plus-circle me-1"></i> Agregar ítem
+          </button>
+        </div>
+
+        {{ formset.management_form }}
+
+        <div class="table-responsive mb-3">
+          <table class="table table-dark table-sm align-middle table-dark-custom mb-0 small items-table" id="presuItemsTable">
+            <thead>
+              <tr class="text-white">
+                <th class="cell-desc">Descripción</th>
+                <th class="text-end cell-qty">Cant.</th>
+                <th class="text-end cell-price">Precio unit.</th>
+                <th class="text-center cell-del">Borrar</th>
+              </tr>
+            </thead>
+            <tbody id="presuItemsBody">
+              {% for form_item in formset %}
+                <tr class="item-row">
+                  <td class="cell-desc">
+                    {% for hidden in form_item.hidden_fields %}{{ hidden }}{% endfor %}
+                    {{ form_item.descripcion }}
+                  </td>
+                  <td class="text-end cell-qty">{{ form_item.cantidad }}</td>
+                  <td class="text-end cell-price">{{ form_item.precio_unitario }}</td>
+                  <td class="text-center cell-del">
+                    <div class="form-check d-flex justify-content-center">
+                      {{ form_item.DELETE }}
+                    </div>
+                  </td>
+                </tr>
+
+                {% for field in form_item.visible_fields %}
+                  {% for error in field.errors %}
+                    <tr>
+                      <td colspan="4">
+                        <div class="invalid-feedback d-block small">{{ error }}</div>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- TEMPLATE FILA NUEVA -->
+        <template id="presuEmptyRow">
+          <tr class="item-row">
+            <td class="cell-desc">
+              {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              {{ formset.empty_form.descripcion }}
+            </td>
+            <td class="text-end cell-qty">{{ formset.empty_form.cantidad }}</td>
+            <td class="text-end cell-price">{{ formset.empty_form.precio_unitario }}</td>
+            <td class="text-center cell-del">
+              <div class="form-check d-flex justify-content-center">
+                {{ formset.empty_form.DELETE }}
+              </div>
+            </td>
+          </tr>
+        </template>
+
+        <!-- BOTONES -->
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <a href="{% url 'taller:presupuesto_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-brand">
+            <i class="bi bi-save2 me-1"></i> Guardar presupuesto
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- COLUMNA LATERAL -->
+  <div class="col-12 col-xl-3">
+    <div class="card-premium p-4 mb-4">
+      <h2 class="h6 text-uppercase text-secondary mb-3">
+        <i class="bi bi-lightbulb me-2"></i>Tip rápido
+      </h2>
+      <ul class="small text-secondary mb-0">
+        <li>Cargá <strong>al menos 1 ítem</strong> para poder guardar.</li>
+        <li>En ese ítem, poné <strong>cantidad mínimo 1</strong> y un <strong>precio unitario</strong>.</li>
+        <li>Si agregaste filas por error, marcá <strong>Borrar</strong> o dejalas completamente vacías.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const btn = document.getElementById("btnAddItemPresu");
+    const body = document.getElementById("presuItemsBody");
+    const tpl  = document.getElementById("presuEmptyRow");
+    const totalFormsInput =
+      document.getElementById("id_items-TOTAL_FORMS") ||
+      document.querySelector('input[name="items-TOTAL_FORMS"]');
+
+    if (!btn || !body || !tpl || !totalFormsInput) return;
+
+    function replacePrefix(html, index) {
+      return html.replaceAll("__prefix__", String(index));
+    }
+
+    btn.addEventListener("click", function () {
+      const index = parseInt(totalFormsInput.value, 10);
+      if (Number.isNaN(index)) return;
+
+      const wrap = document.createElement("tbody");
+      wrap.innerHTML = replacePrefix(tpl.innerHTML, index).trim();
+
+      const newRow = wrap.querySelector("tr");
+      if (!newRow) return;
+
+      body.appendChild(newRow);
+      totalFormsInput.value = index + 1;
+
+      const desc = newRow.querySelector('input[name="items-' + index + '-descripcion"]');
+      if (desc) desc.focus();
+    });
+  })();
+</script>
+{% endblock %}

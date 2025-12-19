@@ -1,0 +1,75 @@
+{% extends "taller/base.html" %}
+
+{% block title %}Nuevo movimiento – {{ cliente.nombre_completo }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+  <div>
+    <h1 class="h5 mb-1">Nuevo movimiento de cuenta</h1>
+    <p class="text-secondary small mb-0">
+      Cliente: <strong>{{ cliente.nombre_completo }}</strong>
+      {% if cliente.dni %} · DNI/CUIT {{ cliente.dni }}{% endif %}
+      <br>
+      Saldo actual: <strong>$ {{ cliente.saldo_actual }}</strong>
+    </p>
+  </div>
+  <a href="{% url 'taller:cliente_detail' cliente.pk %}" class="btn btn-outline-secondary btn-sm">
+    Volver al cliente
+  </a>
+</div>
+
+<div class="card-premium p-4">
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger small">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <div class="row g-3 small">
+      <div class="col-12 col-md-4">
+        <label class="form-label text-secondary">Fecha y hora</label>
+        {{ form.fecha }}
+        {{ form.fecha.errors }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label text-secondary">Tipo</label>
+        {{ form.tipo }}
+        <div class="form-text">
+          Deuda: aumenta el saldo. Pago: reduce la deuda.
+        </div>
+        {{ form.tipo.errors }}
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label text-secondary">Trabajo asociado (opcional)</label>
+        {{ form.trabajo }}
+        {{ form.trabajo.errors }}
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label text-secondary">Monto</label>
+        {{ form.monto }}
+        {{ form.monto.errors }}
+      </div>
+      <div class="col-12">
+        <label class="form-label text-secondary">Descripción</label>
+        {{ form.descripcion }}
+        <div class="form-text">
+          Si lo dejás vacío, se completa automáticamente según el tipo de movimiento.
+        </div>
+        {{ form.descripcion.errors }}
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 mt-4">
+      <a href="{% url 'taller:cliente_detail' cliente.pk %}" class="btn btn-outline-secondary btn-sm">
+        Cancelar
+      </a>
+      <button type="submit" class="btn btn-brand btn-sm">
+        Guardar movimiento
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
