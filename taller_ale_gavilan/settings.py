@@ -1,16 +1,44 @@
+# settings.py (READY TO REPLACE)
 from pathlib import Path
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "django-insecure-taller-ale-gavilan-demo-key"
-DEBUG = True
+# =========================
+# ENV HELPERS
+# =========================
+def env(name: str, default: str = "") -> str:
+    return os.environ.get(name, default)
 
-# En local: OK. En producción agregamos el dominio/IP.
-ALLOWED_HOSTS: list[str] = ["127.0.0.1", "localhost"]
+def env_bool(name: str, default: bool = False) -> bool:
+    val = env(name, "")
+    if val == "":
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+def env_list(name: str, default: str = "") -> list[str]:
+    raw = env(name, default).strip()
+    if not raw:
+        return []
+    # separado por coma
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+# =========================
+# CORE
+# =========================
+# ⚠️ IMPORTANTE:
+# - En local podés dejar DJANGO_SECRET_KEY vacío y usar fallback.
+# - En prod (PythonAnywhere) SI O SI setear DJANGO_SECRET_KEY.
+SECRET_KEY = env("DJANGO_SECRET_KEY", "django-insecure-LOCAL-DEV-ONLY-change-me")
+
+DEBUG = env_bool("DJANGO_DEBUG", True)
+
+# Hosts: en local funciona con 127.0.0.1/localhost
+# En prod: setear DJANGO_ALLOWED_HOSTS="tuuser.pythonanywhere.com"
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 
 INSTALLED_APPS = [
-    "django.contrib.admin",   # queda instalado (por si en el futuro lo habilitás)
+    "django.contrib.admin",   # lo dejamos instalado (admin)
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -34,7 +62,7 @@ ROOT_URLCONF = "taller_ale_gavilan.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+        "DIRS": [BASE_DIR / "templates"],  # ok
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -49,6 +77,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "taller_ale_gavilan.wsgi.application"
 
+# =========================
+# DATABASE
+# =========================
+# Por ahora SQLite (OK para arrancar).
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -68,11 +100,16 @@ TIME_ZONE = "America/Argentina/Buenos_Aires"
 USE_I18N = True
 USE_TZ = True
 
+# =========================
+# STATIC / MEDIA
+# =========================
 STATIC_URL = "/static/"
-STATICFILES_DIRS = [BASE_DIR / "static"]
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]  # tus assets
+STATIC_ROOT = BASE_DIR / "staticfiles"    # collectstatic acá
 
-# ✅ FIX: sin coma
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # =========================
@@ -82,6 +119,29 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "taller:dashboard"
 LOGOUT_REDIRECT_URL = "login"
 
-# (Opcional) cookies más seguras al pasar a prod
-# SESSION_COOKIE_SECURE = True
-# CSRF_COOKIE_SECURE = True
+# =========================
+# SECURITY (PROD)
+# =========================
+# Para PythonAnywhere / HTTPS:
+# Seteá DJANGO_CSRF_TRUSTED_ORIGINS="https://tuuser.pythonanywhere.com"
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
+
+if not DEBUG:
+    # Si estás detrás de proxy (PythonAnywhere), esto evita problemas con HTTPS
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    # Cookies seguras en prod
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    # Clickjacking / sniffing
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
+
+    # HSTS (podés subir de a poco; arrancamos suave)
+    SECURE_HSTS_SECONDS = int(env("DJANGO_HSTS_SECONDS", "3600"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = False
+
+    # Extra
+    REFERRER_POLICY = "same-origin"
