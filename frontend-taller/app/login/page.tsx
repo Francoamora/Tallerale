@@ -143,19 +143,23 @@ function LoginForm() {
               </label>
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                  <svg className="h-4 w-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  {/* Ícono de persona — funciona tanto para email como para username */}
+                  <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
                 <input
                   type="text"
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); setError(""); }}
-                  placeholder="tu@email.com o tu usuario anterior"
+                  placeholder="tu@email.com o nombre de usuario"
                   autoComplete="username"
-                  className="w-full rounded-xl bg-white/8 py-3.5 pl-11 pr-4 text-sm font-medium text-white placeholder-slate-600 outline-none ring-1 ring-white/10 transition focus:bg-white/12 focus:ring-orange-500/50"
+                  className="w-full rounded-xl bg-white/[0.07] py-3.5 pl-11 pr-4 text-sm font-medium text-white placeholder-slate-600 outline-none ring-1 ring-white/10 transition focus:bg-white/[0.11] focus:ring-2 focus:ring-orange-500/60"
                 />
               </div>
+              <p className="mt-1.5 text-[11px] text-slate-600">
+                Podés ingresar con tu email o con tu nombre de usuario de Django.
+              </p>
             </div>
 
             {/* Contraseña */}
