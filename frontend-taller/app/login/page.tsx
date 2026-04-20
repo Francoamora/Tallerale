@@ -13,200 +13,174 @@ import Link from "next/link";
 import { saveSession, getSession, clearSession } from "@/lib/trial";
 import { loginDjango } from "@/lib/api";
 
-// ─── Auto SVG (sedan sport, vista lateral) ────────────────────────────────────
-function CarIllustration() {
+// ─── Dashboard Speedometer SVG — panel izquierdo ─────────────────────────────
+function DashboardIllustration() {
+  // Generar marcas del velocímetro (de 220° a -40°, horario)
+  const totalMarks = 60;
+  const startAngle = 140; // grados desde el eje X positivo
+  const endAngle   = 40;
+  const sweep      = 360 - startAngle + endAngle; // 260°
+
+  const marks = Array.from({ length: totalMarks + 1 }, (_, i) => {
+    const pct   = i / totalMarks;
+    const angle = startAngle + pct * sweep;
+    const rad   = (angle * Math.PI) / 180;
+    const isMajor = i % 5 === 0;
+    const r1 = isMajor ? 108 : 114;
+    const r2 = 122;
+    return {
+      x1: 160 + r1 * Math.cos(rad), y1: 160 + r1 * Math.sin(rad),
+      x2: 160 + r2 * Math.cos(rad), y2: 160 + r2 * Math.sin(rad),
+      isMajor,
+      active: pct < 0.72,
+    };
+  });
+
+  // Aguja — apunta a ~72% de la escala
+  const needlePct   = 0.72;
+  const needleAngle = startAngle + needlePct * sweep;
+  const needleRad   = (needleAngle * Math.PI) / 180;
+  const nx = 160 + 90 * Math.cos(needleRad);
+  const ny = 160 + 90 * Math.sin(needleRad);
+
+  // Arco de progreso naranja
+  const arcR     = 115;
+  const arcStart = startAngle * Math.PI / 180;
+  const arcEnd   = (startAngle + needlePct * sweep) * Math.PI / 180;
+  const largeArc = needlePct * sweep > 180 ? 1 : 0;
+  const arcPath  = [
+    `M ${160 + arcR * Math.cos(arcStart)} ${160 + arcR * Math.sin(arcStart)}`,
+    `A ${arcR} ${arcR} 0 ${largeArc} 1 ${160 + arcR * Math.cos(arcEnd)} ${160 + arcR * Math.sin(arcEnd)}`,
+  ].join(" ");
+
   return (
-    <svg viewBox="0 0 900 420" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full max-w-[680px]">
-      <defs>
-        <radialGradient id="glow" cx="50%" cy="100%" r="50%">
-          <stop offset="0%" stopColor="#f97316" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id="wheelGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#f97316" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#334155" />
-          <stop offset="100%" stopColor="#1e293b" />
-        </linearGradient>
-        <linearGradient id="roofGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#475569" />
-          <stop offset="100%" stopColor="#334155" />
-        </linearGradient>
-        <linearGradient id="windowGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#7dd3fc" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.08" />
-        </linearGradient>
-        <linearGradient id="accentLine" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#f97316" stopOpacity="0" />
-          <stop offset="30%" stopColor="#f97316" stopOpacity="1" />
-          <stop offset="70%" stopColor="#fb923c" stopOpacity="1" />
-          <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
-        </linearGradient>
-        <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
-          <feDropShadow dx="0" dy="8" stdDeviation="12" floodColor="#000" floodOpacity="0.5"/>
-        </filter>
-        <clipPath id="windowClip1">
-          <path d="M345 185 L420 155 L500 155 L510 185 Z" />
-        </clipPath>
-        <clipPath id="windowClip2">
-          <path d="M518 185 L522 155 L590 155 L610 185 Z" />
-        </clipPath>
-      </defs>
+    <div className="flex w-full flex-col items-center gap-8 px-8">
 
-      {/* ── Glow de suelo ── */}
-      <ellipse cx="450" cy="370" rx="380" ry="40" fill="url(#glow)" />
+      {/* ── Velocímetro principal ── */}
+      <div className="relative">
+        <svg viewBox="0 0 320 320" className="w-[260px] drop-shadow-2xl">
+          <defs>
+            <radialGradient id="faceGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#1e293b" />
+              <stop offset="100%" stopColor="#0f172a" />
+            </radialGradient>
+            <filter id="glowFilter">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
 
-      {/* ── Sombra del auto ── */}
-      <ellipse cx="450" cy="358" rx="320" ry="14" fill="#000" opacity="0.45" />
+          {/* Fondo exterior */}
+          <circle cx="160" cy="160" r="148" fill="#0f172a" stroke="#1e293b" strokeWidth="2"/>
 
-      {/* ── Línea del suelo ── */}
-      <line x1="60" y1="358" x2="840" y2="358" stroke="#f97316" strokeWidth="1.5" strokeOpacity="0.25" />
+          {/* Cara del gauge */}
+          <circle cx="160" cy="160" r="132" fill="url(#faceGrad)"/>
 
-      {/* ── Cuerpo inferior (falda) ── */}
-      <path d="M178 310 Q180 328 200 332 L700 332 Q720 328 722 310 Z"
-        fill="#0f172a" />
+          {/* Track gris base */}
+          <circle cx="160" cy="160" r="115" fill="none" stroke="#1e293b" strokeWidth="10"
+            strokeDasharray="2 4" strokeLinecap="round"/>
 
-      {/* ── Cuerpo principal ── */}
-      <path d="
-        M140 310
-        L155 265
-        L200 220
-        L320 178
-        L400 155
-        L540 148
-        L650 158
-        L710 195
-        L750 245
-        L760 310
-        Z"
-        fill="url(#bodyGrad)"
-        filter="url(#shadow)"
-      />
+          {/* Arco naranja de progreso */}
+          <path d={arcPath} fill="none" stroke="#f97316" strokeWidth="10"
+            strokeLinecap="round" filter="url(#glowFilter)" opacity="0.95"/>
 
-      {/* ── Techo ── */}
-      <path d="
-        M320 178
-        L340 148
-        L430 122
-        L540 118
-        L625 130
-        L660 158
-        L540 148
-        L400 155
-        Z"
-        fill="url(#roofGrad)"
-      />
+          {/* Marcas */}
+          {marks.map((m, i) => (
+            <line key={i}
+              x1={m.x1} y1={m.y1} x2={m.x2} y2={m.y2}
+              stroke={m.active ? (m.isMajor ? "#f97316" : "#fb923c") : "#1e293b"}
+              strokeWidth={m.isMajor ? 2.5 : 1.5}
+              strokeLinecap="round"
+              opacity={m.isMajor ? 1 : 0.6}
+            />
+          ))}
 
-      {/* ── Línea de acento naranja en el lateral ── */}
-      <path d="M160 285 Q450 270 740 278"
-        stroke="url(#accentLine)" strokeWidth="2.5" strokeLinecap="round" />
+          {/* Aguja */}
+          <line x1="160" y1="160" x2={nx} y2={ny}
+            stroke="#f97316" strokeWidth="3" strokeLinecap="round" filter="url(#glowFilter)"/>
+          <line x1="160" y1="160"
+            x2={160 - 18 * Math.cos(needleRad)}
+            y2={160 - 18 * Math.sin(needleRad)}
+            stroke="#f97316" strokeWidth="2" strokeLinecap="round" opacity="0.5"/>
 
-      {/* ── Ventana trasera ── */}
-      <path d="M345 183 L355 148 L430 125 L435 183 Z"
-        fill="url(#windowGrad)" stroke="#475569" strokeWidth="1" />
-      {/* reflejo ventana trasera */}
-      <path d="M355 165 L360 135 L375 128 L370 160 Z"
-        fill="#fff" opacity="0.06" />
+          {/* Centro */}
+          <circle cx="160" cy="160" r="10" fill="#f97316" filter="url(#glowFilter)"/>
+          <circle cx="160" cy="160" r="5"  fill="#fff" opacity="0.9"/>
 
-      {/* ── Ventanas centrales ── */}
-      <path d="M440 183 L442 122 L540 118 L545 183 Z"
-        fill="url(#windowGrad)" stroke="#475569" strokeWidth="1" />
-      {/* reflejo */}
-      <path d="M450 170 L452 128 L470 126 L468 168 Z"
-        fill="#fff" opacity="0.06" />
+          {/* Velocidad número */}
+          <text x="160" y="196" textAnchor="middle" fill="#fff"
+            fontSize="38" fontWeight="900" fontFamily="system-ui, sans-serif"
+            letterSpacing="-1">218</text>
+          <text x="160" y="213" textAnchor="middle" fill="#f97316"
+            fontSize="10" fontWeight="700" fontFamily="system-ui, sans-serif"
+            letterSpacing="3">KM/H</text>
 
-      {/* ── Ventana delantera ── */}
-      <path d="M550 183 L548 125 L628 132 L650 155 L655 183 Z"
-        fill="url(#windowGrad)" stroke="#475569" strokeWidth="1" />
-      {/* reflejo */}
-      <path d="M558 172 L556 132 L575 134 L574 170 Z"
-        fill="#fff" opacity="0.06" />
+          {/* Labels escala */}
+          <text x="52"  y="228" fill="#475569" fontSize="9" fontWeight="600" textAnchor="middle">0</text>
+          <text x="160" y="68"  fill="#475569" fontSize="9" fontWeight="600" textAnchor="middle">150</text>
+          <text x="268" y="228" fill="#475569" fontSize="9" fontWeight="600" textAnchor="middle">300</text>
 
-      {/* ── Pilar B y C ── */}
-      <rect x="436" y="120" width="7" height="64" rx="2" fill="#1e293b" />
-      <rect x="543" y="118" width="8" height="66" rx="2" fill="#1e293b" />
+          {/* Anillo exterior decorativo */}
+          <circle cx="160" cy="160" r="148" fill="none"
+            stroke="#f97316" strokeWidth="1" opacity="0.12"/>
+        </svg>
 
-      {/* ── Faros delanteros ── */}
-      <path d="M748 230 L760 225 L762 255 L748 258 Z"
-        fill="#fef3c7" opacity="0.9" />
-      <path d="M748 230 L762 225 L763 235 L748 237 Z"
-        fill="#fbbf24" opacity="0.7" />
-      {/* haz de luz */}
-      <path d="M762 240 L860 215 L865 250 L762 248 Z"
-        fill="#fbbf24" opacity="0.04" />
+        {/* Glow ambiental naranja bajo el gauge */}
+        <div className="pointer-events-none absolute -bottom-6 left-1/2 h-24 w-48 -translate-x-1/2 rounded-full bg-orange-500/20 blur-2xl" />
+      </div>
 
-      {/* ── Faros traseros ── */}
-      <path d="M142 248 L155 245 L158 278 L142 280 Z"
-        fill="#ef4444" opacity="0.75" />
-      <path d="M142 260 L155 258 L155 268 L142 267 Z"
-        fill="#f87171" opacity="0.9" />
+      {/* ── Gauges secundarios ── */}
+      <div className="flex w-full max-w-[260px] items-center justify-between">
+        {/* RPM */}
+        <div className="flex flex-col items-center gap-1">
+          <svg viewBox="0 0 80 80" className="w-16">
+            <circle cx="40" cy="40" r="34" fill="#0f172a" stroke="#1e293b" strokeWidth="2"/>
+            <circle cx="40" cy="40" r="28" fill="none" stroke="#1e293b" strokeWidth="7" strokeDasharray="2 4"/>
+            <circle cx="40" cy="40" r="28" fill="none" stroke="#f97316" strokeWidth="7"
+              strokeDasharray={`${2 * Math.PI * 28 * 0.55} ${2 * Math.PI * 28}`}
+              strokeDashoffset={2 * Math.PI * 28 * 0.25}
+              strokeLinecap="round" opacity="0.8"/>
+            <text x="40" y="44" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="900"
+              fontFamily="system-ui">5.5</text>
+          </svg>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">RPM ×1000</span>
+        </div>
 
-      {/* ── Rejilla delantera ── */}
-      <path d="M730 260 Q745 255 755 270 Q745 280 730 278 Z"
-        fill="#0f172a" stroke="#374151" strokeWidth="1" />
+        {/* Temp */}
+        <div className="flex flex-col items-center gap-1">
+          <svg viewBox="0 0 80 80" className="w-16">
+            <circle cx="40" cy="40" r="34" fill="#0f172a" stroke="#1e293b" strokeWidth="2"/>
+            <circle cx="40" cy="40" r="28" fill="none" stroke="#1e293b" strokeWidth="7" strokeDasharray="2 4"/>
+            <circle cx="40" cy="40" r="28" fill="none" stroke="#10b981" strokeWidth="7"
+              strokeDasharray={`${2 * Math.PI * 28 * 0.45} ${2 * Math.PI * 28}`}
+              strokeDashoffset={2 * Math.PI * 28 * 0.25}
+              strokeLinecap="round" opacity="0.8"/>
+            <text x="40" y="42" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="900"
+              fontFamily="system-ui">90°</text>
+            <text x="40" y="53" textAnchor="middle" fill="#10b981" fontSize="7" fontWeight="700"
+              fontFamily="system-ui">TEMP</text>
+          </svg>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Motor °C</span>
+        </div>
 
-      {/* ── Manija de puerta ── */}
-      <rect x="488" y="232" width="38" height="10" rx="5" fill="#475569" />
-      <rect x="490" y="234" width="34" height="6" rx="3" fill="#64748b" />
-
-      {/* ── Espejo retrovisor ── */}
-      <path d="M710 210 L730 205 L732 222 L710 220 Z"
-        fill="#334155" stroke="#475569" strokeWidth="1" />
-
-      {/* ══ RUEDA TRASERA ══ */}
-      {/* glow rueda */}
-      <circle cx="240" cy="335" r="68" fill="url(#wheelGlow)" />
-      {/* llanta exterior */}
-      <circle cx="240" cy="335" r="58" fill="#111827" stroke="#374151" strokeWidth="3" />
-      {/* aro */}
-      <circle cx="240" cy="335" r="44" fill="#0f172a" stroke="#4b5563" strokeWidth="2" />
-      {/* rayos */}
-      {[0,40,80,120,160,200,240,280,320].map((angle, i) => (
-        <line key={i}
-          x1={240 + 14 * Math.cos(angle * Math.PI / 180)}
-          y1={335 + 14 * Math.sin(angle * Math.PI / 180)}
-          x2={240 + 42 * Math.cos(angle * Math.PI / 180)}
-          y2={335 + 42 * Math.sin(angle * Math.PI / 180)}
-          stroke="#6b7280" strokeWidth="5" strokeLinecap="round"
-        />
-      ))}
-      {/* centro */}
-      <circle cx="240" cy="335" r="14" fill="#1f2937" stroke="#f97316" strokeWidth="2" />
-      <circle cx="240" cy="335" r="5" fill="#f97316" />
-      {/* neumático highlight */}
-      <path d="M195 298 Q205 285 225 282" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round" opacity="0.5" />
-
-      {/* ══ RUEDA DELANTERA ══ */}
-      {/* glow rueda */}
-      <circle cx="660" cy="335" r="68" fill="url(#wheelGlow)" />
-      {/* llanta exterior */}
-      <circle cx="660" cy="335" r="58" fill="#111827" stroke="#374151" strokeWidth="3" />
-      {/* aro */}
-      <circle cx="660" cy="335" r="44" fill="#0f172a" stroke="#4b5563" strokeWidth="2" />
-      {/* rayos */}
-      {[0,40,80,120,160,200,240,280,320].map((angle, i) => (
-        <line key={i}
-          x1={660 + 14 * Math.cos(angle * Math.PI / 180)}
-          y1={335 + 14 * Math.sin(angle * Math.PI / 180)}
-          x2={660 + 42 * Math.cos(angle * Math.PI / 180)}
-          y2={335 + 42 * Math.sin(angle * Math.PI / 180)}
-          stroke="#6b7280" strokeWidth="5" strokeLinecap="round"
-        />
-      ))}
-      {/* centro */}
-      <circle cx="660" cy="335" r="14" fill="#1f2937" stroke="#f97316" strokeWidth="2" />
-      <circle cx="660" cy="335" r="5" fill="#f97316" />
-      {/* neumático highlight */}
-      <path d="M615 298 Q625 285 645 282" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round" opacity="0.5" />
-
-      {/* ── Detalle parabrisas borde ── */}
-      <path d="M322 178 L342 145 L355 148 L335 182 Z"
-        fill="#0f172a" />
-      <path d="M656 178 L650 155 L665 162 L672 183 Z"
-        fill="#0f172a" />
-    </svg>
+        {/* Combustible */}
+        <div className="flex flex-col items-center gap-1">
+          <svg viewBox="0 0 80 80" className="w-16">
+            <circle cx="40" cy="40" r="34" fill="#0f172a" stroke="#1e293b" strokeWidth="2"/>
+            <circle cx="40" cy="40" r="28" fill="none" stroke="#1e293b" strokeWidth="7" strokeDasharray="2 4"/>
+            <circle cx="40" cy="40" r="28" fill="none" stroke="#f59e0b" strokeWidth="7"
+              strokeDasharray={`${2 * Math.PI * 28 * 0.7} ${2 * Math.PI * 28}`}
+              strokeDashoffset={2 * Math.PI * 28 * 0.25}
+              strokeLinecap="round" opacity="0.8"/>
+            <text x="40" y="42" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="900"
+              fontFamily="system-ui">70%</text>
+            <text x="40" y="53" textAnchor="middle" fill="#f59e0b" fontSize="7" fontWeight="700"
+              fontFamily="system-ui">COMB</text>
+          </svg>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Combustible</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -261,9 +235,9 @@ function HeroPanel() {
           </p>
         </div>
 
-        {/* Auto illustration */}
-        <div className="mt-auto -mb-4 -mx-4">
-          <CarIllustration />
+        {/* Dashboard illustration */}
+        <div className="mt-auto flex items-center justify-center pb-8">
+          <DashboardIllustration />
         </div>
       </div>
 

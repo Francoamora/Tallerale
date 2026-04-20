@@ -7,6 +7,7 @@
  */
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LandingNav } from "@/components/landing-nav";
 
 export const metadata: Metadata = {
   title: "TallerOS · El sistema operativo de tu taller mecánico",
@@ -115,46 +116,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white antialiased">
 
       {/* ══ NAVBAR ══════════════════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 sm:px-6">
-
-          {/* Logo */}
-          <Link href="/landing" className="flex items-center gap-3 transition active:scale-95">
-            <LogoOS />
-            <div>
-              <BrandName className="text-base font-black" />
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 leading-none mt-0.5">
-                Para talleres mecánicos
-              </p>
-            </div>
-          </Link>
-
-          {/* Nav — desktop */}
-          <nav className="hidden items-center gap-8 md:flex">
-            <a href="#features" className="text-sm font-semibold text-slate-500 transition hover:text-slate-900">Funciones</a>
-            <a href="#portal" className="text-sm font-semibold text-slate-500 transition hover:text-slate-900">Portal del Cliente</a>
-            <a href="#prueba" className="text-sm font-semibold text-slate-500 transition hover:text-slate-900">Probá gratis</a>
-            <a href="#contacto" className="text-sm font-semibold text-slate-500 transition hover:text-slate-900">Contacto</a>
-          </nav>
-
-          {/* CTAs */}
-          <div className="flex items-center gap-2">
-            <Link
-              href="/login"
-              className="hidden text-sm font-semibold text-slate-600 transition hover:text-slate-900 sm:block"
-            >
-              Iniciar sesión
-            </Link>
-            <Link
-              href="/registro"
-              className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-700 active:scale-95"
-            >
-              Probar gratis
-              <span>{I.arrow}</span>
-            </Link>
-          </div>
-        </div>
-      </header>
+      <LandingNav />
 
       {/* ══ HERO ════════════════════════════════════════════════════════════════ */}
       <section className="relative overflow-hidden bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-4 py-24 sm:py-36">
