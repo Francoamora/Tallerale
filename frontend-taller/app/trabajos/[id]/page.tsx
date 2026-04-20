@@ -97,7 +97,7 @@ function BtnPDF({ onClick, cargando, variante }: { onClick: () => void; cargando
 }
 
 // ─── Documento A4 ────────────────────────────────────────────────────────────
-function DocumentoA4({ t, tallerNombre }: { t: TrabajoDetalle; tallerNombre: string }) {
+function DocumentoA4({ t, tallerNombre, tallerCiudad }: { t: TrabajoDetalle; tallerNombre: string; tallerCiudad: string }) {
   const num = `OT-${String(t.id).padStart(5, "0")}`;
   const fecha = formatDate(t.fecha_ingreso);
   const iniciales = tallerNombre
@@ -173,7 +173,7 @@ function DocumentoA4({ t, tallerNombre }: { t: TrabajoDetalle; tallerNombre: str
                     {tallerNombre}
                   </div>
                   <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 500, marginTop: "1px" }}>
-                    Taller Mecánico
+                    {tallerCiudad || "Taller Mecánico"}
                   </div>
                 </div>
               </div>
@@ -405,7 +405,7 @@ function DocumentoA4({ t, tallerNombre }: { t: TrabajoDetalle; tallerNombre: str
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: "13px", fontWeight: 900, color: "#f97316", letterSpacing: "-0.3px" }}>{tallerNombre}</div>
-              <div style={{ fontSize: "9px", color: "#94a3b8", marginTop: "2px" }}>Taller Mecánico</div>
+              <div style={{ fontSize: "9px", color: "#94a3b8", marginTop: "2px" }}>{tallerCiudad || "Taller Mecánico"}</div>
             </div>
           </div>
         </div>
@@ -461,11 +461,13 @@ export default function DetalleTrabajo({ params }: PageProps) {
   const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
   const [modoPreview, setModoPreview] = useState(false);
   const [generandoPDF, setGenerandoPDF] = useState(false);
-  const [tallerNombre, setTallerNombre] = useState("Taller Mecánico");
+  const [tallerNombre, setTallerNombre] = useState("");
+  const [tallerCiudad, setTallerCiudad] = useState("");
 
   useEffect(() => {
     const session = getSession();
     if (session?.taller_nombre) setTallerNombre(session.taller_nombre);
+    if (session?.taller_ciudad) setTallerCiudad(session.taller_ciudad);
   }, []);
 
   useEffect(() => {
@@ -636,7 +638,7 @@ export default function DetalleTrabajo({ params }: PageProps) {
         {/* Documento centrado */}
         <div className="flex justify-center py-10 print:py-0 print:block">
           <div className="shadow-2xl ring-1 ring-slate-900/10 print:shadow-none print:ring-0">
-            <DocumentoA4 t={trabajo} tallerNombre={tallerNombre} />
+            <DocumentoA4 t={trabajo} tallerNombre={tallerNombre} tallerCiudad={tallerCiudad} />
           </div>
         </div>
       </div>
@@ -778,7 +780,7 @@ export default function DetalleTrabajo({ params }: PageProps) {
           </p>
           <div className="overflow-auto rounded-2xl border border-slate-200 bg-slate-100 p-3 sm:p-6 dark:border-slate-700 dark:bg-slate-900/50">
             <div className="mx-auto shadow-xl ring-1 ring-slate-900/10 dark:ring-slate-700">
-              <DocumentoA4 t={trabajo} tallerNombre={tallerNombre} />
+              <DocumentoA4 t={trabajo} tallerNombre={tallerNombre} tallerCiudad={tallerCiudad} />
             </div>
           </div>
         </div>

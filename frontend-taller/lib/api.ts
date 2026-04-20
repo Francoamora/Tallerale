@@ -245,6 +245,29 @@ export async function logoutDjango(): Promise<void> {
 }
 
 // ==========================================
+// PERFIL DEL TALLER
+// ==========================================
+
+export interface PerfilTallerData {
+  nombre: string;
+  taller_nombre: string;
+  taller_ciudad: string;
+  taller_tel: string;
+}
+
+export async function getPerfilTaller(): Promise<PerfilTallerData> {
+  return apiRequest<PerfilTallerData>("/perfil/");
+}
+
+export async function updatePerfilTaller(data: PerfilTallerData): Promise<PerfilTallerData> {
+  return apiRequest<PerfilTallerData>("/perfil/", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+// ==========================================
 // MÓDULOS DE NEGOCIO (Rutas)
 // ==========================================
 

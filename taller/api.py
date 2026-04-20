@@ -1140,6 +1140,20 @@ class AuthOut(Schema):
     trial_start: Optional[str] = None
 
 
+class PerfilOut(Schema):
+    nombre: str
+    taller_nombre: str
+    taller_ciudad: str = ""
+    taller_tel: str = ""
+
+
+class PerfilIn(Schema):
+    nombre: str
+    taller_nombre: str
+    taller_ciudad: str = ""
+    taller_tel: str = ""
+
+
 class MessageOut(Schema):
     message: str
 
@@ -1235,6 +1249,47 @@ def rotate_token_api(request):
         taller_ciudad=perfil.taller_ciudad if perfil else "",
         taller_tel=perfil.taller_tel if perfil else "",
         trial_start=perfil.trial_start.isoformat() if perfil else None,
+    )
+
+
+@api.get("/perfil/", response=PerfilOut, tags=["Auth"])
+def get_perfil(request):
+    """Devuelve el perfil del taller del usuario autenticado."""
+    try:
+        perfil = request.user.perfil
+    except PerfilTaller.DoesNotExist:
+        raise HttpError(404, "Perfil no encontrado. Completá tu perfil desde la app.")
+    return PerfilOut(
+        nombre=perfil.nombre,
+        taller_nombre=perfil.taller_nombre,
+        taller_ciudad=perfil.taller_ciudad,
+        taller_tel=perfil.taller_tel,
+    )
+
+
+@api.put("/perfil/", response=PerfilOut, tags=["Auth"])
+def update_perfil(request, payload: PerfilIn):
+    """Actualiza (o crea) el perfil del taller del usuario autenticado."""
+    try:
+        perfil = request.user.perfil
+        perfil.nombre        = payload.nombre
+        perfil.taller_nombre = payload.taller_nombre
+        perfil.taller_ciudad = payload.taller_ciudad
+        perfil.taller_tel    = payload.taller_tel
+        perfil.save()
+    except PerfilTaller.DoesNotExist:
+        perfil = PerfilTaller.objects.create(
+            user=request.user,
+            nombre=payload.nombre,
+            taller_nombre=payload.taller_nombre,
+            taller_ciudad=payload.taller_ciudad,
+            taller_tel=payload.taller_tel,
+        )
+    return PerfilOut(
+        nombre=perfil.nombre,
+        taller_nombre=perfil.taller_nombre,
+        taller_ciudad=perfil.taller_ciudad,
+        taller_tel=perfil.taller_tel,
     )
 
 
