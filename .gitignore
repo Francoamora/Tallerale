@@ -10,3 +10,7 @@ media/
 staticfiles/
 taller/**/__pycache__/
 taller_ale_gavilan/**/__pycache__/
+
+# Node.js (root-level package.json solo para detección de Vercel)
+node_modules/
+package-lock.json
