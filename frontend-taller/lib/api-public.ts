@@ -17,14 +17,23 @@ const FALLBACK = "http://127.0.0.1:8000/api";
 function getBaseUrl(): string {
   if (typeof window === "undefined") {
     // Server Component / SSR
-    return (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? FALLBACK).replace(/\/$/, "");
+    const configured = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (configured) return configured.replace(/\/$/, "");
+    return process.env.NODE_ENV !== "production" ? FALLBACK : "";
   }
   // Client Component
-  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? FALLBACK).replace(/\/$/, "");
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (configured) return configured.replace(/\/$/, "");
+  return process.env.NODE_ENV !== "production" ? FALLBACK : "";
 }
 
 function buildUrl(path: string): string {
   const base = getBaseUrl();
+  if (!base) {
+    throw new Error(
+      "Falta configurar NEXT_PUBLIC_API_BASE_URL/API_BASE_URL para usar los endpoints publicos del backend.",
+    );
+  }
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 

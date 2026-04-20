@@ -1,12 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({ 
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-inter",
-});
 
 export const metadata: Metadata = {
   title: {
@@ -23,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     // suppressHydrationWarning evita errores cuando carga el modo oscuro guardado
-    <html lang="es" className={`${inter.variable} antialiased`} suppressHydrationWarning>
+    <html lang="es" className="antialiased" suppressHydrationWarning>
       {/* Acá está la clave: 
         De día -> Fondo slate-50, texto slate-900
         De noche -> Fondo slate-950, texto slate-50

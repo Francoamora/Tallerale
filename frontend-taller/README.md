@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TallerOS Frontend
 
-## Getting Started
+Frontend desacoplado de `TallerOS`, construido con `Next.js 16`, `TypeScript` y `Tailwind CSS`.
 
-First, run the development server:
+## Desarrollo local
+
+1. Crear variables de entorno:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Apuntar el frontend al backend Django:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000/api
+API_BASE_URL=http://127.0.0.1:8000/api
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Levantar el proyecto:
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy en Vercel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Este repo es un monorepo simple:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- backend Django en la raiz del repositorio
+- frontend Next.js en `frontend-taller/`
 
-## Deploy on Vercel
+Para desplegar el frontend correcto en Vercel:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Importar el repo `Francoamora/Tallerale`
+2. Configurar `Root Directory` como `frontend-taller`
+3. Elegir `Framework Preset: Next.js`
+4. Cargar estas variables:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```env
+NEXT_PUBLIC_API_BASE_URL=https://tu-backend.up.railway.app/api
+API_BASE_URL=https://tu-backend.up.railway.app/api
+```
+
+Si Vercel apunta a `./`, va a detectar el backend Django viejo de la raiz y no este frontend.

@@ -4,15 +4,30 @@ import { getAuthToken, clearSession } from "@/lib/trial";
 
 const FALLBACK_API_ROOT = "http://127.0.0.1:8000/api";
 
-export const API_ROOT = (
-  process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? FALLBACK_API_ROOT
-).replace(/\/$/, "");
+function resolveApiRoot() {
+  const configured = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (configured) return configured.replace(/\/$/, "");
+
+  if (process.env.NODE_ENV !== "production") {
+    return FALLBACK_API_ROOT;
+  }
+
+  return "";
+}
+
+export const API_ROOT = resolveApiRoot();
 
 export const PUBLIC_API_ROOT = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? FALLBACK_API_ROOT
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  (process.env.NODE_ENV !== "production" ? FALLBACK_API_ROOT : "")
 ).replace(/\/$/, "");
 
 function buildUrl(path: string, root = API_ROOT) {
+  if (!root) {
+    throw new Error(
+      "Falta configurar NEXT_PUBLIC_API_BASE_URL/API_BASE_URL para conectar el frontend con el backend.",
+    );
+  }
   return `${root}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
