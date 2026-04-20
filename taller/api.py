@@ -1134,6 +1134,8 @@ class AuthOut(Schema):
     email: str
     nombre: str
     taller_nombre: str
+    taller_ciudad: str = ""
+    taller_tel: str = ""
     taller_id: Optional[int] = None
     trial_start: Optional[str] = None
 
@@ -1195,6 +1197,8 @@ def login_api(request, payload: LoginIn):
         email=user.email or identifier_lower,
         nombre=perfil.nombre if perfil else (user.first_name or user.username),
         taller_nombre=perfil.taller_nombre if perfil else (user.last_name or "Mi Taller"),
+        taller_ciudad=perfil.taller_ciudad if perfil else "",
+        taller_tel=perfil.taller_tel if perfil else "",
         trial_start=perfil.trial_start.isoformat() if perfil else None,
     )
 
@@ -1228,6 +1232,8 @@ def rotate_token_api(request):
         email=request.user.email or request.user.username,
         nombre=perfil.nombre if perfil else (request.user.first_name or request.user.username),
         taller_nombre=perfil.taller_nombre if perfil else (request.user.last_name or "Mi Taller"),
+        taller_ciudad=perfil.taller_ciudad if perfil else "",
+        taller_tel=perfil.taller_tel if perfil else "",
         trial_start=perfil.trial_start.isoformat() if perfil else None,
     )
 
@@ -1265,5 +1271,7 @@ def register_api(request, payload: RegisterIn):
         email=user.email,
         nombre=perfil.nombre,
         taller_nombre=perfil.taller_nombre,
+        taller_ciudad=perfil.taller_ciudad,
+        taller_tel=perfil.taller_tel,
         trial_start=perfil.trial_start.isoformat(),
     )

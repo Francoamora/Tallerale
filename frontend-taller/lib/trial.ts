@@ -27,12 +27,25 @@ export interface SessionData {
 }
 
 const KEY = "ag_session_data";
+const COOKIE_TOKEN = "ag_token";
+
+/** Sincroniza el token a una cookie para que el middleware de Next.js pueda leerlo. */
+function syncTokenCookie(token: string | null): void {
+  if (typeof document === "undefined") return;
+  if (token) {
+    const secure = location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${COOKIE_TOKEN}=${token}; path=/; SameSite=Lax${secure}`;
+  } else {
+    document.cookie = `${COOKIE_TOKEN}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+  }
+}
 
 // ─── Guardar sesión al registrarse ───────────────────────────────────────────
 export function saveSession(data: SessionData): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(KEY, JSON.stringify(data));
   localStorage.setItem("ag_session", "true");
+  syncTokenCookie(data.token || null);
 }
 
 // ─── Leer sesión ──────────────────────────────────────────────────────────────
@@ -121,6 +134,8 @@ export function clearSession(): void {
   localStorage.removeItem("ag_session");
   // Limpiar hints del usuario anterior para que el nuevo vea sus propias guías
   localStorage.removeItem("ag_hints_dismissed");
+  // Limpiar cookie para que el middleware de Next.js también refleje el logout
+  syncTokenCookie(null);
 }
 
 // ─── Leer token de auth ───────────────────────────────────────────────────────

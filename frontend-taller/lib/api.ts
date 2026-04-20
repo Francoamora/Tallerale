@@ -153,6 +153,8 @@ export interface AuthResponse {
   email: string;
   nombre: string;
   taller_nombre: string;
+  taller_ciudad?: string;
+  taller_tel?: string;
   taller_id?: number;
   trial_start?: string;   // ISO — solo en register
 }
