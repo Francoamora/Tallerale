@@ -1,122 +1,125 @@
 {% extends "taller/base.html" %}
-{% block title %}Vehículos – Ale Gavilan Cars Solutions{% endblock %}
+{% block title %}Vehículos — Ale Gavilan Cars Solutions{% endblock %}
 
 {% block content %}
 
-<div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+<div class="page-header d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
-    <h1 class="h5 mb-1">Vehículos</h1>
-    <div class="text-muted small">
-      Unidades registradas y acceso rápido a trabajos.
+    <span class="badge rounded-pill mb-2" style="background:rgba(255,255,255,0.06);color:var(--text-secondary);border:1px solid var(--border-strong);font-size:.68rem;">
+      <i class="bi bi-car-front-fill me-1"></i>VEHÍCULOS
+    </span>
+    <h1 class="h4 mb-1 gradient-text">Registro de vehículos</h1>
+    <p class="text-muted small mb-0">Consultá y gestioná todas las unidades del taller.</p>
+  </div>
+  <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-brand btn-sm">
+    <i class="bi bi-plus-lg"></i> Nuevo vehículo
+  </a>
+</div>
+
+{# ── BÚSQUEDA ── #}
+<div class="card-premium p-3 mb-4">
+  <form method="get" class="d-flex gap-2 align-items-center flex-wrap">
+    <div class="search-wrapper flex-grow-1">
+      <i class="bi bi-search"></i>
+      <input type="text" name="q" value="{{ request.GET.q|default:'' }}"
+             class="form-control form-control-sm"
+             placeholder="Buscar por patente, marca, modelo, cliente…" autocomplete="off">
+    </div>
+    <button type="submit" class="btn btn-brand btn-sm"><i class="bi bi-search"></i> Buscar</button>
+    {% if request.GET.q %}
+      <a href="{% url 'taller:vehiculo_list' %}" class="btn btn-outline-premium btn-sm"><i class="bi bi-x-lg"></i></a>
+    {% endif %}
+  </form>
+</div>
+
+{# ── TABLA ── #}
+{% if vehiculos %}
+  <div class="card-premium p-0">
+    <div class="table-responsive">
+      <table class="table table-dark-custom mb-0">
+        <thead>
+          <tr>
+            <th>Patente</th>
+            <th>Vehículo</th>
+            <th>Año</th>
+            <th>Color</th>
+            <th>Cliente</th>
+            <th class="text-end">Km actual</th>
+            <th class="text-end">Próx. service</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in vehiculos %}
+            <tr>
+              <td class="fw-bold" style="color:var(--text-primary);letter-spacing:.06em;">{{ v.patente }}</td>
+              <td>
+                <div class="fw-semibold small">{{ v.marca }} {{ v.modelo }}</div>
+              </td>
+              <td class="text-secondary small">{{ v.anio|default:"—" }}</td>
+              <td class="text-secondary small">{{ v.color|default:"—" }}</td>
+              <td>
+                {% if v.cliente %}
+                  <a href="{% url 'taller:cliente_detail' v.cliente.pk %}" style="color:var(--info);font-size:.84rem;text-decoration:none;">
+                    {{ v.cliente.nombre_completo }}
+                  </a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-end text-secondary small">
+                {% if v.kilometraje_actual %}{{ v.kilometraje_actual|floatformat:0 }} km{% else %}—{% endif %}
+              </td>
+              <td class="text-end small">
+                {% if v.proximo_service_km %}
+                  <span style="color:#fbbf24;">{{ v.proximo_service_km|floatformat:0 }} km</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm">
+                  <a href="{% url 'taller:vehiculo_detail' v.pk %}" class="btn btn-outline-premium btn-sm" title="Ver ficha"><i class="bi bi-eye"></i></a>
+                  <a href="{% url 'taller:vehiculo_update' v.pk %}" class="btn btn-outline-premium btn-sm" title="Editar"><i class="bi bi-pencil"></i></a>
+                  <a href="{% url 'taller:trabajo_list' %}?q={{ v.patente }}" class="btn btn-outline-premium btn-sm" title="Ver trabajos"><i class="bi bi-clipboard-data"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <div class="d-flex gap-2 flex-wrap">
-    <a class="btn btn-brand btn-sm" href="{% url 'taller:vehiculo_create' %}">
-      <i class="bi bi-car-front me-1"></i> Nuevo vehículo
-    </a>
-    <a class="btn btn-outline-secondary btn-sm" href="{% url 'taller:cliente_create' %}">
-      <i class="bi bi-person-plus me-1"></i> Nuevo cliente
-    </a>
-  </div>
-</div>
-
-<form method="get" class="mb-3">
-  <div class="input-group">
-    <span class="input-group-text"><i class="bi bi-search"></i></span>
-    <input
-      type="search"
-      name="q"
-      value="{{ request.GET.q|default:'' }}"
-      class="form-control"
-      placeholder="Buscar por patente, marca o modelo…"
-    >
-    <button class="btn btn-outline-secondary">Buscar</button>
-  </div>
-</form>
-
-{% if vehiculos %}
-<div class="card-premium p-0 overflow-hidden">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Patente</th>
-          <th>Vehículo</th>
-          <th>Cliente</th>
-          <th class="text-end">Km</th>
-          <th class="text-end">Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for v in vehiculos %}
-          <tr>
-            <td class="fw-semibold">{{ v.patente }}</td>
-
-            <td>
-              <div class="fw-semibold text-dark">
-                {{ v.marca }} {{ v.modelo }}
-              </div>
-              <div class="small text-dark">
-                {% if v.anio %}
-                  Año {{ v.anio }}
-                {% else %}
-                  Año no informado
-                {% endif %}
-              </div>
-            </td>
-
-            <td>
-              {% if v.cliente %}
-                <span class="text-dark">{{ v.cliente.nombre_completo }}</span>
-              {% else %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-
-            <td class="text-end">
-              {% if v.kilometraje_actual %}
-                {{ v.kilometraje_actual }} km
-              {% else %}
-                —
-              {% endif %}
-            </td>
-
-            <td class="text-end">
-              <div class="btn-group btn-group-sm">
-                <a href="{% url 'taller:vehiculo_detail' v.id %}"
-                   class="btn btn-outline-secondary"
-                   title="Ver vehículo">
-                  <i class="bi bi-eye"></i>
-                </a>
-                <a href="{% url 'taller:vehiculo_update' v.id %}"
-                   class="btn btn-outline-primary"
-                   title="Editar vehículo">
-                  <i class="bi bi-pencil"></i>
-                </a>
-                <a href="{% url 'taller:trabajo_list' %}?q={{ v.patente }}"
-                   class="btn btn-outline-secondary"
-                   title="Ver trabajos">
-                  <i class="bi bi-clipboard-data"></i>
-                </a>
-              </div>
-            </td>
-          </tr>
+  {% if is_paginated %}
+    <nav class="d-flex justify-content-center mt-4">
+      <ul class="pagination gap-1">
+        {% if page_obj.has_previous %}
+          <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}"><i class="bi bi-chevron-left"></i></a></li>
+        {% endif %}
+        {% for num in page_obj.paginator.page_range %}
+          {% if page_obj.number == num %}
+            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+          {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item"><a class="page-link" href="?page={{ num }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">{{ num }}</a></li>
+          {% endif %}
         {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
+        {% if page_obj.has_next %}
+          <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}"><i class="bi bi-chevron-right"></i></a></li>
+        {% endif %}
+      </ul>
+    </nav>
+  {% endif %}
+
 {% else %}
-<div class="card-premium p-4">
-  <h2 class="h6 text-uppercase text-secondary mb-2">Sin vehículos</h2>
-  <p class="text-secondary small mb-3">
-    Cargá el primer vehículo para empezar a registrar trabajos.
-  </p>
-  <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-brand btn-sm">
-    <i class="bi bi-car-front me-1"></i> Cargar vehículo
-  </a>
-</div>
+  <div class="card-premium p-5 text-center">
+    <i class="bi bi-car-front" style="font-size:3rem;color:var(--border-strong);display:block;margin-bottom:1rem;"></i>
+    <h5 class="text-secondary">Sin vehículos registrados</h5>
+    <p class="text-muted small">Cargá el primer vehículo para empezar a registrar trabajos.</p>
+    <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-brand btn-sm mt-2">
+      <i class="bi bi-plus me-1"></i>Agregar vehículo
+    </a>
+  </div>
 {% endif %}
 
 {% endblock %}

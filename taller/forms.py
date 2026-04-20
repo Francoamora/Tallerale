@@ -77,11 +77,8 @@ class ARIntegerField(forms.IntegerField):
 # ==========================
 
 class BaseModelForm(forms.ModelForm):
-    def _add_class(self, widget, cls: str):
-        existing = widget.attrs.get("class", "")
-        widget.attrs["class"] = (existing + f" {cls}").strip()
-
     def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
 
         for name, field in self.fields.items():
@@ -99,6 +96,10 @@ class BaseModelForm(forms.ModelForm):
 
             widget.attrs.setdefault("aria-label", field.label or name)
 
+    def _add_class(self, widget, cls: str):
+        existing = widget.attrs.get("class", "")
+        widget.attrs["class"] = (existing + f" {cls}").strip()
+
 
 # ==========================
 #   CLIENTES / VEHÍCULOS
@@ -107,16 +108,31 @@ class BaseModelForm(forms.ModelForm):
 class ClienteForm(BaseModelForm):
     class Meta:
         model = Cliente
-        fields = "__all__"
+        fields = ["nombre", "apellido", "telefono", "email", "dni", "direccion", "notas"]
 
 
 class VehiculoForm(BaseModelForm):
     class Meta:
         model = Vehiculo
-        fields = "__all__"
+        fields = [
+            "cliente",
+            "patente",
+            "marca",
+            "modelo",
+            "anio",
+            "color",
+            "kilometraje_actual",
+            "estado_cubiertas",
+            "proximo_service_km",
+            "proximo_service_fecha",
+            "notas",
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        if self.user and "cliente" in self.fields:
+            self.fields["cliente"].queryset = Cliente.objects.filter(owner=self.user).order_by("nombre", "apellido")
 
         if "kilometraje_actual" in self.fields:
             self.fields["kilometraje_actual"] = ARIntegerField(
@@ -133,6 +149,41 @@ class VehiculoForm(BaseModelForm):
                 }
             )
 
+    def clean_cliente(self):
+        cliente = self.cleaned_data.get("cliente")
+        if cliente and self.user and cliente.owner_id != self.user.id:
+            raise ValidationError("No podés asociar un vehículo a un cliente de otra cuenta.")
+        return cliente
+
+    def clean_patente(self):
+        patente = "".join((self.cleaned_data.get("patente") or "").split()).upper()
+        if not patente:
+            raise ValidationError("La patente es obligatoria.")
+        return patente
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cliente = cleaned_data.get("cliente")
+        patente = cleaned_data.get("patente")
+
+        if cliente:
+            self.instance.owner = cliente.owner
+
+        if cliente and patente:
+            duplicado = (
+                Vehiculo.objects.filter(owner=cliente.owner, patente=patente)
+                .exclude(pk=self.instance.pk)
+                .select_related("cliente")
+                .first()
+            )
+            if duplicado:
+                if duplicado.cliente_id == cliente.id:
+                    self.add_error("patente", "La patente ya está cargada para este cliente en tu taller.")
+                else:
+                    self.add_error("patente", "La patente ya está registrada en tu taller a nombre de otro cliente.")
+
+        return cleaned_data
+
 
 # ==========================
 #   TRABAJOS
@@ -145,6 +196,12 @@ class TrabajoForm(BaseModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        if self.user:
+            if "cliente" in self.fields:
+                self.fields["cliente"].queryset = Cliente.objects.filter(owner=self.user).order_by("nombre", "apellido")
+            if "vehiculo" in self.fields:
+                self.fields["vehiculo"].queryset = Vehiculo.objects.select_related("cliente").filter(owner=self.user).order_by("patente")
 
         if "kilometraje" in self.fields:
             self.fields["kilometraje"] = ARIntegerField(required=True, label="Kilometraje")
@@ -178,6 +235,22 @@ class TrabajoForm(BaseModelForm):
         else:
             for fname in ("fecha_ingreso", "fecha_egreso_estimado", "fecha_egreso_real"):
                 self.fields.pop(fname, None)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cliente = cleaned_data.get("cliente")
+        vehiculo = cleaned_data.get("vehiculo")
+
+        if cliente and self.user and cliente.owner_id != self.user.id:
+            self.add_error("cliente", "No podés usar un cliente de otra cuenta.")
+
+        if vehiculo and self.user and vehiculo.cliente.owner_id != self.user.id:
+            self.add_error("vehiculo", "No podés usar un vehículo de otra cuenta.")
+
+        if cliente and vehiculo and vehiculo.cliente_id != cliente.id:
+            self.add_error("vehiculo", "El vehículo seleccionado no pertenece al cliente elegido.")
+
+        return cleaned_data
 
 
 class TrabajoItemForm(BaseModelForm):
@@ -265,6 +338,9 @@ class MovimientoCuentaForm(BaseModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        if self.user and "trabajo" in self.fields:
+            self.fields["trabajo"].queryset = Trabajo.objects.select_related("cliente", "vehiculo").filter(owner=self.user).order_by("-fecha_ingreso")
+
         if "monto" in self.fields:
             self.fields["monto"] = ARDecimalField(
                 required=True,
@@ -277,6 +353,11 @@ class MovimientoCuentaForm(BaseModelForm):
                 attrs={"class": "form-control form-control-sm", "inputmode": "decimal", "placeholder": "Ej: 10.000", "autocomplete": "off"}
             )
 
+        # metodo_pago: solo relevante cuando tipo=PAGO
+        if "metodo_pago" in self.fields:
+            self.fields["metodo_pago"].required = False
+            self.fields["metodo_pago"].label = "Método de pago"
+
 
 class TurnoForm(BaseModelForm):
     class Meta:
@@ -287,6 +368,31 @@ class TurnoForm(BaseModelForm):
             "motivo": forms.Textarea(attrs={"rows": 3, "placeholder": "Ej: Service, frenos, diagnóstico de ruido…"}),
             "notas": forms.Textarea(attrs={"rows": 3, "placeholder": "Solo uso interno (no lo ve el cliente)."}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.user:
+            if "cliente" in self.fields:
+                self.fields["cliente"].queryset = Cliente.objects.filter(owner=self.user).order_by("nombre", "apellido")
+            if "vehiculo" in self.fields:
+                self.fields["vehiculo"].queryset = Vehiculo.objects.select_related("cliente").filter(owner=self.user).order_by("patente")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cliente = cleaned_data.get("cliente")
+        vehiculo = cleaned_data.get("vehiculo")
+
+        if cliente and self.user and cliente.owner_id != self.user.id:
+            self.add_error("cliente", "No podés usar un cliente de otra cuenta.")
+
+        if vehiculo and self.user and vehiculo.cliente.owner_id != self.user.id:
+            self.add_error("vehiculo", "No podés usar un vehículo de otra cuenta.")
+
+        if cliente and vehiculo and vehiculo.cliente_id != cliente.id:
+            self.add_error("vehiculo", "El vehículo seleccionado no pertenece al cliente elegido.")
+
+        return cleaned_data
 
 
 # ==========================
@@ -319,6 +425,12 @@ class PresupuestoForm(BaseModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        if self.user:
+            if "cliente" in self.fields:
+                self.fields["cliente"].queryset = Cliente.objects.filter(owner=self.user).order_by("nombre", "apellido")
+            if "vehiculo" in self.fields:
+                self.fields["vehiculo"].queryset = Vehiculo.objects.select_related("cliente").filter(owner=self.user).order_by("patente")
+
         if not (self.instance and self.instance.pk):
             if "fecha" in self.fields and not self.initial.get("fecha"):
                 self.initial["fecha"] = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M")
@@ -350,6 +462,22 @@ class PresupuestoForm(BaseModelForm):
         if val in (None, ""):
             return Decimal("0.00")
         return val
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cliente = cleaned_data.get("cliente")
+        vehiculo = cleaned_data.get("vehiculo")
+
+        if cliente and self.user and cliente.owner_id != self.user.id:
+            self.add_error("cliente", "No podés usar un cliente de otra cuenta.")
+
+        if vehiculo and self.user and vehiculo.cliente.owner_id != self.user.id:
+            self.add_error("vehiculo", "No podés usar un vehículo de otra cuenta.")
+
+        if cliente and vehiculo and vehiculo.cliente_id != cliente.id:
+            self.add_error("vehiculo", "El vehículo seleccionado no pertenece al cliente elegido.")
+
+        return cleaned_data
 
 
 class PresupuestoItemForm(BaseModelForm):

@@ -1,82 +1,191 @@
 {% extends "taller/base.html" %}
-
-{% block title %}Turno #{{ turno.id }} – Taller Mecánico Ale Gavilan{% endblock %}
+{% block title %}Turno #{{ turno.id }} — Ale Gavilan Cars Solutions{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+
+<div class="page-header d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
-    <h1 class="h5 mb-1">
-      Turno · {{ turno.fecha_hora|date:"d/m/Y H:i" }}
-    </h1>
-    <p class="text-secondary small mb-0">
-      {{ turno.cliente.nombre_completo }}
-      {% if turno.vehiculo %}
-        · {{ turno.vehiculo.patente }} – {{ turno.vehiculo.marca }} {{ turno.vehiculo.modelo }}
+    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+      <a href="{% url 'taller:turno_list' %}" style="color:var(--text-muted);font-size:.8rem;text-decoration:none;">
+        <i class="bi bi-calendar-week me-1"></i>Turnos
+      </a>
+      <i class="bi bi-chevron-right text-muted" style="font-size:.7rem;"></i>
+      <span style="color:var(--text-secondary);font-size:.8rem;">#{{ turno.id }}</span>
+      {% if turno.estado == "PENDIENTE" %}<span class="badge badge-pendiente">Pendiente</span>
+      {% elif turno.estado == "CONFIRMADO" %}<span class="badge badge-confirmado">Confirmado</span>
+      {% elif turno.estado == "CANCELADO" %}<span class="badge badge-cancelado">Cancelado</span>
+      {% elif turno.estado == "CUMPLIDO" %}<span class="badge badge-cumplido">Cumplido</span>
       {% endif %}
+    </div>
+    <h1 class="h4 mb-1 gradient-text">
+      <i class="bi bi-calendar3 me-2" style="color:#38bdf8;font-style:normal;"></i>{{ turno.fecha_hora|date:"d/m/Y" }} · {{ turno.fecha_hora|time:"H:i" }} hs
+    </h1>
+    <p class="text-muted small mb-0">
+      {% if turno.cliente %}{{ turno.cliente.nombre_completo }}{% endif %}
+      {% if turno.vehiculo %} · <strong style="color:var(--text-secondary);">{{ turno.vehiculo.patente }}</strong> — {{ turno.vehiculo.marca }} {{ turno.vehiculo.modelo }}{% endif %}
     </p>
   </div>
-  <div class="d-flex gap-2">
-    <a href="{% url 'taller:turno_update' turno.pk %}" class="btn btn-sm btn-outline-light">
-      Editar
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{% url 'taller:turno_update' turno.pk %}" class="btn btn-outline-premium btn-sm">
+      <i class="bi bi-pencil-square me-1"></i>Editar turno
     </a>
-    <a href="{% url 'taller:turno_list' %}" class="btn btn-sm btn-outline-secondary">
-      Volver
+    <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm">
+      <i class="bi bi-clipboard-plus me-1"></i>Crear trabajo
+    </a>
+    <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-premium btn-sm">
+      <i class="bi bi-arrow-left-short"></i>Volver
     </a>
   </div>
 </div>
 
-<div class="card-premium p-4 small">
-  <div class="row g-3">
-    <div class="col-12 col-md-4">
-      <div class="text-secondary text-uppercase mb-1">Cliente</div>
-      <div class="fw-semibold">
-        {{ turno.cliente.nombre_completo }}
+<div class="row g-4">
+
+  {# ── Detalles del turno ── #}
+  <div class="col-12 col-lg-5">
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-calendar-event me-2" style="color:#38bdf8;"></i>Detalles del turno
+        </h2>
       </div>
-      <div class="text-secondary">
-        {{ turno.cliente.telefono|default:"Sin teléfono" }}
+      <div class="p-4">
+        <dl class="row small mb-0">
+          <dt class="col-5 text-muted mb-2">Fecha y hora</dt>
+          <dd class="col-7 fw-semibold mb-2" style="color:var(--text-primary);">
+            {{ turno.fecha_hora|date:"d/m/Y" }} · {{ turno.fecha_hora|time:"H:i" }} hs
+          </dd>
+
+          <dt class="col-5 text-muted mb-2">Estado</dt>
+          <dd class="col-7 mb-2">
+            {% if turno.estado == "PENDIENTE" %}<span class="badge badge-pendiente">Pendiente</span>
+            {% elif turno.estado == "CONFIRMADO" %}<span class="badge badge-confirmado">Confirmado</span>
+            {% elif turno.estado == "CANCELADO" %}<span class="badge badge-cancelado">Cancelado</span>
+            {% elif turno.estado == "CUMPLIDO" %}<span class="badge badge-cumplido">Cumplido</span>
+            {% endif %}
+          </dd>
+
+          <dt class="col-5 text-muted mb-2">Creado</dt>
+          <dd class="col-7 mb-2 text-secondary">{{ turno.creado_en|date:"d/m/Y H:i" }}</dd>
+        </dl>
+
+        {% if turno.motivo %}
+          <hr style="border-color:var(--border);">
+          <div class="small">
+            <div class="text-muted text-uppercase mb-2" style="font-size:.68rem;letter-spacing:.08em;">Motivo</div>
+            <p class="mb-0" style="color:var(--text-secondary);white-space:pre-wrap;">{{ turno.motivo }}</p>
+          </div>
+        {% endif %}
+
+        {% if turno.notas_internas %}
+          <hr style="border-color:var(--border);">
+          <div class="small">
+            <div class="text-muted text-uppercase mb-2" style="font-size:.68rem;letter-spacing:.08em;">
+              <i class="bi bi-lock me-1"></i>Notas internas
+            </div>
+            <p class="mb-0 panel-soft p-3" style="color:var(--text-secondary);white-space:pre-wrap;border-radius:var(--radius);">{{ turno.notas_internas }}</p>
+          </div>
+        {% endif %}
+
+        <hr style="border-color:var(--border);">
+        <div class="d-flex flex-column gap-2">
+          <a href="{% url 'taller:turno_update' turno.pk %}" class="btn btn-outline-premium btn-sm">
+            <i class="bi bi-pencil-square me-1"></i>Editar turno
+          </a>
+          <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm">
+            <i class="bi bi-clipboard-plus me-1"></i>Crear trabajo desde este turno
+          </a>
+        </div>
       </div>
     </div>
-    <div class="col-12 col-md-4">
-      <div class="text-secondary text-uppercase mb-1">Vehículo</div>
-      {% if turno.vehiculo %}
-        <div class="fw-semibold">
-          {{ turno.vehiculo.patente }}
-        </div>
-        <div class="text-secondary">
-          {{ turno.vehiculo.marca }} {{ turno.vehiculo.modelo }}
+  </div>
+
+  {# ── Cliente + Vehículo ── #}
+  <div class="col-12 col-lg-7">
+    <div class="d-flex flex-column gap-4 h-100">
+
+      {% if turno.cliente %}
+        <div class="card-premium p-0">
+          <div class="card-premium-header">
+            <h2 class="h6 mb-0" style="color:var(--text-primary);">
+              <i class="bi bi-person-fill me-2" style="color:#34d399;"></i>Cliente
+            </h2>
+          </div>
+          <div class="p-4">
+            <div class="d-flex align-items-center gap-3 mb-3">
+              <div class="client-avatar flex-shrink-0">{{ turno.cliente.nombre_completo|first }}</div>
+              <div>
+                <div class="fw-semibold" style="color:var(--text-primary);font-size:1rem;">{{ turno.cliente.nombre_completo }}</div>
+                <div class="d-flex flex-wrap gap-3 mt-1" style="font-size:.78rem;color:var(--text-muted);">
+                  {% if turno.cliente.telefono %}
+                    <span><i class="bi bi-telephone me-1"></i>{{ turno.cliente.telefono }}</span>
+                  {% endif %}
+                  {% if turno.cliente.dni %}
+                    <span><i class="bi bi-person-vcard me-1"></i>{{ turno.cliente.dni }}</span>
+                  {% endif %}
+                  {% if turno.cliente.email %}
+                    <span><i class="bi bi-envelope me-1"></i>{{ turno.cliente.email }}</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            <a href="{% url 'taller:cliente_detail' turno.cliente.pk %}" class="btn btn-outline-premium btn-sm">
+              <i class="bi bi-eye me-1"></i>Ver ficha del cliente
+            </a>
+          </div>
         </div>
       {% else %}
-        <div class="text-secondary">Sin vehículo asociado</div>
+        <div class="card-premium p-4">
+          <div class="text-muted small"><i class="bi bi-person me-2"></i>Sin cliente asociado</div>
+        </div>
       {% endif %}
-    </div>
-    <div class="col-12 col-md-4">
-      <div class="text-secondary text-uppercase mb-1">Estado</div>
-      <div class="text-info text-uppercase fw-semibold">
-        {{ turno.get_estado_display }}
-      </div>
-      <div class="text-secondary mt-2">
-        Creado el {{ turno.creado_en|date:"d/m/Y H:i" }}
-      </div>
-    </div>
 
-    <div class="col-12">
-      <hr class="border-secondary-subtle">
-    </div>
+      {% if turno.vehiculo %}
+        <div class="card-premium p-0">
+          <div class="card-premium-header">
+            <h2 class="h6 mb-0" style="color:var(--text-primary);">
+              <i class="bi bi-car-front-fill me-2" style="color:#fbbf24;"></i>Vehículo
+            </h2>
+          </div>
+          <div class="p-4">
+            <div class="d-flex align-items-center gap-3 mb-3">
+              <div class="icon-circle icon-circle-warning flex-shrink-0">
+                <i class="bi bi-car-front"></i>
+              </div>
+              <div>
+                <div class="fw-bold" style="color:var(--text-primary);letter-spacing:.06em;font-size:1.1rem;">{{ turno.vehiculo.patente }}</div>
+                <div style="color:var(--text-muted);font-size:.84rem;">
+                  {{ turno.vehiculo.marca }} {{ turno.vehiculo.modelo }}
+                  {% if turno.vehiculo.anio %} · {{ turno.vehiculo.anio }}{% endif %}
+                  {% if turno.vehiculo.color %} · {{ turno.vehiculo.color }}{% endif %}
+                </div>
+              </div>
+            </div>
+            {% if turno.vehiculo.kilometraje_actual %}
+              <div class="panel-soft p-3 mb-3 small">
+                <i class="bi bi-speedometer2 me-2" style="color:#38bdf8;"></i>
+                <strong style="color:var(--text-primary);">{{ turno.vehiculo.kilometraje_actual|floatformat:0 }} km</strong>
+                <span class="text-muted ms-1">— último registrado</span>
+              </div>
+            {% endif %}
+            <div class="d-flex gap-2">
+              <a href="{% url 'taller:vehiculo_detail' turno.vehiculo.pk %}" class="btn btn-outline-premium btn-sm">
+                <i class="bi bi-eye me-1"></i>Ver ficha del vehículo
+              </a>
+              <a href="{% url 'taller:trabajo_list' %}?q={{ turno.vehiculo.patente }}" class="btn btn-outline-premium btn-sm">
+                <i class="bi bi-clipboard-data me-1"></i>Trabajos
+              </a>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="card-premium p-4">
+          <div class="text-muted small"><i class="bi bi-car-front me-2"></i>Sin vehículo asociado</div>
+        </div>
+      {% endif %}
 
-    <div class="col-12 col-md-6">
-      <div class="text-secondary text-uppercase mb-1">Motivo</div>
-      <p class="mb-0">{{ turno.motivo }}</p>
-    </div>
-    <div class="col-12 col-md-6">
-      <div class="text-secondary text-uppercase mb-1">Notas internas</div>
-      <p class="mb-0">
-        {% if turno.notas_internas %}
-          {{ turno.notas_internas }}
-        {% else %}
-          —
-        {% endif %}
-      </p>
     </div>
   </div>
+
 </div>
+
 {% endblock %}

@@ -1,209 +1,159 @@
 {% extends "taller/base.html" %}
-{% block title %}Presupuestos – Ale Gavilan Cars Solutions{% endblock %}
+{% block title %}Presupuestos — Ale Gavilan Cars Solutions{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
-  <div>
-    <h1 class="h5 mb-1">Presupuestos</h1>
-    <div class="text-muted small">
-      Listado de presupuestos guardados para imprimir o entregar al cliente.
-    </div>
-  </div>
 
+<div class="page-header d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+  <div>
+    <span class="badge rounded-pill mb-2" style="background:rgba(255,255,255,0.06);color:var(--text-secondary);border:1px solid var(--border-strong);font-size:.68rem;">
+      <i class="bi bi-file-earmark-text me-1"></i>PRESUPUESTOS
+    </span>
+    <h1 class="h4 mb-1 gradient-text">Presupuestos</h1>
+    <p class="text-muted small mb-0">Generá, imprimí y gestioná presupuestos para tus clientes.</p>
+  </div>
   <div class="d-flex gap-2">
-    <a class="btn btn-brand btn-sm" href="{% url 'taller:presupuesto_create' %}">
-      <i class="bi bi-file-earmark-plus me-1"></i> Nuevo presupuesto
+    <a href="{% url 'taller:presupuesto_papelera' %}" class="btn btn-outline-premium btn-sm">
+      <i class="bi bi-trash3"></i> Papelera
+    </a>
+    <a href="{% url 'taller:presupuesto_create' %}" class="btn btn-brand btn-sm">
+      <i class="bi bi-file-earmark-plus"></i> Nuevo presupuesto
     </a>
   </div>
 </div>
 
-{% with q=request.GET.q|default:'' %}
-<div class="d-flex gap-2 flex-wrap mb-3">
-  <a class="btn btn-sm {% if show == 'activos' %}btn-primary{% else %}btn-outline-primary{% endif %}"
-     href="?show=activos{% if q %}&q={{ q|urlencode }}{% endif %}">
-    Activos ({{ presupuestos_activos_count }})
-  </a>
-  <a class="btn btn-sm {% if show == 'eliminados' %}btn-danger{% else %}btn-outline-danger{% endif %}"
-     href="?show=eliminados{% if q %}&q={{ q|urlencode }}{% endif %}">
-    Eliminados ({{ presupuestos_eliminados_count }})
-  </a>
-  <a class="btn btn-sm {% if show == 'todos' %}btn-dark{% else %}btn-outline-dark{% endif %}"
-     href="?show=todos{% if q %}&q={{ q|urlencode }}{% endif %}">
-    Todos
-  </a>
-</div>
-{% endwith %}
-
-<form method="get" class="mb-3">
-  <input type="hidden" name="show" value="{{ show|default:'activos' }}">
-  <div class="input-group">
-    <span class="input-group-text"><i class="bi bi-search"></i></span>
-    <input
-      type="search"
-      name="q"
-      value="{{ request.GET.q|default:'' }}"
-      class="form-control"
-      placeholder="Buscar por cliente, teléfono, DNI, patente, marca/modelo o título…"
-    >
-    <button class="btn btn-outline-secondary" type="submit">Buscar</button>
-    {% if request.GET.q %}
-      <a class="btn btn-outline-secondary" href="?show={{ show|default:'activos' }}">
-        <i class="bi bi-x-circle"></i>
-      </a>
-    {% endif %}
+{# ── FILTROS ── #}
+<div class="card-premium p-3 mb-4">
+  {% with q=request.GET.q|default:'' %}
+  <form method="get" class="d-flex flex-wrap gap-2 align-items-center mb-2">
+    <input type="hidden" name="show" value="{{ show|default:'activos' }}">
+    <div class="search-wrapper flex-grow-1" style="min-width:200px;">
+      <i class="bi bi-search"></i>
+      <input type="text" name="q" value="{{ q }}"
+             class="form-control form-control-sm"
+             placeholder="Buscar por cliente, vehículo, título…" autocomplete="off">
+    </div>
+    <button type="submit" class="btn btn-brand btn-sm"><i class="bi bi-search"></i></button>
+    {% if q %}<a href="?show={{ show|default:'activos' }}" class="btn btn-outline-premium btn-sm"><i class="bi bi-x-lg"></i></a>{% endif %}
+  </form>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="?show=activos{% if q %}&q={{ q|urlencode }}{% endif %}"
+       class="btn btn-sm {% if show == 'activos' or not show %}btn-brand{% else %}btn-outline-premium{% endif %}">
+      Activos
+    </a>
+    <a href="?show=eliminados{% if q %}&q={{ q|urlencode }}{% endif %}"
+       class="btn btn-sm {% if show == 'eliminados' %}btn-brand{% else %}btn-outline-premium{% endif %}">
+      Papelera
+    </a>
+    <a href="?show=todos{% if q %}&q={{ q|urlencode }}{% endif %}"
+       class="btn btn-sm {% if show == 'todos' %}btn-brand{% else %}btn-outline-premium{% endif %}">
+      Todos
+    </a>
   </div>
-</form>
+  {% endwith %}
+</div>
 
-<div class="card-premium p-0 overflow-hidden">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead class="table-light">
-        <tr>
-          <th style="width:90px;">#</th>
-          <th>Cliente</th>
-          <th>Vehículo</th>
-          <th style="width:160px;">Estado</th>
-          <th class="text-end" style="width:140px;">Total</th>
-          <th style="width:210px;">Fecha</th>
-          <th class="text-end" style="width:280px;">Acciones</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {% for p in presupuestos %}
-          <tr class="{% if not p.activo %}table-danger{% endif %}">
-            <td class="fw-semibold">#{{ p.id }}</td>
-
-            <td>
-              <div class="fw-semibold text-dark">
-                {{ p.cliente.nombre_completo }}
-              </div>
-              <div class="small text-dark">
+{# ── TABLA ── #}
+{% if presupuestos %}
+  <div class="card-premium p-0">
+    <div class="table-responsive">
+      <table class="table table-dark-custom mb-0">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Cliente</th>
+            <th>Vehículo</th>
+            <th>Título</th>
+            <th>Estado</th>
+            <th>Fecha</th>
+            <th class="text-end">Total</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in presupuestos %}
+            <tr {% if not p.activo %}style="opacity:.55;"{% endif %}>
+              <td class="text-muted" style="font-size:.78rem;">#{{ p.id }}</td>
+              <td>
+                <div class="fw-semibold small" style="color:var(--text-primary);">{{ p.cliente.nombre_completo }}</div>
                 {% if p.cliente.telefono %}
-                  <i class="bi bi-telephone me-1"></i>{{ p.cliente.telefono }}
+                  <div class="text-muted" style="font-size:.75rem;"><i class="bi bi-telephone me-1"></i>{{ p.cliente.telefono }}</div>
                 {% endif %}
-                {% if p.cliente.dni %}
-                  <span class="ms-3">
-                    <i class="bi bi-person-vcard me-1"></i>{{ p.cliente.dni }}
-                  </span>
+              </td>
+              <td>
+                {% if p.vehiculo %}
+                  <div class="fw-bold small" style="color:var(--text-primary);letter-spacing:.05em;">{{ p.vehiculo.patente }}</div>
+                  <div class="text-muted" style="font-size:.75rem;">{{ p.vehiculo.marca }} {{ p.vehiculo.modelo }}</div>
+                {% else %}
+                  <span class="text-muted small">Sin vehículo</span>
                 {% endif %}
-              </div>
-            </td>
-
-            <td>
-              {% if p.vehiculo %}
-                <div class="fw-semibold text-dark">{{ p.vehiculo.patente }}</div>
-                <div class="small text-dark">
-                  {{ p.vehiculo.marca }} {{ p.vehiculo.modelo }}
-                </div>
-              {% else %}
-                <span class="text-muted">Sin vehículo</span>
-              {% endif %}
-            </td>
-
-            <td>
-              {% if p.estado == "BORRADOR" %}
-                <span class="badge text-bg-warning">
-                  <i class="bi bi-pencil-square me-1"></i>Borrador
-                </span>
-              {% elif p.estado == "ENTREGADO" %}
-                <span class="badge text-bg-info">
-                  <i class="bi bi-send-check me-1"></i>Entregado
-                </span>
-              {% elif p.estado == "APROBADO" %}
-                <span class="badge text-bg-success">
-                  <i class="bi bi-check-circle-fill me-1"></i>Aprobado
-                </span>
-              {% else %}
-                <span class="badge text-bg-danger">
-                  <i class="bi bi-x-circle-fill me-1"></i>Rechazado
-                </span>
-              {% endif %}
-              {% if not p.activo %}
-                <span class="badge text-bg-danger ms-2">
-                  <i class="bi bi-trash3 me-1"></i>Eliminado
-                </span>
-              {% endif %}
-            </td>
-
-            <td class="text-end fw-semibold">
-              $ {{ p.total|default:"0"|floatformat:2 }}
-            </td>
-
-            <!-- FIX: hora en badge legible (no text-muted) -->
-            <td>
-              <div class="small text-dark">
-                <i class="bi bi-calendar3 me-1"></i>
+              </td>
+              <td class="text-secondary small">{{ p.titulo|truncatechars:35 }}</td>
+              <td>
+                {% if not p.activo %}
+                  <span class="badge badge-anulado"><i class="bi bi-archive me-1"></i>Eliminado</span>
+                {% elif p.estado == "BORRADOR" %}
+                  <span class="badge badge-borrador">Borrador</span>
+                {% elif p.estado == "ENTREGADO" %}
+                  <span class="badge badge-ingresado">Entregado</span>
+                {% elif p.estado == "APROBADO" %}
+                  <span class="badge badge-aprobado">Aprobado</span>
+                {% elif p.estado == "RECHAZADO" %}
+                  <span class="badge badge-rechazado">Rechazado</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small" style="white-space:nowrap;">
                 {{ p.fecha|date:"d/m/Y" }}
-              </div>
-
-              <span class="badge text-bg-light border text-dark mt-1">
-                <i class="bi bi-clock me-1"></i>
-                {{ p.fecha|time:"H:i" }}
-              </span>
-
-              {% if p.eliminado_en %}
-                <div class="text-danger small mt-1">
-                  <i class="bi bi-trash3 me-1"></i>
-                  Eliminado {{ p.eliminado_en|date:"d/m/Y H:i" }}
-                </div>
-              {% elif p.valido_hasta %}
-                <div class="small text-dark mt-1">
-                  <i class="bi bi-clock-history me-1"></i>
-                  Válido hasta {{ p.valido_hasta|date:"d/m/Y" }}
-                </div>
-              {% endif %}
-            </td>
-
-            <td class="text-end">
-              <div class="action-stack ms-auto">
-                {% if p.activo %}
-                  <a class="btn btn-brand btn-sm w-100 mb-1"
-                     href="{% url 'taller:presupuesto_comprobante' p.id %}"
-                     target="_blank" rel="noopener">
-                    <i class="bi bi-printer me-1"></i> Comprobante
-                  </a>
-
-                  <div class="btn-group w-100" role="group" aria-label="Acciones presupuesto">
-                    <a class="btn btn-outline-secondary btn-sm"
-                       href="{% url 'taller:presupuesto_detail' p.id %}" title="Ver">
+                {% if p.valido_hasta %}
+                  <div style="font-size:.72rem;color:var(--text-muted);">Válido hasta {{ p.valido_hasta|date:"d/m/Y" }}</div>
+                {% endif %}
+              </td>
+              <td class="text-end fw-bold monto-total small">$ {{ p.total|floatformat:0 }}</td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm">
+                  {% if p.activo %}
+                    <a href="{% url 'taller:presupuesto_comprobante' p.pk %}" target="_blank" class="btn btn-brand btn-sm" title="Comprobante / Imprimir">
+                      <i class="bi bi-printer"></i>
+                    </a>
+                    <a href="{% url 'taller:presupuesto_detail' p.pk %}" class="btn btn-outline-premium btn-sm" title="Ver">
                       <i class="bi bi-eye"></i>
                     </a>
-                    <a class="btn btn-outline-primary btn-sm"
-                       href="{% url 'taller:presupuesto_update' p.id %}" title="Editar">
+                    <a href="{% url 'taller:presupuesto_update' p.pk %}" class="btn btn-outline-premium btn-sm" title="Editar">
                       <i class="bi bi-pencil"></i>
                     </a>
-                    <form method="post" action="{% url 'taller:presupuesto_delete' p.id %}" class="d-inline">
+                    <form method="post" action="{% url 'taller:presupuesto_delete' p.pk %}" class="d-inline">
                       {% csrf_token %}
-                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                      <button class="btn btn-outline-danger btn-sm" title="Enviar a eliminados"
-                              onclick="return confirm('¿Enviar este presupuesto a eliminados? (No se borra definitivo)');">
+                      <button type="submit" class="btn btn-outline-premium btn-sm" title="Papelera"
+                              onclick="return confirm('¿Enviar a papelera?');"
+                              style="color:#fca5a5;">
                         <i class="bi bi-archive"></i>
                       </button>
                     </form>
-                  </div>
-                {% else %}
-                  <div class="btn-group w-100" role="group" aria-label="Acciones eliminados">
-                    <a class="btn btn-outline-secondary btn-sm"
-                       href="{% url 'taller:presupuesto_detail' p.id %}">
-                      <i class="bi bi-eye me-1"></i> Ver
-                    </a>
-                    <form method="post" action="{% url 'taller:presupuesto_restore' p.id %}" class="d-inline">
+                  {% else %}
+                    <a href="{% url 'taller:presupuesto_detail' p.pk %}" class="btn btn-outline-premium btn-sm"><i class="bi bi-eye"></i></a>
+                    <form method="post" action="{% url 'taller:presupuesto_restore' p.pk %}" class="d-inline">
                       {% csrf_token %}
-                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                      <button class="btn btn-outline-success btn-sm">
-                        <i class="bi bi-arrow-counterclockwise me-1"></i> Restaurar
+                      <button type="submit" class="btn btn-sm" style="background:var(--success-light);color:#34d399;border:1px solid var(--success-border);">
+                        <i class="bi bi-arrow-counterclockwise"></i>
                       </button>
                     </form>
-                  </div>
-                {% endif %}
-              </div>
-            </td>
-
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
+{% else %}
+  <div class="card-premium p-5 text-center">
+    <i class="bi bi-file-earmark-x" style="font-size:3rem;color:var(--border-strong);display:block;margin-bottom:1rem;"></i>
+    <h5 class="text-secondary">Sin presupuestos</h5>
+    <p class="text-muted small">Generá el primer presupuesto para un cliente.</p>
+    <a href="{% url 'taller:presupuesto_create' %}" class="btn btn-brand btn-sm mt-2">
+      <i class="bi bi-file-earmark-plus me-1"></i>Nuevo presupuesto
+    </a>
+  </div>
+{% endif %}
+
 {% endblock %}

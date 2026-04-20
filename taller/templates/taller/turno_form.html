@@ -1,186 +1,180 @@
 {% extends "taller/base.html" %}
-
-{% block title %}
-  {% if object %}Editar turno{% else %}Nuevo turno{% endif %} – Taller Mecánico Ale Gavilan
-{% endblock %}
+{% block title %}{% if object %}Editar turno{% else %}Nuevo turno{% endif %} — Ale Gavilan Cars Solutions{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+
+<div class="page-header d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
-    <div class="d-flex align-items-center gap-2 mb-2">
-      <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
-        <i class="bi bi-calendar-check me-1"></i> Turnos
-      </span>
-      <span class="badge rounded-pill bg-primary-soft text-uppercase small">
-        {% if object %}Editar turno{% else %}Nuevo turno{% endif %}
+    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+      <a href="{% url 'taller:turno_list' %}" style="color:var(--text-muted);font-size:.8rem;text-decoration:none;">
+        <i class="bi bi-calendar-week me-1"></i>Turnos
+      </a>
+      <i class="bi bi-chevron-right text-muted" style="font-size:.7rem;"></i>
+      <span style="color:var(--text-secondary);font-size:.8rem;">
+        {% if object %}Editar #{{ object.id }}{% else %}Nuevo turno{% endif %}
       </span>
       {% if object %}
-        <span class="badge rounded-pill bg-info bg-opacity-25 text-uppercase small">
-          {{ object.get_estado_display }}
-        </span>
+        {% if object.estado == "PENDIENTE" %}<span class="badge badge-pendiente">Pendiente</span>
+        {% elif object.estado == "CONFIRMADO" %}<span class="badge badge-confirmado">Confirmado</span>
+        {% elif object.estado == "CANCELADO" %}<span class="badge badge-cancelado">Cancelado</span>
+        {% elif object.estado == "CUMPLIDO" %}<span class="badge badge-cumplido">Cumplido</span>
+        {% endif %}
       {% endif %}
     </div>
-    <h1 class="h5 mb-1">
-      {% if object %}
-        Editar turno · {{ object.fecha_hora|date:"d/m/Y H:i" }}
-      {% else %}
-        Nuevo turno
-      {% endif %}
+    <h1 class="h4 mb-1 gradient-text">
+      {% if object %}Editar turno · {{ object.fecha_hora|date:"d/m/Y H:i" }}{% else %}Nuevo turno{% endif %}
     </h1>
-    <p class="text-secondary small mb-0">
-      Organizá el ingreso de vehículos al taller con fecha, hora y motivo claros.
-    </p>
+    <p class="text-muted small mb-0">Organizá el ingreso de vehículos con fecha, hora y motivo claros.</p>
   </div>
-
   <div class="d-flex flex-wrap gap-2">
     {% if object %}
       <a href="{% url 'taller:turno_detail' object.pk %}" class="btn btn-outline-premium btn-sm">
-        <i class="bi bi-eye me-1"></i> Ver detalle
+        <i class="bi bi-eye me-1"></i>Ver detalle
       </a>
     {% endif %}
-    <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-list-ul me-1"></i> Volver al listado
+    <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-premium btn-sm">
+      <i class="bi bi-arrow-left-short"></i>Volver
     </a>
   </div>
 </div>
 
 <div class="row g-4">
-  <!-- Columna principal -->
+
+  {# ── Formulario principal ── #}
   <div class="col-12 col-xl-8">
-    <div class="card-premium p-4 h-100">
-      <form method="post" novalidate>
-        {% csrf_token %}
+    <div class="card-premium p-0">
+      <div class="card-premium-header">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-calendar-plus me-2" style="color:#38bdf8;"></i>
+          {% if object %}Modificar datos del turno{% else %}Datos del turno{% endif %}
+        </h2>
+      </div>
+      <div class="p-4">
+        <form method="post" novalidate>
+          {% csrf_token %}
 
-        {# Errores generales #}
-        {% if form.errors or form.non_field_errors %}
-          <div class="alert alert-danger small mb-3">
-            <strong>Revisá los campos marcados en rojo.</strong>
-            Asegurate de seleccionar cliente, fecha y hora válidas y cargar el motivo del turno.
-          </div>
-        {% endif %}
+          {% if form.errors %}
+            <div class="alert alert-danger small mb-4">
+              <i class="bi bi-exclamation-triangle-fill me-2"></i>
+              <strong>Revisá los campos marcados.</strong> Asegurate de completar cliente, fecha y hora.
+            </div>
+          {% endif %}
 
-        {% if form.non_field_errors %}
-          <div class="alert alert-danger small mb-3">
-            {{ form.non_field_errors }}
-          </div>
-        {% endif %}
-
-        <!-- Bloque: datos principales -->
-        <div class="mb-4">
-          <h2 class="h6 text-uppercase text-secondary mb-3">
-            <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 1</span>
-            Datos principales
-          </h2>
-
-          <div class="row g-3 small">
-            <!-- Cliente -->
-            <div class="col-12 col-md-6">
-              <label class="form-label small fw-semibold">Cliente</label>
-              <div class="form-text small text-secondary mb-1">
-                Escribí nombre, apellido o DNI para buscar más rápido.
+          {# ── Bloque 1: Quién y cuándo ── #}
+          <div class="mb-4">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <span class="badge" style="background:var(--accent-subtle);color:#f87171;border:1px solid var(--accent-border);">1</span>
+              <span class="text-muted small fw-bold text-uppercase" style="letter-spacing:.07em;">Quién y cuándo</span>
+            </div>
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Cliente</label>
+                {{ form.cliente }}
+                {% for e in form.cliente.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+                <div class="form-text">Buscá por nombre, apellido o DNI.</div>
               </div>
-              {{ form.cliente }}
-              {% for error in form.cliente.errors %}
-                <div class="invalid-feedback d-block small">{{ error }}</div>
-              {% endfor %}
-            </div>
-
-            <!-- Vehículo -->
-            <div class="col-12 col-md-6">
-              <label class="form-label small fw-semibold">Vehículo</label>
-              {{ form.vehiculo }}
-              <div class="form-text small text-secondary">
-                Podés dejarlo vacío si todavía no cargaste el vehículo.
+              <div class="col-12 col-md-6">
+                <label class="form-label">Vehículo <span class="text-muted fw-normal">(opcional)</span></label>
+                {{ form.vehiculo }}
+                {% for e in form.vehiculo.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+                <div class="form-text">Podés dejarlo vacío si aún no está cargado.</div>
               </div>
-              {% for error in form.vehiculo.errors %}
-                <div class="invalid-feedback d-block small">{{ error }}</div>
-              {% endfor %}
-            </div>
-
-            <!-- Fecha y hora -->
-            <div class="col-12 col-md-6">
-              <label class="form-label small fw-semibold">Fecha y hora</label>
-              {{ form.fecha_hora }}
-              {% for error in form.fecha_hora.errors %}
-                <div class="invalid-feedback d-block small">{{ error }}</div>
-              {% endfor %}
-            </div>
-
-            <!-- Estado -->
-            <div class="col-12 col-md-6">
-              <label class="form-label small fw-semibold">Estado del turno</label>
-              {{ form.estado }}
-              {% for error in form.estado.errors %}
-                <div class="invalid-feedback d-block small">{{ error }}</div>
-              {% endfor %}
+              <div class="col-12 col-md-6">
+                <label class="form-label">Fecha y hora del turno</label>
+                {{ form.fecha_hora }}
+                {% for e in form.fecha_hora.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Estado</label>
+                {{ form.estado }}
+                {% for e in form.estado.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Bloque: detalle -->
-        <div class="mb-4">
-          <h2 class="h6 text-uppercase text-secondary mb-3">
-            <span class="badge rounded-pill bg-primary-soft text-uppercase me-2">Paso 2</span>
-            Detalle del turno
-          </h2>
+          <hr style="border-color:var(--border);">
 
-          <div class="row g-3 small">
-            <div class="col-12">
-              <label class="form-label small fw-semibold">Motivo</label>
-              {{ form.motivo }}
-              {% for error in form.motivo.errors %}
-                <div class="invalid-feedback d-block small">{{ error }}</div>
-              {% endfor %}
+          {# ── Bloque 2: Detalle ── #}
+          <div class="mb-4">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <span class="badge" style="background:var(--info-light);color:#38bdf8;border:1px solid var(--info-border);">2</span>
+              <span class="text-muted small fw-bold text-uppercase" style="letter-spacing:.07em;">Detalle del turno</span>
             </div>
-
-            <div class="col-12">
-              <label class="form-label small fw-semibold">Notas internas</label>
-              {{ form.notas }}
-              <div class="form-text small text-secondary">
-                Solo para uso interno del taller (no se muestra al cliente).
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Motivo</label>
+                {{ form.motivo }}
+                {% for e in form.motivo.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+                <div class="form-text">¿Qué trae el vehículo al taller? Ej: cambio de aceite, revisión frenos, etc.</div>
               </div>
-              {% for error in form.notas.errors %}
-                <div class="invalid-feedback d-block small">{{ error }}</div>
-              {% endfor %}
+              <div class="col-12">
+                <label class="form-label">Notas internas <span class="text-muted fw-normal">(no visible al cliente)</span></label>
+                {{ form.notas }}
+                {% for e in form.notas.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+                <div class="form-text">Aclaraciones para el equipo del taller.</div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <hr class="border-secondary-subtle my-3">
+          <hr style="border-color:var(--border);">
 
-        <!-- Botones -->
-        <div class="d-flex justify-content-end gap-2 mt-2">
-          <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-secondary btn-sm">
-            Cancelar
-          </a>
-          <button type="submit" class="btn btn-brand btn-sm">
-            <i class="bi bi-save2 me-1"></i>
-            {% if object %}Guardar cambios{% else %}Crear turno{% endif %}
-          </button>
-        </div>
-      </form>
+          <div class="d-flex justify-content-end gap-2">
+            <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-premium btn-sm">Cancelar</a>
+            <button type="submit" class="btn btn-brand">
+              <i class="bi bi-save2 me-1"></i>
+              {% if object %}Guardar cambios{% else %}Crear turno{% endif %}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
-  <!-- Columna lateral: contexto / ayuda -->
+  {# ── Panel lateral ── #}
   <div class="col-12 col-xl-4">
-    <div class="card-premium p-4 h-100">
-      <h2 class="h6 text-uppercase text-secondary mb-3">
-        <i class="bi bi-lightbulb me-2"></i>Consejo rápido
-      </h2>
-      <p class="small text-secondary mb-2">
-        Usá los turnos para que el taller nunca se te descontrole:
-      </p>
-      <ul class="small text-secondary mb-3">
-        <li>Siempre cargá el <strong>motivo</strong> para saber qué viene a hacer el cliente.</li>
-        <li>Si ya existe el vehículo, asociarlo te ayuda a ver su historial al instante.</li>
-        <li>Las <strong>notas internas</strong> son ideales para aclarar detalles entre el equipo.</li>
+    <div class="card-premium p-4">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-lightbulb" style="color:#fbbf24;font-size:1rem;"></i>
+        <span class="text-muted small fw-bold text-uppercase" style="letter-spacing:.08em;">Consejos</span>
+      </div>
+      <ul class="list-unstyled small text-secondary mb-4">
+        <li class="mb-2 d-flex gap-2">
+          <i class="bi bi-check-circle text-info-custom flex-shrink-0 mt-1"></i>
+          <span>Cargá siempre el <strong style="color:var(--text-primary);">motivo</strong> para saber qué viene a hacer el cliente.</span>
+        </li>
+        <li class="mb-2 d-flex gap-2">
+          <i class="bi bi-check-circle text-info-custom flex-shrink-0 mt-1"></i>
+          <span>Si ya existe el vehículo, asociarlo te permite ver el historial completo al instante.</span>
+        </li>
+        <li class="d-flex gap-2">
+          <i class="bi bi-check-circle text-info-custom flex-shrink-0 mt-1"></i>
+          <span>Las <strong style="color:var(--text-primary);">notas internas</strong> son ideales para aclarar detalles entre el equipo.</span>
+        </li>
       </ul>
-      <p class="small text-secondary mb-0">
-        Cuanto más claros sean los turnos, más ordenado y profesional se siente el taller
-        para vos y para tus clientes.
-      </p>
+
+      <div class="panel-soft p-3">
+        <div class="small text-muted mb-2 fw-bold text-uppercase" style="font-size:.65rem;letter-spacing:.09em;">Estados del turno</div>
+        <div class="d-flex flex-column gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge badge-pendiente">Pendiente</span>
+            <span class="small text-muted">Turno sin confirmar aún</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge badge-confirmado">Confirmado</span>
+            <span class="small text-muted">Cliente avisado y confirmado</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge badge-cumplido">Cumplido</span>
+            <span class="small text-muted">El cliente se presentó</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge badge-cancelado">Cancelado</span>
+            <span class="small text-muted">Turno no realizado</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
+
 </div>
 {% endblock %}

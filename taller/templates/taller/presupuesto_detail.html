@@ -1,315 +1,268 @@
 {% extends "taller/base.html" %}
-
-{% block title %}Presupuesto #{{ presupuesto.id }} – Ale Gavilan Cars Solutions{% endblock %}
+{% block title %}Presupuesto #{{ presupuesto.id }} — Ale Gavilan Cars Solutions{% endblock %}
 
 {% block content %}
 
-{# Alerta: presupuesto eliminado #}
+{# ── Banner: presupuesto en papelera ── #}
 {% if not presupuesto.activo %}
-  <div class="alert alert-warning border-0 shadow-sm d-flex align-items-start gap-3 mb-4">
-    <div class="d-flex align-items-center justify-content-center rounded-circle bg-dark bg-opacity-10" style="width:42px;height:42px;">
-      <i class="bi bi-archive-fill fs-5 text-dark"></i>
-    </div>
+  <div class="alert alert-warning d-flex align-items-start gap-3 mb-4">
+    <i class="bi bi-archive-fill" style="font-size:1.3rem;flex-shrink:0;margin-top:.15rem;"></i>
     <div class="flex-grow-1">
-      <div class="fw-semibold">Este presupuesto está en “Eliminados”.</div>
-      <div class="small text-muted">
-        {% if presupuesto.eliminado_en %}
-          Se envió a eliminados el {{ presupuesto.eliminado_en|date:"d/m/Y H:i" }}.
-        {% endif %}
-        Podés restaurarlo para que vuelva a aparecer en listados normales.
+      <div class="fw-semibold">Este presupuesto está en la papelera</div>
+      <div class="small mt-1">
+        {% if presupuesto.eliminado_en %}Enviado el {{ presupuesto.eliminado_en|date:"d/m/Y H:i" }}.{% endif %}
+        Restauralo para que vuelva a aparecer en los listados activos.
       </div>
     </div>
     <form method="post" action="{% url 'taller:presupuesto_restore' presupuesto.pk %}">
       {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-      <button type="submit" class="btn btn-sm btn-dark">
-        <i class="bi bi-arrow-counterclockwise me-1"></i> Restaurar
+      <button type="submit" class="btn btn-sm btn-success-premium">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar
       </button>
     </form>
   </div>
 {% endif %}
 
-<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
-
-  <!-- IZQ: Identidad -->
-  <div class="flex-grow-1" style="min-width: 280px;">
+{# ── Header ── #}
+<div class="page-header d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+  <div>
     <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
-      <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
-        <i class="bi bi-file-earmark-text me-1"></i> Presupuesto #{{ presupuesto.id }}
-      </span>
-
-      <span class="badge rounded-pill bg-info bg-opacity-25 text-uppercase small">
-        {{ presupuesto.get_estado_display }}
-      </span>
-
-      <span class="badge rounded-pill bg-secondary bg-opacity-25 text-uppercase small">
-        <i class="bi bi-lightning-charge me-1"></i> {{ presupuesto.get_tipo_display }}
-      </span>
-
-      {% if presupuesto.valido_hasta %}
-        <span class="badge rounded-pill bg-warning bg-opacity-25 text-uppercase small">
-          <i class="bi bi-hourglass-split me-1"></i> Válido hasta {{ presupuesto.valido_hasta|date:"d/m/Y" }}
-        </span>
-      {% endif %}
-
+      <a href="{% url 'taller:presupuesto_list' %}" style="color:var(--text-muted);font-size:.8rem;text-decoration:none;">
+        <i class="bi bi-file-earmark-text me-1"></i>Presupuestos
+      </a>
+      <i class="bi bi-chevron-right text-muted" style="font-size:.7rem;"></i>
+      <span style="color:var(--text-secondary);font-size:.8rem;">#{{ presupuesto.id }}</span>
       {% if not presupuesto.activo %}
-        <span class="badge rounded-pill bg-danger bg-opacity-25 text-uppercase small">
-          <i class="bi bi-archive me-1"></i> ELIMINADO
-        </span>
+        <span class="badge badge-anulado"><i class="bi bi-archive me-1"></i>Eliminado</span>
+      {% elif presupuesto.estado == "BORRADOR" %}
+        <span class="badge badge-borrador">Borrador</span>
+      {% elif presupuesto.estado == "ENTREGADO" %}
+        <span class="badge badge-ingresado">Entregado</span>
+      {% elif presupuesto.estado == "APROBADO" %}
+        <span class="badge badge-aprobado">Aprobado</span>
+      {% elif presupuesto.estado == "RECHAZADO" %}
+        <span class="badge badge-rechazado">Rechazado</span>
       {% endif %}
     </div>
-
-    <h1 class="h4 mb-1">
-      {% if presupuesto.vehiculo %}
-        {{ presupuesto.vehiculo.patente }}
-      {% else %}
-        {{ presupuesto.cliente.nombre_completo }}
-      {% endif %}
+    <h1 class="h4 mb-1 gradient-text">
+      {% if presupuesto.vehiculo %}{{ presupuesto.vehiculo.patente }}{% else %}{{ presupuesto.cliente.nombre_completo }}{% endif %}
     </h1>
-
-    <p class="text-secondary small mb-1">
-      {% if presupuesto.vehiculo %}
-        {{ presupuesto.vehiculo.marca }} {{ presupuesto.vehiculo.modelo }}
-      {% else %}
-        <i class="bi bi-info-circle me-1"></i> Sin vehículo asignado
-      {% endif %}
-      · Cliente:
-      <a href="{% url 'taller:cliente_detail' presupuesto.cliente.pk %}"
-         class="link-light link-underline-opacity-0 link-underline-opacity-100-hover">
-        {{ presupuesto.cliente.nombre_completo }}
-      </a>
-    </p>
-
     <p class="text-muted small mb-0">
-      <i class="bi bi-calendar3 me-1"></i>
-      Fecha: {{ presupuesto.fecha|date:"d/m/Y" }}
-      <span class="text-muted">{{ presupuesto.fecha|time:"H:i" }}</span>
+      {{ presupuesto.titulo|truncatechars:60 }}
+      · <i class="bi bi-calendar3 me-1"></i>{{ presupuesto.fecha|date:"d/m/Y" }}
+      {% if presupuesto.valido_hasta %}
+        · <i class="bi bi-hourglass-split me-1"></i>Válido hasta {{ presupuesto.valido_hasta|date:"d/m/Y" }}
+      {% endif %}
     </p>
   </div>
 
-  <!-- DER: Total + Acciones -->
-  <div class="text-end" style="min-width: 320px; max-width: 520px;">
-    <div class="total-box mb-3">
-      <div class="total-label">Total del presupuesto</div>
-      <div class="total-value">
-        $ {{ presupuesto.total|default:"0"|floatformat:2 }}
-      </div>
-      {% if presupuesto.valido_hasta %}
-        <div class="total-meta mt-2">
-          <i class="bi bi-hourglass-split me-1"></i> Válido hasta {{ presupuesto.valido_hasta|date:"d/m/Y" }}
-        </div>
-      {% endif %}
-    </div>
-
-    <div class="action-bar d-flex flex-wrap gap-2 justify-content-end">
-      <a href="{% url 'taller:presupuesto_comprobante' presupuesto.pk %}"
-         target="_blank" rel="noopener"
-         class="btn btn-sm btn-brand">
-        <i class="bi bi-printer-fill me-1"></i> Comprobante / Imprimir
+  <div class="d-flex flex-wrap gap-2">
+    {% if presupuesto.activo %}
+      <a href="{% url 'taller:presupuesto_comprobante' presupuesto.pk %}" target="_blank" class="btn btn-brand btn-sm">
+        <i class="bi bi-printer-fill me-1"></i>Imprimir
       </a>
-
-      {% if presupuesto.activo %}
-        <a href="{% url 'taller:presupuesto_update' presupuesto.pk %}"
-           class="btn btn-sm btn-outline-premium">
-          <i class="bi bi-pencil-square me-1"></i> Editar
-        </a>
-      {% else %}
-        <button type="button" class="btn btn-sm btn-outline-premium" disabled
-                title="Restaurá el presupuesto para poder editarlo.">
-          <i class="bi bi-pencil-square me-1"></i> Editar
+      <a href="{% url 'taller:presupuesto_update' presupuesto.pk %}" class="btn btn-outline-premium btn-sm">
+        <i class="bi bi-pencil-square me-1"></i>Editar
+      </a>
+    {% else %}
+      <form method="post" action="{% url 'taller:presupuesto_restore' presupuesto.pk %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success-premium btn-sm">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar
         </button>
-      {% endif %}
-
-      <a href="{% url 'taller:presupuesto_list' %}"
-         class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-arrow-left-short me-1"></i> Volver
-      </a>
-    </div>
-
-    {# Zona de riesgo separada #}
-    <div class="danger-zone mt-3 pt-3">
-      {% if presupuesto.activo %}
-        <form method="post" action="{% url 'taller:presupuesto_delete' presupuesto.pk %}" class="d-inline">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <button type="submit" class="btn btn-sm btn-outline-danger w-100"
-                  onclick="return confirm('¿Enviar este presupuesto a eliminados? (No se borra definitivo)');">
-            <i class="bi bi-archive me-1"></i> Enviar a eliminados
-          </button>
-        </form>
-      {% else %}
-        <form method="post" action="{% url 'taller:presupuesto_restore' presupuesto.pk %}" class="d-inline">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <button type="submit" class="btn btn-sm btn-outline-success w-100">
-            <i class="bi bi-arrow-counterclockwise me-1"></i> Restaurar presupuesto
-          </button>
-        </form>
-      {% endif %}
-    </div>
+      </form>
+    {% endif %}
+    <a href="{% url 'taller:presupuesto_list' %}" class="btn btn-outline-premium btn-sm">
+      <i class="bi bi-arrow-left-short"></i>Volver
+    </a>
   </div>
 </div>
 
+{# ── Total destacado + Resumen ── #}
 <div class="row g-4 mb-4">
 
-  <!-- CLIENTE / RESUMEN -->
-  <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <h2 class="h6 text-uppercase text-secondary mb-0">Cliente y resumen</h2>
-        <span class="badge rounded-pill bg-secondary bg-opacity-25 text-uppercase small">
-          <i class="bi bi-person-circle me-1"></i> Cliente
-        </span>
+  {# Total box #}
+  <div class="col-12 col-md-4">
+    <div class="card-premium p-4 text-center h-100 d-flex flex-column justify-content-center" style="border-color:var(--border-strong);">
+      <div class="text-muted text-uppercase mb-2" style="font-size:.68rem;letter-spacing:.1em;font-weight:700;">
+        <i class="bi bi-file-earmark-text me-1"></i>Total del presupuesto
       </div>
+      <div class="fw-bold" style="font-size:2.4rem;color:var(--text-primary);letter-spacing:-.04em;line-height:1.1;font-variant-numeric:tabular-nums;">
+        $ {{ presupuesto.total|default:"0"|floatformat:0 }}
+      </div>
+      {% if presupuesto.descuento and presupuesto.descuento > 0 %}
+        <div class="small text-muted mt-2">
+          <i class="bi bi-tag me-1" style="color:#fbbf24;"></i>Descuento: $ {{ presupuesto.descuento|floatformat:0 }}
+        </div>
+      {% endif %}
+      {% if presupuesto.valido_hasta %}
+        <div class="small text-muted mt-1">
+          <i class="bi bi-hourglass-split me-1"></i>Válido hasta {{ presupuesto.valido_hasta|date:"d/m/Y" }}
+        </div>
+      {% endif %}
+      <div class="mt-4 d-flex flex-column gap-2">
+        {% if presupuesto.activo %}
+          <a href="{% url 'taller:presupuesto_comprobante' presupuesto.pk %}" target="_blank" class="btn btn-brand btn-sm">
+            <i class="bi bi-printer-fill me-1"></i>Comprobante / Imprimir
+          </a>
+          <form method="post" action="{% url 'taller:presupuesto_delete' presupuesto.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-premium btn-sm w-100"
+                    onclick="return confirm('¿Enviar a papelera?');"
+                    style="color:#fca5a5;">
+              <i class="bi bi-archive me-1"></i>Enviar a papelera
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 
-      <div class="mb-2">
-        <div class="fw-semibold">
-          <i class="bi bi-person-check me-2"></i>{{ presupuesto.cliente.nombre_completo }}
+  {# Cliente y datos ── #}
+  <div class="col-12 col-md-8">
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-person-fill me-2" style="color:#34d399;"></i>Cliente y vehículo
+        </h2>
+      </div>
+      <div class="p-4">
+        <div class="row g-3 small">
+
+          <div class="col-12 col-sm-6">
+            <div class="text-muted text-uppercase mb-2" style="font-size:.68rem;letter-spacing:.08em;">Cliente</div>
+            <div class="d-flex align-items-center gap-3">
+              <div class="client-avatar flex-shrink-0">{{ presupuesto.cliente.nombre_completo|first }}</div>
+              <div>
+                <div class="fw-semibold" style="color:var(--text-primary);">{{ presupuesto.cliente.nombre_completo }}</div>
+                {% if presupuesto.cliente.telefono %}
+                  <div class="text-muted"><i class="bi bi-telephone me-1"></i>{{ presupuesto.cliente.telefono }}</div>
+                {% endif %}
+                {% if presupuesto.cliente.dni %}
+                  <div class="text-muted"><i class="bi bi-person-vcard me-1"></i>{{ presupuesto.cliente.dni }}</div>
+                {% endif %}
+              </div>
+            </div>
+            <a href="{% url 'taller:cliente_detail' presupuesto.cliente.pk %}" class="btn btn-outline-premium btn-sm mt-3">
+              <i class="bi bi-eye me-1"></i>Ver cliente
+            </a>
+          </div>
+
+          <div class="col-12 col-sm-6">
+            <div class="text-muted text-uppercase mb-2" style="font-size:.68rem;letter-spacing:.08em;">Vehículo</div>
+            {% if presupuesto.vehiculo %}
+              <div>
+                <div class="fw-bold" style="color:var(--text-primary);letter-spacing:.06em;font-size:1.05rem;">{{ presupuesto.vehiculo.patente }}</div>
+                <div class="text-muted">{{ presupuesto.vehiculo.marca }} {{ presupuesto.vehiculo.modelo }}</div>
+              </div>
+              <a href="{% url 'taller:vehiculo_detail' presupuesto.vehiculo.pk %}" class="btn btn-outline-premium btn-sm mt-3">
+                <i class="bi bi-car-front me-1"></i>Ver vehículo
+              </a>
+            {% else %}
+              <span class="text-muted">Sin vehículo asignado</span>
+            {% endif %}
+          </div>
+
         </div>
-        <div class="text-muted small">
-          {% if presupuesto.cliente.telefono %}<i class="bi bi-telephone me-1"></i>{{ presupuesto.cliente.telefono }}{% endif %}
-          {% if presupuesto.cliente.dni %}<span class="ms-2"><i class="bi bi-person-vcard me-1"></i>{{ presupuesto.cliente.dni }}</span>{% endif %}
-        </div>
-        {% if presupuesto.cliente.direccion %}
-          <div class="text-muted small mt-1">
-            <i class="bi bi-geo-alt me-1"></i>{{ presupuesto.cliente.direccion }}
+
+        {% if presupuesto.titulo %}
+          <hr style="border-color:var(--border);">
+          <div class="small">
+            <div class="text-muted text-uppercase mb-1" style="font-size:.68rem;letter-spacing:.08em;">Título</div>
+            <p class="mb-0" style="color:var(--text-secondary);">{{ presupuesto.titulo }}</p>
+          </div>
+        {% endif %}
+
+        {% if presupuesto.resumen %}
+          <hr style="border-color:var(--border);">
+          <div class="small">
+            <div class="text-muted text-uppercase mb-1" style="font-size:.68rem;letter-spacing:.08em;">Resumen para el cliente</div>
+            <p class="mb-0" style="color:var(--text-secondary);white-space:pre-wrap;">{{ presupuesto.resumen }}</p>
+          </div>
+        {% endif %}
+
+        {% if presupuesto.notas_internas %}
+          <hr style="border-color:var(--border);">
+          <div class="small">
+            <div class="text-muted text-uppercase mb-1" style="font-size:.68rem;letter-spacing:.08em;">
+              <i class="bi bi-lock me-1"></i>Notas internas
+            </div>
+            <p class="mb-0 panel-soft p-3" style="color:var(--text-secondary);white-space:pre-wrap;border-radius:var(--radius);">{{ presupuesto.notas_internas }}</p>
           </div>
         {% endif %}
       </div>
-
-      <hr class="border-secondary-subtle">
-
-      <div class="small">
-        <div class="text-secondary text-uppercase mb-1">Título</div>
-        <p class="mb-0" style="white-space: pre-wrap;">{{ presupuesto.titulo|default:"—" }}</p>
-      </div>
-
-      <hr class="border-secondary-subtle">
-
-      <div class="small">
-        <div class="text-secondary text-uppercase mb-1">Resumen para el cliente</div>
-        <p class="mb-0" style="white-space: pre-wrap;">{{ presupuesto.resumen|default:"—" }}</p>
-      </div>
-
-      {% if presupuesto.notas_internas %}
-        <hr class="border-secondary-subtle">
-        <div class="small">
-          <div class="text-secondary text-uppercase mb-1">Notas internas</div>
-          <p class="mb-0" style="white-space: pre-wrap;">{{ presupuesto.notas_internas }}</p>
-        </div>
-      {% endif %}
     </div>
   </div>
-
-  <!-- VEHÍCULO + TOTALES -->
-  <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <h2 class="h6 text-uppercase text-secondary mb-0">Vehículo y totales</h2>
-
-        {% if presupuesto.vehiculo %}
-          <a href="{% url 'taller:vehiculo_detail' presupuesto.vehiculo.pk %}"
-             class="btn btn-sm btn-outline-premium">
-            <i class="bi bi-car-front-fill me-1"></i> Ver ficha
-          </a>
-        {% endif %}
-      </div>
-
-      <dl class="row small mb-3">
-        <dt class="col-5 text-secondary">Vehículo</dt>
-        <dd class="col-7 mb-2">
-          {% if presupuesto.vehiculo %}
-            {{ presupuesto.vehiculo.patente }} · {{ presupuesto.vehiculo.marca }} {{ presupuesto.vehiculo.modelo }}
-          {% else %}
-            —
-          {% endif %}
-        </dd>
-
-        <dt class="col-5 text-secondary">Ítems</dt>
-        <dd class="col-7 mb-2">{{ presupuesto.items.count }}</dd>
-
-        <dt class="col-5 text-secondary">Descuento</dt>
-        <dd class="col-7 mb-2">
-          {% if presupuesto.descuento and presupuesto.descuento > 0 %}
-            − $ {{ presupuesto.descuento|floatformat:2 }}
-          {% else %}
-            —
-          {% endif %}
-        </dd>
-
-        <dt class="col-5 text-secondary">Total</dt>
-        <dd class="col-7 fw-semibold">$ {{ presupuesto.total|default:"0"|floatformat:2 }}</dd>
-      </dl>
-
-      <div class="small text-secondary">
-        <i class="bi bi-printer me-1"></i> Podés imprimir el comprobante o guardarlo como PDF desde el navegador.
-      </div>
-    </div>
-  </div>
-
 </div>
 
-<!-- ÍTEMS -->
-<div class="card-premium p-4">
-  {% with items_count=presupuesto.items.count %}
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-      <h2 class="h6 text-uppercase text-secondary mb-0">Detalle de ítems</h2>
-      {% if items_count > 0 %}
-        <span class="small text-secondary">Ítems cargados: {{ items_count }}</span>
-      {% endif %}
-    </div>
+{# ── Ítems del presupuesto ── #}
+<div class="card-premium p-0">
+  <div class="card-premium-header d-flex justify-content-between align-items-center">
+    <h2 class="h6 mb-0" style="color:var(--text-primary);">
+      <i class="bi bi-list-ul me-2" style="color:#a5b4fc;"></i>Detalle de ítems
+      <span class="badge ms-2" style="background:rgba(255,255,255,0.07);color:var(--text-muted);border:1px solid var(--border);">{{ presupuesto.items.count }}</span>
+    </h2>
+    {% if presupuesto.activo %}
+      <a href="{% url 'taller:presupuesto_update' presupuesto.pk %}" class="btn btn-outline-premium btn-sm">
+        <i class="bi bi-pencil me-1"></i>Editar ítems
+      </a>
+    {% endif %}
+  </div>
 
+  {% with items_count=presupuesto.items.count %}
     {% if items_count > 0 %}
       <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle table-dark-custom mb-0 small">
+        <table class="table table-dark-custom mb-0">
           <thead>
             <tr>
               <th>Descripción</th>
-              <th class="text-end" style="width: 12%;">Cant.</th>
-              <th class="text-end" style="width: 18%;">Precio unit.</th>
-              <th class="text-end" style="width: 18%;">Subtotal</th>
+              <th class="text-end" style="width:10%;">Cant.</th>
+              <th class="text-end" style="width:18%;">Precio unit.</th>
+              <th class="text-end" style="width:18%;">Subtotal</th>
             </tr>
           </thead>
           <tbody>
             {% for it in presupuesto.items.all %}
               <tr>
-                <td class="fw-semibold">{{ it.descripcion }}</td>
-                <td class="text-end">{{ it.cantidad|floatformat:2 }}</td>
-                <td class="text-end">$ {{ it.precio_unitario|default:"0"|floatformat:2 }}</td>
-                <td class="text-end fw-semibold">$ {{ it.subtotal|default:"0"|floatformat:2 }}</td>
+                <td class="fw-semibold small" style="color:var(--text-primary);">{{ it.descripcion }}</td>
+                <td class="text-end text-secondary small">{{ it.cantidad|floatformat:2 }}</td>
+                <td class="text-end text-secondary small">$ {{ it.precio_unitario|default:"0"|floatformat:2 }}</td>
+                <td class="text-end fw-bold small monto-total">$ {{ it.subtotal|default:"0"|floatformat:2 }}</td>
               </tr>
             {% endfor %}
           </tbody>
+          <tfoot>
+            {% if presupuesto.descuento and presupuesto.descuento > 0 %}
+              <tr>
+                <td colspan="3" class="text-end text-muted small fw-semibold" style="border-top:1px solid var(--border-strong);">
+                  <i class="bi bi-tag me-1"></i>Descuento
+                </td>
+                <td class="text-end small fw-bold" style="color:#fbbf24;border-top:1px solid var(--border-strong);">
+                  − $ {{ presupuesto.descuento|floatformat:2 }}
+                </td>
+              </tr>
+            {% endif %}
+            <tr>
+              <td colspan="3" class="text-end fw-bold" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);border-top:2px solid var(--border-strong);">
+                Total del presupuesto
+              </td>
+              <td class="text-end" style="font-size:1.2rem;font-weight:800;color:var(--text-primary);font-variant-numeric:tabular-nums;border-top:2px solid var(--border-strong);">
+                $ {{ presupuesto.total|default:"0"|floatformat:0 }}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
-
-      <hr class="border-secondary-subtle my-4">
-
-      <div class="d-flex justify-content-end">
-        <div class="totals-mini">
-          {% if presupuesto.descuento and presupuesto.descuento > 0 %}
-            <div class="d-flex justify-content-between">
-              <span class="text-secondary">Descuento</span>
-              <span class="fw-semibold">- $ {{ presupuesto.descuento|floatformat:2 }}</span>
-            </div>
-          {% endif %}
-          <div class="d-flex justify-content-between mt-2">
-            <span class="text-secondary">Total</span>
-            <span class="fs-5 fw-bold">$ {{ presupuesto.total|default:"0"|floatformat:2 }}</span>
-          </div>
-        </div>
-      </div>
-
     {% else %}
-      <p class="text-secondary small mb-0">
-        Este presupuesto todavía no tiene ítems cargados.
+      <div class="empty-state py-5">
+        <i class="bi bi-list-ul"></i>
+        <p>Este presupuesto no tiene ítems cargados todavía.</p>
         {% if presupuesto.activo %}
-          <a class="link-light link-underline-opacity-0 link-underline-opacity-100-hover"
-             href="{% url 'taller:presupuesto_update' presupuesto.pk %}">
-            Cargar ítems
+          <a href="{% url 'taller:presupuesto_update' presupuesto.pk %}" class="btn btn-outline-premium btn-sm mt-2">
+            <i class="bi bi-pencil me-1"></i>Cargar ítems
           </a>
         {% endif %}
-      </p>
+      </div>
     {% endif %}
   {% endwith %}
 </div>

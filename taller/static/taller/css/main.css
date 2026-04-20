@@ -1,0 +1,1204 @@
+/*
+  ============================================
+  TALLER ALE GAVILAN — CARS SOLUTIONS
+  Design System · Dark Automotive Premium v3.0
+  ============================================
+*/
+
+/* ==========================================
+   1. DESIGN TOKENS
+   ========================================== */
+:root {
+  /* Backgrounds */
+  --bg:            #0d0d1a;
+  --bg-card:       #12121f;
+  --bg-elevated:   #1a1a2e;
+  --bg-soft:       #1e1e32;
+  --bg-input:      #16162a;
+
+  /* Brand accent — Rojo automotriz */
+  --accent:          #dc2626;
+  --accent-hover:    #b91c1c;
+  --accent-subtle:   rgba(220, 38, 38, 0.12);
+  --accent-border:   rgba(220, 38, 38, 0.30);
+  --accent-glow:     0 0 20px rgba(220, 38, 38, 0.25);
+
+  /* Gold accent — Premium */
+  --gold:         #d97706;
+  --gold-subtle:  rgba(217, 119, 6, 0.12);
+  --gold-border:  rgba(217, 119, 6, 0.30);
+
+  /* Semantic colors */
+  --success:       #059669;
+  --success-light: rgba(5, 150, 105, 0.12);
+  --success-border: rgba(5, 150, 105, 0.30);
+  --warning:       #d97706;
+  --warning-light: rgba(217, 119, 6, 0.12);
+  --warning-border: rgba(217, 119, 6, 0.30);
+  --danger:        #dc2626;
+  --danger-light:  rgba(220, 38, 38, 0.12);
+  --danger-border: rgba(220, 38, 38, 0.30);
+  --info:          #0ea5e9;
+  --info-light:    rgba(14, 165, 233, 0.12);
+  --info-border:   rgba(14, 165, 233, 0.30);
+
+  /* Text */
+  --text-primary:   #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted:     #64748b;
+
+  /* Borders */
+  --border:         rgba(255, 255, 255, 0.07);
+  --border-strong:  rgba(255, 255, 255, 0.13);
+  --border-focus:   rgba(220, 38, 38, 0.50);
+
+  /* Spacing & Geometry */
+  --radius-sm: 8px;
+  --radius:    12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow:    0 4px 16px rgba(0,0,0,0.5);
+  --shadow-lg: 0 8px 40px rgba(0,0,0,0.6);
+
+  /* Transitions */
+  --transition: 0.18s ease;
+  --transition-slow: 0.35s ease;
+
+  /* Layout */
+  --nav-height: 64px;
+  --container-max: 1320px;
+}
+
+/* ==========================================
+   2. RESET / BASE
+   ========================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==========================================
+   3. ACCESSIBILITY
+   ========================================== */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 9999;
+  padding: 8px 18px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  font-weight: 700;
+  font-size: 0.85rem;
+  transition: top 0.2s;
+  text-decoration: none;
+}
+.skip-link:focus { top: 0; outline: none; }
+
+/* ==========================================
+   4. NAVBAR
+   ========================================== */
+.navbar-premium {
+  background: rgba(13, 13, 26, 0.97);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  min-height: var(--nav-height);
+  padding: 0 1.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+  box-shadow: 0 1px 0 var(--border), 0 4px 24px rgba(0,0,0,0.4);
+}
+
+/* Brand */
+.brand-logo img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  filter: drop-shadow(0 2px 10px rgba(220,38,38,0.45));
+}
+
+.brand-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.brand-subtitle {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Nav links */
+.navbar-premium .nav-link {
+  color: var(--text-secondary) !important;
+  font-size: 0.84rem;
+  font-weight: 500;
+  padding: 0.45rem 0.8rem !important;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.navbar-premium .nav-link:hover {
+  color: var(--text-primary) !important;
+  background: rgba(255,255,255,0.06);
+}
+
+.navbar-premium .nav-link.active {
+  color: #fff !important;
+  background: var(--accent-subtle);
+}
+
+.navbar-premium .nav-link.active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* Navbar toggler */
+.navbar-toggler {
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 0.35rem 0.6rem !important;
+}
+
+.navbar-toggler:focus { box-shadow: none !important; }
+
+/* Dropdown Premium */
+.dropdown-menu-premium {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+  padding: 0.5rem !important;
+  min-width: 220px !important;
+}
+
+.dropdown-menu-premium .dropdown-item {
+  color: var(--text-secondary) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 0.5rem 0.8rem !important;
+  font-size: 0.84rem !important;
+  transition: all var(--transition) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.dropdown-menu-premium .dropdown-item:hover,
+.dropdown-menu-premium .dropdown-item:focus {
+  color: var(--text-primary) !important;
+  background: rgba(255,255,255,0.07) !important;
+}
+
+.dropdown-menu-premium .dropdown-header {
+  color: var(--text-muted) !important;
+  font-size: 0.65rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  padding: 0.5rem 0.8rem 0.25rem !important;
+}
+
+.dropdown-menu-premium .dropdown-divider {
+  border-color: var(--border) !important;
+  margin: 0.4rem 0 !important;
+}
+
+.dropdown-menu-premium .dropdown-item-text {
+  color: var(--text-muted) !important;
+  font-size: 0.78rem !important;
+  padding: 0.25rem 0.8rem !important;
+  display: block;
+}
+
+/* ==========================================
+   5. MAIN CONTENT
+   ========================================== */
+main.container,
+main.container-fluid {
+  padding-top: 1.75rem;
+  padding-bottom: 2.5rem;
+}
+
+/* ==========================================
+   6. CARDS PREMIUM
+   ========================================== */
+.card-premium {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.card-premium:hover {
+  border-color: var(--border-strong);
+}
+
+.card-premium-header {
+  border-bottom: 1px solid var(--border);
+  padding: 1.25rem 1.5rem;
+}
+
+/* Accent top line */
+.card-accent-top {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-accent-top::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--gold) 100%);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
+/* ==========================================
+   7. STAT PILLS — KPI CARDS
+   ========================================== */
+.stat-pill {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 1.25rem 1.5rem;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-pill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  opacity: 0;
+  transition: opacity var(--transition);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
+.stat-pill:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.stat-pill:hover::after { opacity: 1; }
+
+.stat-pill.stat-success { border-color: var(--success-border); }
+.stat-pill.stat-success::after { background: linear-gradient(90deg, var(--success), transparent); opacity: 0.6; }
+.stat-pill.stat-danger  { border-color: var(--danger-border); }
+.stat-pill.stat-danger::after  { background: linear-gradient(90deg, var(--danger), transparent); opacity: 0.6; }
+.stat-pill.stat-warning { border-color: var(--warning-border); }
+.stat-pill.stat-warning::after { background: linear-gradient(90deg, var(--warning), transparent); opacity: 0.6; }
+.stat-pill.stat-info    { border-color: var(--info-border); }
+.stat-pill.stat-info::after    { background: linear-gradient(90deg, var(--info), transparent); opacity: 0.6; }
+
+.stat-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 2.1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value-sm {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-trend-up   { color: var(--success); }
+.stat-trend-down { color: var(--danger); }
+
+/* ==========================================
+   8. BUTTONS
+   ========================================== */
+
+/* Botón principal — Rojo */
+.btn-brand {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: #fff !important;
+  border: none !important;
+  font-weight: 600;
+  border-radius: var(--radius-sm) !important;
+  transition: all var(--transition) !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.35rem;
+  box-shadow: 0 2px 14px rgba(220,38,38,0.35) !important;
+  white-space: nowrap;
+}
+
+.btn-brand:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 22px rgba(220,38,38,0.5) !important;
+  transform: translateY(-1px);
+}
+
+.btn-brand:active { transform: translateY(0) !important; }
+
+/* Botón secundario outline */
+.btn-outline-premium {
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border-strong) !important;
+  font-weight: 500;
+  border-radius: var(--radius-sm) !important;
+  transition: all var(--transition) !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.btn-outline-premium:hover {
+  color: var(--text-primary) !important;
+  background: rgba(255,255,255,0.07) !important;
+  border-color: var(--border-strong) !important;
+}
+
+/* Botón success - verde */
+.btn-success-premium {
+  background: var(--success-light) !important;
+  color: #34d399 !important;
+  border: 1px solid var(--success-border) !important;
+  font-weight: 600;
+  border-radius: var(--radius-sm) !important;
+  transition: all var(--transition) !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btn-success-premium:hover {
+  background: rgba(5,150,105,0.2) !important;
+  color: #6ee7b7 !important;
+}
+
+/* Override Bootstrap btn variants in dark theme */
+.btn-outline-secondary {
+  color: var(--text-secondary) !important;
+  border-color: var(--border-strong) !important;
+}
+.btn-outline-secondary:hover {
+  background: rgba(255,255,255,0.07) !important;
+  color: var(--text-primary) !important;
+}
+
+.btn-outline-light {
+  color: var(--text-secondary) !important;
+  border-color: var(--border-strong) !important;
+}
+.btn-outline-light:hover {
+  background: rgba(255,255,255,0.08) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ==========================================
+   9. TYPOGRAPHY
+   ========================================== */
+.gradient-text {
+  background: linear-gradient(135deg, #f1f5f9 0%, #94a3b8 80%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+a { color: var(--info); }
+a:hover { color: #7dd3fc; }
+
+.text-secondary { color: var(--text-secondary) !important; }
+.text-muted     { color: var(--text-muted) !important; }
+
+/* ==========================================
+   10. TABLES
+   ========================================== */
+.table-dark-custom {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--text-secondary);
+  --bs-table-border-color: var(--border);
+  --bs-table-striped-bg: rgba(255,255,255,0.02);
+  --bs-table-hover-bg: rgba(255,255,255,0.04);
+}
+
+.table-dark-custom thead th {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  border-bottom: 1px solid var(--border-strong) !important;
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table-dark-custom td {
+  border-bottom: 1px solid var(--border) !important;
+  padding: 0.875rem 1rem;
+  vertical-align: middle;
+  color: var(--text-secondary);
+}
+
+.table-dark-custom tbody tr:hover td {
+  background: rgba(255,255,255,0.03);
+}
+
+.table-dark-custom tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
+/* Override Bootstrap dark table */
+.table-dark {
+  --bs-table-bg: transparent;
+  --bs-table-border-color: var(--border);
+  --bs-table-color: var(--text-secondary);
+}
+
+/* ==========================================
+   11. BADGES  (Estado-aware)
+   ========================================== */
+
+/* Trabajo estados */
+.badge-ingresado   { background: var(--info-light);    color: #38bdf8; border: 1px solid var(--info-border); }
+.badge-en_proceso  { background: var(--warning-light); color: #fbbf24; border: 1px solid var(--warning-border); }
+.badge-finalizado  { background: var(--success-light); color: #34d399; border: 1px solid var(--success-border); }
+.badge-entregado   { background: rgba(99,102,241,0.12); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.30); }
+.badge-anulado     { background: var(--danger-light);  color: #fca5a5; border: 1px solid var(--danger-border); }
+
+/* Presupuesto estados */
+.badge-borrador    { background: rgba(255,255,255,0.06); color: var(--text-secondary); border: 1px solid var(--border-strong); }
+.badge-aprobado    { background: var(--success-light); color: #34d399; border: 1px solid var(--success-border); }
+.badge-rechazado   { background: var(--danger-light);  color: #fca5a5; border: 1px solid var(--danger-border); }
+
+/* Turno estados */
+.badge-pendiente   { background: var(--warning-light); color: #fbbf24; border: 1px solid var(--warning-border); }
+.badge-confirmado  { background: var(--success-light); color: #34d399; border: 1px solid var(--success-border); }
+.badge-cancelado   { background: var(--danger-light);  color: #fca5a5; border: 1px solid var(--danger-border); }
+.badge-cumplido    { background: rgba(99,102,241,0.12); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.30); }
+
+/* Cuenta */
+.badge-deuda { background: var(--danger-light); color: #fca5a5; border: 1px solid var(--danger-border); }
+.badge-pago  { background: var(--success-light); color: #34d399; border: 1px solid var(--success-border); }
+
+/* Generic badge overrides */
+.badge {
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  padding: 0.3em 0.7em;
+  border-radius: 999px;
+}
+
+/* ==========================================
+   12. FORMS
+   ========================================== */
+.form-control,
+.form-select {
+  background: var(--bg-input) !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  font-size: 0.88rem !important;
+  transition: all var(--transition) !important;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background: var(--bg-elevated) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+.form-control::placeholder {
+  color: var(--text-muted) !important;
+  font-size: 0.85rem;
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  background: rgba(255,255,255,0.03) !important;
+  color: var(--text-muted) !important;
+  cursor: not-allowed;
+}
+
+.form-label {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+}
+
+.form-text {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.invalid-feedback {
+  font-size: 0.78rem;
+  color: #fca5a5 !important;
+}
+
+.is-invalid {
+  border-color: var(--danger) !important;
+  background-image: none !important;
+}
+
+.is-invalid:focus {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px var(--danger-light) !important;
+}
+
+/* Errorlist (Django style) */
+.errorlist {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+}
+
+.errorlist li {
+  color: #fca5a5;
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.errorlist li::before {
+  content: "⚠";
+  font-size: 0.7rem;
+}
+
+/* Non-field errors */
+.non-field-errors {
+  background: var(--danger-light);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  color: #fca5a5;
+  font-size: 0.84rem;
+}
+
+/* ==========================================
+   13. ALERTS
+   ========================================== */
+.alert {
+  border-radius: var(--radius) !important;
+  border: 1px solid !important;
+  font-size: 0.875rem;
+}
+
+.alert-success {
+  background: var(--success-light) !important;
+  border-color: var(--success-border) !important;
+  color: #34d399 !important;
+}
+
+.alert-danger, .alert-error {
+  background: var(--danger-light) !important;
+  border-color: var(--danger-border) !important;
+  color: #fca5a5 !important;
+}
+
+.alert-warning {
+  background: var(--warning-light) !important;
+  border-color: var(--warning-border) !important;
+  color: #fbbf24 !important;
+}
+
+.alert-info {
+  background: var(--info-light) !important;
+  border-color: var(--info-border) !important;
+  color: #38bdf8 !important;
+}
+
+.alert .btn-close {
+  filter: invert(1) opacity(0.5) !important;
+}
+
+/* ==========================================
+   14. FOOTER
+   ========================================== */
+.footer-premium {
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  padding: 1.25rem 0;
+}
+
+/* ==========================================
+   15. PAGE HEADER
+   ========================================== */
+.page-header {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 1.5rem 2rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.page-header::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--gold) 60%, transparent 100%);
+}
+
+/* ==========================================
+   16. PANEL SOFT
+   ========================================== */
+.panel-soft {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* ==========================================
+   17. MISC UTILS
+   ========================================== */
+.border-secondary-subtle { border-color: var(--border) !important; }
+.pre { white-space: pre-wrap; word-break: break-word; }
+
+/* Icon circle */
+.icon-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.icon-circle-danger  { background: var(--danger-light);  color: #f87171; }
+.icon-circle-success { background: var(--success-light); color: #34d399; }
+.icon-circle-warning { background: var(--warning-light); color: #fbbf24; }
+.icon-circle-info    { background: var(--info-light);    color: #38bdf8; }
+.icon-circle-neutral { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+
+/* Divider */
+.divider-dark { border-color: var(--border) !important; }
+
+/* ==========================================
+   18. LIST ITEMS PREMIUM
+   ========================================== */
+.list-item-premium {
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+
+.list-item-premium:last-child { border-bottom: none; }
+.list-item-premium:hover { background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); }
+
+/* ==========================================
+   19. PAGINATION
+   ========================================== */
+.pagination .page-link {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--text-secondary) !important;
+  border-radius: var(--radius-sm) !important;
+  margin: 0 2px;
+  font-size: 0.85rem;
+  transition: all var(--transition);
+}
+
+.pagination .page-link:hover {
+  background: rgba(255,255,255,0.08) !important;
+  color: var(--text-primary) !important;
+}
+
+.pagination .page-item.active .page-link {
+  background: var(--accent-subtle) !important;
+  border-color: var(--accent-border) !important;
+  color: var(--text-primary) !important;
+}
+
+.pagination .page-item.disabled .page-link {
+  opacity: 0.3 !important;
+  cursor: not-allowed;
+}
+
+/* ==========================================
+   20. SEARCH BOX
+   ========================================== */
+.search-wrapper {
+  position: relative;
+}
+
+.search-wrapper .bi-search {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+  font-size: 0.85rem;
+}
+
+.search-wrapper .form-control {
+  padding-left: 2.25rem !important;
+}
+
+/* ==========================================
+   21. EMPTY STATES
+   ========================================== */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+}
+
+.empty-state i {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.4;
+  display: block;
+}
+
+.empty-state p {
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+/* ==========================================
+   22. TOOLTIP / POPOVER
+   ========================================== */
+.tooltip-inner {
+  background: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-sm) !important;
+  font-size: 0.78rem;
+}
+
+/* ==========================================
+   23. MODAL
+   ========================================== */
+.modal-content {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.modal-header {
+  border-bottom: 1px solid var(--border) !important;
+  padding: 1.25rem 1.5rem !important;
+}
+
+.modal-footer {
+  border-top: 1px solid var(--border) !important;
+  padding: 1rem 1.5rem !important;
+}
+
+.modal-title {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.btn-close {
+  filter: invert(1) opacity(0.5) !important;
+}
+
+.btn-close:hover {
+  filter: invert(1) opacity(0.8) !important;
+}
+
+.modal-backdrop {
+  background-color: rgba(0,0,0,0.7) !important;
+}
+
+/* ==========================================
+   24. ANIMATIONS
+   ========================================== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(220,38,38,0); }
+}
+
+.fade-in   { animation: fadeIn 0.3s ease forwards; }
+.slide-in  { animation: slideIn 0.3s ease forwards; }
+
+/* ==========================================
+   25. SCROLLBAR CUSTOM
+   ========================================== */
+::-webkit-scrollbar          { width: 6px; height: 6px; }
+::-webkit-scrollbar-track    { background: var(--bg); }
+::-webkit-scrollbar-thumb    { background: var(--border-strong); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ==========================================
+   26. FORMSET ROWS (Trabajos / Presupuestos)
+   ========================================== */
+.formset-row {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+  transition: border-color var(--transition);
+}
+
+.formset-row:hover { border-color: var(--border-strong); }
+
+.formset-row.marked-delete {
+  opacity: 0.4;
+  border-color: var(--danger-border) !important;
+  background: var(--danger-light) !important;
+}
+
+/* ==========================================
+   27. ACCOUNT / FINANCIAL COMPONENTS
+   ========================================== */
+.saldo-positivo {
+  color: #f87171;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.saldo-negativo {
+  color: #34d399;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.saldo-cero {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.monto-deuda  { color: #fca5a5; font-variant-numeric: tabular-nums; font-weight: 600; }
+.monto-pago   { color: #6ee7b7; font-variant-numeric: tabular-nums; font-weight: 600; }
+.monto-total  { color: var(--text-primary); font-variant-numeric: tabular-nums; font-weight: 800; }
+
+/* ==========================================
+   28. RESPONSIVE
+   ========================================== */
+@media (max-width: 992px) {
+  .navbar-collapse {
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--border);
+    margin-top: 0.5rem;
+  }
+
+  .navbar-premium .nav-link.active::after {
+    display: none;
+  }
+
+  .stat-value { font-size: 1.7rem; }
+
+  .page-header { padding: 1.25rem 1.5rem; }
+}
+
+@media (max-width: 576px) {
+  .stat-value { font-size: 1.5rem; }
+  main.container { padding-top: 1rem; }
+}
+
+/* ==========================================
+   29. PRINT OVERRIDES (para páginas normales)
+   ========================================== */
+@media print {
+  .navbar-premium,
+  .footer-premium,
+  .btn,
+  .alert,
+  .skip-link { display: none !important; }
+
+  body { background: #fff !important; color: #000 !important; }
+  .card-premium { border: 1px solid #ddd !important; }
+}
+
+/* ==========================================
+   30. DASHBOARD HERO
+   ========================================== */
+.dash-hero {
+  background: linear-gradient(145deg, var(--bg-elevated) 0%, var(--bg-card) 60%, rgba(220,38,38,0.04) 100%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  padding: 2rem 2.5rem;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 1.75rem;
+}
+
+.dash-hero::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--gold) 55%, transparent 100%);
+}
+
+.dash-hero::after {
+  content: "";
+  position: absolute;
+  top: -100px; right: -100px;
+  width: 340px; height: 340px;
+  background: radial-gradient(circle, rgba(220,38,38,0.07) 0%, transparent 65%);
+  pointer-events: none;
+  animation: pulse-hero 6s ease-in-out infinite;
+}
+
+@keyframes pulse-hero {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.1); opacity: 0.7; }
+}
+
+.dash-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(52, 211, 153, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 999px;
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 0.22rem 0.7rem;
+  text-transform: uppercase;
+}
+
+.dash-hero-badge .pulse-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  animation: pulse-dot 2s ease-in-out infinite;
+  display: inline-block;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* ==========================================
+   31. ACTION CARDS (Accesos rápidos)
+   ========================================== */
+.action-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  text-decoration: none !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  transition: all 0.22s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+}
+
+.action-card::after {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.action-card:hover { transform: translateY(-5px); box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+.action-card:hover::after { opacity: 1; }
+
+.action-card-icon {
+  width: 56px; height: 56px;
+  border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.55rem;
+  transition: all 0.22s ease;
+}
+
+.action-card-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+  transition: color 0.22s ease;
+  line-height: 1.3;
+}
+.action-card:hover .action-card-label { color: var(--text-primary); }
+
+/* Variantes de color */
+.action-icon-red    { background: var(--accent-subtle);          color: #f87171;  border: 1px solid var(--accent-border); }
+.action-icon-blue   { background: var(--info-light);             color: #38bdf8;  border: 1px solid var(--info-border); }
+.action-icon-purple { background: rgba(99,102,241,0.1);          color: #a5b4fc;  border: 1px solid rgba(99,102,241,0.25); }
+.action-icon-green  { background: var(--success-light);          color: #34d399;  border: 1px solid var(--success-border); }
+.action-icon-amber  { background: var(--warning-light);          color: #fbbf24;  border: 1px solid var(--warning-border); }
+
+.action-card:hover .action-icon-red    { background: rgba(220,38,38,0.22);   box-shadow: 0 0 22px rgba(220,38,38,0.3); }
+.action-card:hover .action-icon-blue   { background: rgba(14,165,233,0.22);  box-shadow: 0 0 22px rgba(14,165,233,0.25); }
+.action-card:hover .action-icon-purple { background: rgba(99,102,241,0.22);  box-shadow: 0 0 22px rgba(99,102,241,0.25); }
+.action-card:hover .action-icon-green  { background: rgba(5,150,105,0.22);   box-shadow: 0 0 22px rgba(5,150,105,0.25); }
+.action-card:hover .action-icon-amber  { background: rgba(217,119,6,0.22);   box-shadow: 0 0 22px rgba(217,119,6,0.25); }
+
+.action-red::after    { background: linear-gradient(90deg, var(--accent), transparent); }
+.action-blue::after   { background: linear-gradient(90deg, var(--info), transparent); }
+.action-purple::after { background: linear-gradient(90deg, #6366f1, transparent); }
+.action-green::after  { background: linear-gradient(90deg, var(--success), transparent); }
+.action-amber::after  { background: linear-gradient(90deg, var(--warning), transparent); }
+
+/* ==========================================
+   32. ACTIVITY FEED ITEMS
+   ========================================== */
+.activity-item {
+  padding: 1rem 1.5rem;
+  transition: background var(--transition);
+}
+.activity-item:hover { background: rgba(255,255,255,0.02); }
+.border-bottom-soft  { border-bottom: 1px solid var(--border); }
+
+/* ==========================================
+   33. CLIENT AVATAR CHIP
+   ========================================== */
+.client-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(220,38,38,0.15), rgba(217,119,6,0.15));
+  border: 1px solid var(--accent-border);
+  color: #f87171;
+  font-size: 0.95rem;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+/* ==========================================
+   34. LINKABLE STAT PILLS
+   ========================================== */
+a.stat-pill {
+  text-decoration: none !important;
+  color: inherit !important;
+}
+a.stat-pill:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+}
+a.stat-pill:hover::after { opacity: 1; }
+
+/* ==========================================
+   35. HELPERS
+   ========================================== */
+.text-info-custom    { color: #38bdf8 !important; }
+.text-warning-custom { color: #fbbf24 !important; }
+.text-purple-custom  { color: #a5b4fc !important; }
+.min-w-0 { min-width: 0; }
+
+/* Navbar — accent glow on logo */
+.brand-logo img {
+  transition: filter var(--transition-slow);
+}
+.navbar-premium:hover .brand-logo img {
+  filter: drop-shadow(0 2px 14px rgba(220,38,38,0.65));
+}
+
+/* Navbar item hover glow subtle */
+.navbar-premium .nav-link.active {
+  background: var(--accent-subtle);
+  box-shadow: inset 0 0 12px rgba(220,38,38,0.08);
+}
+
+/* Card premium — soft inner glow on hover */
+.card-premium:hover {
+  box-shadow: 0 0 0 1px var(--border-strong), 0 8px 32px rgba(0,0,0,0.4);
+}
+
+/* ==========================================
+   36. RESPONSIVE TWEAKS (dashboard)
+   ========================================== */
+@media (max-width: 768px) {
+  .dash-hero { padding: 1.5rem 1.25rem; }
+  .dash-hero::after { display: none; }
+  .action-card { padding: 1.25rem 0.75rem; gap: 0.5rem; }
+  .action-card-icon { width: 44px; height: 44px; font-size: 1.25rem; }
+  .action-card-label { font-size: 0.72rem; }
+  .activity-item { padding: 0.875rem 1rem; }
+}

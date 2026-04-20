@@ -1,196 +1,252 @@
 {% load static %}
 <!doctype html>
-<html lang="es" class="h-100">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d0d1a">
+  <title>{% block title %}Ale Gavilan Cars Solutions{% endblock %}</title>
 
-    <title>{% block title %}Ale Gavilan Cars Solutions{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{% static 'taller/img/logo.png' %}">
 
-    <link rel="icon" type="image/png" href="{% static 'taller/img/logo.png' %}">
+  <!-- Bootstrap + Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-    <!-- Bootstrap + Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <!-- Estilos propios -->
-    <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
+  <!-- Sistema de diseño propio -->
+  <link rel="stylesheet" href="{% static 'taller/css/main.css' %}">
 
-    {% block extra_head %}{% endblock %}
-  </head>
+  {% block extra_head %}{% endblock %}
+</head>
 
-  <body class="d-flex flex-column min-vh-100">
-    <a class="skip-link" href="#mainContent">Saltar al contenido</a>
+<body class="d-flex flex-column min-vh-100">
 
-    <nav class="navbar navbar-expand-lg navbar-premium navbar-dark" id="mainNav" aria-label="Navegación principal">
-      <div class="container-fluid">
+  <a class="skip-link" href="#mainContent">Saltar al contenido principal</a>
 
-        <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'taller:dashboard' %}">
-          <span class="brand-logo" aria-hidden="true">
-            <img src="{% static 'taller/img/logo.png' %}" alt="Logo Ale Gavilan Cars Solutions">
-          </span>
-          <div class="d-flex flex-column brand-text">
-            <span class="brand-title fw-bold">Ale Gavilan</span>
-            <small class="brand-subtitle">Cars Solutions</small>
+  <!-- =============================================
+       NAVBAR PREMIUM
+       ============================================= -->
+  <nav class="navbar navbar-expand-lg navbar-premium" id="mainNav" aria-label="Navegación principal">
+    <div class="container-fluid">
+
+      <!-- Brand -->
+      <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'taller:dashboard' %}">
+        <span class="brand-logo" aria-hidden="true">
+          <img src="{% static 'taller/img/logo.png' %}" alt="Logo Ale Gavilan Cars Solutions">
+        </span>
+        <div class="d-flex flex-column brand-text">
+          <span class="brand-title">Ale Gavilan</span>
+          <small class="brand-subtitle">Cars Solutions</small>
+        </div>
+      </a>
+
+      <!-- Toggle mobile -->
+      <button class="navbar-toggler border-0" type="button"
+              data-bs-toggle="collapse" data-bs-target="#mainNavbar"
+              aria-controls="mainNavbar" aria-expanded="false" aria-label="Mostrar menú">
+        <i class="bi bi-list text-secondary" style="font-size:1.3rem;"></i>
+      </button>
+
+      <div class="collapse navbar-collapse" id="mainNavbar">
+        <!-- Nav links -->
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3 gap-lg-1">
+
+          <li class="nav-item">
+            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"
+               href="{% url 'taller:dashboard' %}">
+              <i class="bi bi-speedometer2"></i>Panel
+            </a>
+          </li>
+
+          <li class="nav-item">
+            <a class="nav-link {% if 'cliente' in request.resolver_match.url_name %}active{% endif %}"
+               href="{% url 'taller:cliente_list' %}">
+              <i class="bi bi-people-fill"></i>Clientes
+            </a>
+          </li>
+
+          <li class="nav-item">
+            <a class="nav-link {% if 'vehiculo' in request.resolver_match.url_name %}active{% endif %}"
+               href="{% url 'taller:vehiculo_list' %}">
+              <i class="bi bi-car-front-fill"></i>Vehículos
+            </a>
+          </li>
+
+          <li class="nav-item">
+            <a class="nav-link {% if 'trabajo' in request.resolver_match.url_name %}active{% endif %}"
+               href="{% url 'taller:trabajo_list' %}">
+              <i class="bi bi-wrench-adjustable"></i>Trabajos
+            </a>
+          </li>
+
+          <li class="nav-item">
+            <a class="nav-link {% if 'presupuesto' in request.resolver_match.url_name %}active{% endif %}"
+               href="{% url 'taller:presupuesto_list' %}">
+              <i class="bi bi-file-earmark-text"></i>Presupuestos
+            </a>
+          </li>
+
+          <li class="nav-item">
+            <a class="nav-link {% if 'turno' in request.resolver_match.url_name %}active{% endif %}"
+               href="{% url 'taller:turno_list' %}">
+              <i class="bi bi-calendar-week"></i>Turnos
+            </a>
+          </li>
+
+        </ul>
+
+        <!-- Acciones rápidas + usuario -->
+        <div class="d-flex align-items-center gap-2 gap-lg-3">
+
+          <!-- Acciones rápidas -->
+          <div class="d-none d-lg-flex gap-2">
+            <a href="{% url 'taller:trabajo_create' %}"
+               class="btn btn-brand btn-sm"
+               data-bs-toggle="tooltip" title="Nuevo trabajo (Alt+N)">
+              <i class="bi bi-clipboard-plus"></i>
+              <span class="d-none d-xl-inline">Nuevo trabajo</span>
+            </a>
+            <a href="{% url 'taller:turno_create' %}"
+               class="btn btn-outline-premium btn-sm"
+               data-bs-toggle="tooltip" title="Nuevo turno">
+              <i class="bi bi-calendar-plus"></i>
+            </a>
           </div>
-        </a>
 
-        <button class="navbar-toggler" type="button"
-                data-bs-toggle="collapse" data-bs-target="#mainNavbar"
-                aria-controls="mainNavbar" aria-expanded="false" aria-label="Mostrar navegación">
-          <span class="navbar-toggler-icon"></span>
-        </button>
+          <div class="vr d-none d-lg-block opacity-25 mx-1"></div>
 
-        <div class="collapse navbar-collapse" id="mainNavbar">
-          <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4">
-            <li class="nav-item">
-              <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"
-                 href="{% url 'taller:dashboard' %}"
-                 {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>
-                <i class="bi bi-speedometer2 me-2"></i>Panel
-              </a>
-            </li>
+          <!-- Usuario -->
+          {% if request.user.is_authenticated %}
+            <div class="dropdown">
+              <button class="btn btn-outline-premium btn-sm dropdown-toggle d-flex align-items-center gap-2"
+                      type="button"
+                      data-bs-toggle="dropdown"
+                      aria-expanded="false">
+                <i class="bi bi-person-circle"></i>
+                <span class="d-none d-md-inline">{{ request.user.get_short_name|default:request.user.username }}</span>
+              </button>
 
-            <li class="nav-item">
-              <a class="nav-link {% if request.resolver_match.url_name == 'cliente_list' %}active{% endif %}"
-                 href="{% url 'taller:cliente_list' %}"
-                 {% if request.resolver_match.url_name == 'cliente_list' %}aria-current="page"{% endif %}>
-                <i class="bi bi-people-fill me-2"></i>Clientes
-              </a>
-            </li>
-
-            <li class="nav-item">
-              <a class="nav-link {% if request.resolver_match.url_name == 'vehiculo_list' %}active{% endif %}"
-                 href="{% url 'taller:vehiculo_list' %}"
-                 {% if request.resolver_match.url_name == 'vehiculo_list' %}aria-current="page"{% endif %}>
-                <i class="bi bi-car-front-fill me-2"></i>Vehículos
-              </a>
-            </li>
-
-            <li class="nav-item">
-              <a class="nav-link {% if request.resolver_match.url_name == 'trabajo_list' %}active{% endif %}"
-                 href="{% url 'taller:trabajo_list' %}"
-                 {% if request.resolver_match.url_name == 'trabajo_list' %}aria-current="page"{% endif %}>
-                <i class="bi bi-clipboard-check me-2"></i>Trabajos
-              </a>
-            </li>
-
-            <li class="nav-item">
-              <a class="nav-link {% if request.resolver_match.url_name == 'presupuesto_list' %}active{% endif %}"
-                 href="{% url 'taller:presupuesto_list' %}"
-                 {% if request.resolver_match.url_name == 'presupuesto_list' %}aria-current="page"{% endif %}>
-                <i class="bi bi-file-earmark-text me-2"></i>Presupuestos
-              </a>
-            </li>
-
-            <li class="nav-item">
-              <a class="nav-link {% if request.resolver_match.url_name == 'turno_list' %}active{% endif %}"
-                 href="{% url 'taller:turno_list' %}"
-                 {% if request.resolver_match.url_name == 'turno_list' %}aria-current="page"{% endif %}>
-                <i class="bi bi-calendar-week me-2"></i>Turnos
-              </a>
-            </li>
-          </ul>
-
-          <div class="d-flex align-items-center gap-3">
-            <div class="d-none d-lg-flex flex-column text-end small">
-              <span class="text-secondary">
-                <i class="bi bi-telephone me-1"></i> 348215331483
-              </span>
-              <span class="text-muted">
-                <i class="bi bi-geo-alt me-1"></i> Diagonal Sur S/N · Tacuarendí
-              </span>
-            </div>
-
-            <div class="vr d-none d-lg-block opacity-25"></div>
-
-            {% if request.user.is_authenticated %}
-              <div class="dropdown">
-                <button
-                  class="btn btn-outline-light btn-sm dropdown-toggle"
-                  type="button"
-                  data-bs-toggle="dropdown"
-                  data-bs-display="static"
-                  aria-expanded="false"
-                >
-                  <i class="bi bi-person-circle me-2"></i>
-                  {{ request.user.get_short_name|default:request.user.username }}
-                </button>
-
-                <ul class="dropdown-menu dropdown-menu-end dropdown-menu-premium">
+              <ul class="dropdown-menu dropdown-menu-end dropdown-menu-premium">
+                <li>
+                  <h6 class="dropdown-header">
+                    <i class="bi bi-shield-check me-1"></i>Sesión activa
+                  </h6>
+                </li>
+                <li>
+                  <span class="dropdown-item-text">
+                    <i class="bi bi-person me-1"></i>{{ request.user.username }}
+                  </span>
+                </li>
+                {% if request.user.email %}
                   <li>
-                    <h6 class="dropdown-header">Sesión iniciada</h6>
-                  </li>
-
-                  <li>
-                    <span class="dropdown-item-text small text-muted">
-                      <i class="bi bi-envelope me-2"></i>{{ request.user.email|default:"Sin email" }}
+                    <span class="dropdown-item-text">
+                      <i class="bi bi-envelope me-1"></i>{{ request.user.email }}
                     </span>
                   </li>
-
-                  <li><hr class="dropdown-divider"></li>
-
-                  <li>
-                    <a class="dropdown-item" href="{% url 'taller:dashboard' %}">
-                      <i class="bi bi-speedometer2 me-2"></i>Ir al panel
-                    </a>
-                  </li>
-
-                  <li>
-                    <a class="dropdown-item" href="{% url 'taller:presupuesto_list' %}">
-                      <i class="bi bi-file-earmark-text me-2"></i>Presupuestos
-                    </a>
-                  </li>
-
-                  <li><hr class="dropdown-divider"></li>
-
-                  <li class="px-3 py-2">
-                    <form method="post" action="{% url 'logout' %}">
-                      {% csrf_token %}
-                      <button class="btn btn-danger btn-sm w-100" type="submit">
-                        <i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión
-                      </button>
-                    </form>
-                  </li>
-                </ul>
-              </div>
-            {% else %}
-              <a class="btn btn-outline-light btn-sm" href="{% url 'login' %}">
-                <i class="bi bi-box-arrow-in-right me-2"></i>Ingresar
-              </a>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-    </nav>
-
-    <main id="mainContent" class="container flex-grow-1">
-      {% if messages %}
-        <div class="mb-3">
-          {% for message in messages %}
-            <div class="alert alert-{{ message.tags|default:'secondary' }} alert-dismissible fade show" role="alert">
-              {{ message }}
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+                {% endif %}
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                  <a class="dropdown-item" href="{% url 'taller:dashboard' %}">
+                    <i class="bi bi-speedometer2"></i>Panel principal
+                  </a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="{% url 'taller:trabajo_create' %}">
+                    <i class="bi bi-clipboard-plus"></i>Nuevo trabajo
+                  </a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="{% url 'taller:presupuesto_list' %}">
+                    <i class="bi bi-file-earmark-text"></i>Presupuestos
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li class="px-2 py-1">
+                  <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm w-100 text-start d-flex align-items-center gap-2"
+                            style="background:rgba(220,38,38,0.12);color:#fca5a5;border:1px solid rgba(220,38,38,0.25);border-radius:8px;"
+                            type="submit">
+                      <i class="bi bi-box-arrow-right"></i>Cerrar sesión
+                    </button>
+                  </form>
+                </li>
+              </ul>
             </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-
-      {% block content %}{% endblock %}
-    </main>
-
-    <footer class="footer-premium mt-auto">
-      <div class="container py-3">
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 small text-muted">
-          <div>© {% now "Y" %} · Ale Gavilan Cars Solutions</div>
-          <div>Desarrollado por <strong>Franco Agustín Mora</strong></div>
+          {% else %}
+            <a class="btn btn-brand btn-sm" href="{% url 'login' %}">
+              <i class="bi bi-box-arrow-in-right"></i>Ingresar
+            </a>
+          {% endif %}
         </div>
       </div>
-    </footer>
+    </div>
+  </nav>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{% static 'taller/js/main.js' %}"></script>
+  <!-- =============================================
+       MAIN CONTENT
+       ============================================= -->
+  <main id="mainContent" class="container flex-grow-1">
 
-    {% block extra_js %}{% endblock %}
-  </body>
+    {% if messages %}
+      <div class="mt-3">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+            {% if message.tags == 'success' %}
+              <i class="bi bi-check-circle-fill me-2"></i>
+            {% elif message.tags == 'error' or message.tags == 'danger' %}
+              <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            {% elif message.tags == 'warning' %}
+              <i class="bi bi-exclamation-circle-fill me-2"></i>
+            {% else %}
+              <i class="bi bi-info-circle-fill me-2"></i>
+            {% endif %}
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+
+  </main>
+
+  <!-- =============================================
+       FOOTER
+       ============================================= -->
+  <footer class="footer-premium mt-auto">
+    <div class="container">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+        <div class="d-flex align-items-center gap-3">
+          <span>© {% now "Y" %} <strong>Ale Gavilan Cars Solutions</strong></span>
+          <span class="d-none d-md-inline text-muted">·</span>
+          <span class="d-none d-md-inline">
+            <i class="bi bi-telephone me-1"></i>348215331483
+          </span>
+          <span class="d-none d-md-inline text-muted">·</span>
+          <span class="d-none d-md-inline">
+            <i class="bi bi-geo-alt me-1"></i>Diagonal Sur S/N · Tacuarendí
+          </span>
+        </div>
+        <div class="text-muted">
+          Desarrollado por <strong style="color:var(--text-secondary)">Franco Agustín Mora</strong>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- JS propio -->
+  <script src="{% static 'taller/js/main.js' %}"></script>
+
+  {% block extra_js %}{% endblock %}
+
+</body>
 </html>

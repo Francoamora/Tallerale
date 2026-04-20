@@ -1,252 +1,281 @@
 {% extends "taller/base.html" %}
-
-{% block title %}Trabajo #{{ trabajo.id }} – Ale Gavilan Cars Solutions{% endblock %}
+{% block title %}Trabajo #{{ trabajo.id }} — Ale Gavilan Cars Solutions{% endblock %}
 
 {% block content %}
 
+{# ── ALERTA PAPELERA ── #}
 {% if not trabajo.activo %}
-  <div class="alert alert-warning border-0 shadow-sm d-flex align-items-start gap-3 mb-4">
-    <div class="d-flex align-items-center justify-content-center rounded-circle bg-dark bg-opacity-10" style="width:42px;height:42px;">
-      <i class="bi bi-archive-fill fs-5 text-dark"></i>
-    </div>
+  <div class="alert alert-warning alert-dismissible mb-4 d-flex align-items-center gap-3">
+    <i class="bi bi-archive-fill fs-5"></i>
     <div class="flex-grow-1">
-      <div class="fw-semibold">Este trabajo está en “Eliminados”.</div>
-      <div class="small text-muted">
-        {% if trabajo.eliminado_en %}
-          Se envió a eliminados el {{ trabajo.eliminado_en|date:"d/m/Y H:i" }}.
-        {% endif %}
-        Podés restaurarlo para que vuelva a aparecer en listados normales.
-      </div>
+      <strong>Este trabajo está en la papelera.</strong>
+      {% if trabajo.eliminado_en %}
+        Eliminado el {{ trabajo.eliminado_en|date:"d/m/Y H:i" }}.
+      {% endif %}
     </div>
     <form method="post" action="{% url 'taller:trabajo_restore' trabajo.pk %}">
       {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-      <button type="submit" class="btn btn-sm btn-dark">
-        <i class="bi bi-arrow-counterclockwise me-1"></i> Restaurar
+      <button type="submit" class="btn btn-sm" style="background:var(--warning-light);color:#fbbf24;border:1px solid var(--warning-border);">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar
       </button>
     </form>
   </div>
 {% endif %}
 
-<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+{# ── HEADER ── #}
+<div class="page-header d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+  <div>
+    <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+      <a href="{% url 'taller:trabajo_list' %}" style="color:var(--text-muted);font-size:.8rem;text-decoration:none;">
+        <i class="bi bi-wrench-adjustable me-1"></i>Trabajos
+      </a>
+      <i class="bi bi-chevron-right text-muted" style="font-size:.7rem;"></i>
+      <span style="color:var(--text-secondary);font-size:.8rem;">#{{ trabajo.id }}</span>
 
-  <!-- IZQ -->
-  <div class="flex-grow-1" style="min-width:280px;">
-    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
-      <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
-        <i class="bi bi-clipboard-check me-1"></i> Trabajo #{{ trabajo.id }}
-      </span>
-
-      <span class="badge rounded-pill bg-info bg-opacity-25 text-uppercase small">
-        {{ trabajo.get_estado_display }}
-      </span>
-
-      {% if trabajo.estado_general %}
-        <span class="badge rounded-pill bg-warning bg-opacity-25 text-uppercase small">
-          <i class="bi bi-activity me-1"></i> {{ trabajo.get_estado_general_display }}
-        </span>
-      {% endif %}
+      {% with e=trabajo.estado %}
+        {% if e == "INGRESADO" %}<span class="badge badge-ingresado">Ingresado</span>
+        {% elif e == "EN_PROCESO" %}<span class="badge badge-en_proceso">En proceso</span>
+        {% elif e == "FINALIZADO" %}<span class="badge badge-finalizado">Finalizado</span>
+        {% elif e == "ENTREGADO" %}<span class="badge badge-entregado">Entregado</span>
+        {% elif e == "ANULADO" %}<span class="badge badge-anulado">Anulado</span>
+        {% endif %}
+      {% endwith %}
 
       {% if not trabajo.activo %}
-        <span class="badge rounded-pill bg-danger bg-opacity-25 text-uppercase small">
-          <i class="bi bi-archive me-1"></i> ELIMINADO
-        </span>
+        <span class="badge badge-anulado"><i class="bi bi-archive me-1"></i>Papelera</span>
       {% endif %}
     </div>
 
-    <h1 class="h4 mb-1">
-      {% if trabajo.vehiculo %}
-        {{ trabajo.vehiculo.patente }}
-      {% else %}
-        Sin vehículo
-      {% endif %}
+    <h1 class="h4 mb-1 gradient-text">
+      {% if trabajo.vehiculo %}{{ trabajo.vehiculo.patente }}{% else %}Trabajo #{{ trabajo.id }}{% endif %}
     </h1>
-
-    <p class="text-secondary small mb-1">
-      {% if trabajo.vehiculo %}
-        {{ trabajo.vehiculo.marca }} {{ trabajo.vehiculo.modelo }}
-        {% if trabajo.vehiculo.anio %} · {{ trabajo.vehiculo.anio }}{% endif %}
-      {% endif %}
+    <p class="text-muted small mb-0">
+      {% if trabajo.vehiculo %}{{ trabajo.vehiculo.marca }} {{ trabajo.vehiculo.modelo }}{% if trabajo.vehiculo.anio %} · {{ trabajo.vehiculo.anio }}{% endif %}{% endif %}
       {% if trabajo.cliente %}
-        · Cliente:
-        <a href="{% url 'taller:cliente_detail' trabajo.cliente.pk %}"
-           class="link-light link-underline-opacity-0 link-underline-opacity-100-hover">
-          {{ trabajo.cliente.nombre_completo }}
-        </a>
+        · <a href="{% url 'taller:cliente_detail' trabajo.cliente.pk %}" style="color:var(--info);text-decoration:none;">{{ trabajo.cliente.nombre_completo }}</a>
       {% endif %}
     </p>
-
-    <p class="text-muted small mb-0">
-      <i class="bi bi-box-arrow-in-right me-1"></i>
-      Ingreso: {{ trabajo.fecha_ingreso|date:"d/m/Y H:i" }}
+    <p class="text-muted small mt-1 mb-0">
+      <i class="bi bi-box-arrow-in-right me-1"></i>Ingreso: {{ trabajo.fecha_ingreso|date:"d/m/Y H:i" }}
       {% if trabajo.fecha_egreso_real %}
-        · <i class="bi bi-box-arrow-right me-1"></i> Egreso: {{ trabajo.fecha_egreso_real|date:"d/m/Y H:i" }}
+        · <i class="bi bi-box-arrow-right me-1"></i>Egreso real: {{ trabajo.fecha_egreso_real|date:"d/m/Y H:i" }}
       {% elif trabajo.fecha_egreso_estimado %}
-        · <i class="bi bi-clock-history me-1"></i> Egreso estimado: {{ trabajo.fecha_egreso_estimado|date:"d/m/Y H:i" }}
+        · <i class="bi bi-clock-history me-1"></i>Estimado: {{ trabajo.fecha_egreso_estimado|date:"d/m/Y H:i" }}
       {% endif %}
     </p>
   </div>
 
-  <!-- DER -->
-  <div class="text-end" style="min-width:320px;max-width:520px;">
-    <div class="total-box mb-3">
-      <div class="total-label">Total del trabajo</div>
-      <div class="total-value">
-        $ {{ trabajo.total|default:"0"|floatformat:2 }}
+  <div class="d-flex flex-column align-items-end gap-2">
+    {# Total box #}
+    <div class="card-premium p-3 text-center" style="min-width:180px;">
+      <div class="text-muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;">Total del trabajo</div>
+      <div class="fw-black mt-1" style="font-size:1.8rem;color:var(--text-primary);letter-spacing:-.03em;font-variant-numeric:tabular-nums;">
+        $ {{ trabajo.total|floatformat:0 }}
       </div>
     </div>
 
-    <div class="action-bar d-flex flex-wrap gap-2 justify-content-end">
-      <a href="{% url 'taller:trabajo_comprobante' trabajo.pk %}"
-         target="_blank" rel="noopener"
-         class="btn btn-sm btn-brand">
-        <i class="bi bi-printer-fill me-1"></i> Comprobante / Imprimir
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+      <a href="{% url 'taller:trabajo_comprobante' trabajo.pk %}" target="_blank" class="btn btn-brand btn-sm">
+        <i class="bi bi-printer-fill me-1"></i>Comprobante
       </a>
-
       {% if trabajo.activo %}
-        <a href="{% url 'taller:trabajo_update' trabajo.pk %}"
-           class="btn btn-sm btn-outline-premium">
-          <i class="bi bi-pencil-square me-1"></i> Editar
+        <a href="{% url 'taller:trabajo_update' trabajo.pk %}" class="btn btn-outline-premium btn-sm">
+          <i class="bi bi-pencil-square me-1"></i>Editar
         </a>
-      {% else %}
-        <button class="btn btn-sm btn-outline-premium" disabled>
-          <i class="bi bi-pencil-square me-1"></i> Editar
-        </button>
       {% endif %}
-
-      <a href="{% url 'taller:trabajo_list' %}"
-         class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-arrow-left-short me-1"></i> Volver
+      {% if trabajo.cliente %}
+        <a href="{% url 'taller:movimiento_cuenta_create' trabajo.cliente.pk %}?tipo=PAGO" class="btn btn-sm"
+           style="background:var(--success-light);color:#34d399;border:1px solid var(--success-border);">
+          <i class="bi bi-cash-coin me-1"></i>Registrar pago
+        </a>
+      {% endif %}
+      <a href="{% url 'taller:trabajo_list' %}" class="btn btn-outline-premium btn-sm">
+        <i class="bi bi-arrow-left-short me-1"></i>Volver
       </a>
     </div>
 
-    <div class="danger-zone mt-3 pt-3">
-      {% if trabajo.activo %}
-        <form method="post" action="{% url 'taller:trabajo_delete' trabajo.pk %}">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <button type="submit" class="btn btn-sm btn-outline-danger w-100"
-                  onclick="return confirm('¿Enviar este trabajo a eliminados? (No se borra definitivo)');">
-            <i class="bi bi-archive me-1"></i> Enviar a eliminados
-          </button>
-        </form>
-      {% else %}
-        <form method="post" action="{% url 'taller:trabajo_restore' trabajo.pk %}">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <button type="submit" class="btn btn-sm btn-outline-success w-100">
-            <i class="bi bi-arrow-counterclockwise me-1"></i> Restaurar trabajo
-          </button>
-        </form>
-      {% endif %}
-    </div>
+    {# Soft delete / restore #}
+    {% if trabajo.activo %}
+      <form method="post" action="{% url 'taller:trabajo_delete' trabajo.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm" onclick="return confirm('¿Enviar este trabajo a la papelera?');"
+                style="background:var(--danger-light);color:#fca5a5;border:1px solid var(--danger-border);font-size:.75rem;">
+          <i class="bi bi-archive me-1"></i>Enviar a papelera
+        </button>
+      </form>
+    {% else %}
+      <form method="post" action="{% url 'taller:trabajo_restore' trabajo.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm"
+                style="background:var(--success-light);color:#34d399;border:1px solid var(--success-border);font-size:.75rem;">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar
+        </button>
+      </form>
+    {% endif %}
   </div>
 </div>
 
+{# ── CUERPO ── #}
 <div class="row g-4 mb-4">
 
-  <!-- RESUMEN -->
+  {# Resumen #}
   <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <h2 class="h6 text-uppercase text-secondary mb-3">Resumen del trabajo</h2>
-
-      <dl class="row small mb-3">
-        <dt class="col-5 text-secondary">Kilometraje ingreso</dt>
-        <dd class="col-7">{{ trabajo.kilometraje|default:"—" }} km</dd>
-
-        <dt class="col-5 text-secondary">Mano de obra</dt>
-        <dd class="col-7">$ {{ trabajo.total_mano_obra|floatformat:2 }}</dd>
-
-        <dt class="col-5 text-secondary">Repuestos</dt>
-        <dd class="col-7">$ {{ trabajo.total_repuestos|floatformat:2 }}</dd>
-
-        <dt class="col-5 text-secondary">Descuento</dt>
-        <dd class="col-7">
-          {% if trabajo.descuento and trabajo.descuento > 0 %}
-            − $ {{ trabajo.descuento|floatformat:2 }}
-          {% else %}—{% endif %}
-        </dd>
-
-        <dt class="col-5 text-secondary">Total</dt>
-        <dd class="col-7 fw-semibold">$ {{ trabajo.total|floatformat:2 }}</dd>
-      </dl>
-
-      <div class="small">
-        <div class="text-secondary text-uppercase mb-1">Resumen</div>
-        <p class="mb-0" style="white-space:pre-wrap;">{{ trabajo.resumen_trabajos|default:"—" }}</p>
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-clipboard-text me-2" style="color:#a5b4fc;"></i>Resumen del trabajo
+        </h2>
       </div>
+      <div class="p-4">
+        <dl class="row small mb-3">
+          <dt class="col-5 text-muted">Km al ingreso</dt>
+          <dd class="col-7">{{ trabajo.kilometraje|default:"—"|floatformat:0 }} km</dd>
 
-      {% if trabajo.observaciones_cliente %}
-        <hr class="border-secondary-subtle">
-        <div class="small">
-          <div class="text-secondary text-uppercase mb-1">Observaciones del cliente</div>
-          <p class="mb-0" style="white-space:pre-wrap;">{{ trabajo.observaciones_cliente }}</p>
-        </div>
-      {% endif %}
+          <dt class="col-5 text-muted">Mano de obra</dt>
+          <dd class="col-7 monto-pago">$ {{ trabajo.total_mano_obra|floatformat:0 }}</dd>
 
-      {% if trabajo.recomendaciones_proximo_service %}
-        <hr class="border-secondary-subtle">
-        <div class="small">
-          <div class="text-secondary text-uppercase mb-1">Recomendaciones futuras</div>
-          <p class="mb-0" style="white-space:pre-wrap;">{{ trabajo.recomendaciones_proximo_service }}</p>
-        </div>
-      {% endif %}
+          <dt class="col-5 text-muted">Repuestos / insumos</dt>
+          <dd class="col-7" style="color:var(--text-primary);">$ {{ trabajo.total_repuestos|floatformat:0 }}</dd>
+
+          {% if trabajo.descuento and trabajo.descuento > 0 %}
+            <dt class="col-5 text-muted">Descuento</dt>
+            <dd class="col-7 monto-deuda">− $ {{ trabajo.descuento|floatformat:0 }}</dd>
+          {% endif %}
+
+          <dt class="col-5 text-muted fw-bold">Total</dt>
+          <dd class="col-7 fw-bold monto-total">$ {{ trabajo.total|floatformat:0 }}</dd>
+
+          <dt class="col-5 text-muted">Estado general</dt>
+          <dd class="col-7">
+            {% with g=trabajo.estado_general %}
+              {% if g == "EXCELENTE" %}<span style="color:#34d399;">Excelente</span>
+              {% elif g == "BUENO" %}<span style="color:#38bdf8;">Bueno</span>
+              {% elif g == "REGULAR" %}<span style="color:#fbbf24;">Regular</span>
+              {% elif g == "CRITICO" %}<span style="color:#fca5a5;">Crítico</span>
+              {% else %}{{ trabajo.get_estado_general_display }}{% endif %}
+            {% endwith %}
+          </dd>
+        </dl>
+
+        {% if trabajo.resumen_trabajos %}
+          <div class="panel-soft p-3 mb-3">
+            <div class="text-muted mb-1" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;">Resumen</div>
+            <p class="small mb-0 pre" style="color:var(--text-secondary);">{{ trabajo.resumen_trabajos }}</p>
+          </div>
+        {% endif %}
+
+        {% if trabajo.observaciones_cliente %}
+          <div class="small mb-3">
+            <div class="text-muted mb-1" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;">Observaciones del cliente</div>
+            <p class="mb-0 pre" style="color:var(--text-secondary);">{{ trabajo.observaciones_cliente }}</p>
+          </div>
+        {% endif %}
+
+        {% if trabajo.recomendaciones_proximo_service %}
+          <div class="panel-soft p-3" style="border-color:var(--warning-border);">
+            <div class="text-muted mb-1" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;">
+              <i class="bi bi-wrench-adjustable me-1" style="color:#fbbf24;"></i>Recomendaciones futuras
+            </div>
+            <p class="small mb-0 pre" style="color:var(--text-secondary);">{{ trabajo.recomendaciones_proximo_service }}</p>
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
-  <!-- VEHÍCULO -->
+  {# Vehículo + datos #}
   <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h6 text-uppercase text-secondary mb-0">Vehículo</h2>
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-car-front me-2" style="color:#fbbf24;"></i>Vehículo y cliente
+        </h2>
         {% if trabajo.vehiculo %}
-          <a href="{% url 'taller:vehiculo_detail' trabajo.vehiculo.pk %}"
-             class="btn btn-sm btn-outline-premium">
-            <i class="bi bi-car-front-fill me-1"></i> Ver ficha
+          <a href="{% url 'taller:vehiculo_detail' trabajo.vehiculo.pk %}" class="btn btn-outline-premium btn-sm" style="font-size:.72rem;padding:.2rem .6rem;">
+            <i class="bi bi-car-front me-1"></i>Ver ficha
           </a>
         {% endif %}
       </div>
-
-      <dl class="row small mb-0">
-        <dt class="col-5 text-secondary">Patente</dt>
-        <dd class="col-7">{{ trabajo.vehiculo.patente|default:"—" }}</dd>
-
-        <dt class="col-5 text-secondary">Marca / Modelo</dt>
-        <dd class="col-7">
+      <div class="p-4">
+        <dl class="row small mb-3">
           {% if trabajo.vehiculo %}
-            {{ trabajo.vehiculo.marca }} {{ trabajo.vehiculo.modelo }}
-          {% else %}—{% endif %}
-        </dd>
+            <dt class="col-5 text-muted">Patente</dt>
+            <dd class="col-7 fw-bold" style="color:var(--text-primary);letter-spacing:.06em;">{{ trabajo.vehiculo.patente }}</dd>
 
-        <dt class="col-5 text-secondary">Kilometraje actual</dt>
-        <dd class="col-7">
-          {{ trabajo.vehiculo.kilometraje_actual|default:"—" }} km
-        </dd>
+            <dt class="col-5 text-muted">Vehículo</dt>
+            <dd class="col-7">{{ trabajo.vehiculo.marca }} {{ trabajo.vehiculo.modelo }}</dd>
 
-        <dt class="col-5 text-secondary">Próximo control</dt>
-        <dd class="col-7">
-          {{ trabajo.proximo_control_km|default:trabajo.vehiculo.proximo_service_km|default:"—" }} km
-        </dd>
-      </dl>
+            {% if trabajo.vehiculo.anio %}
+              <dt class="col-5 text-muted">Año</dt>
+              <dd class="col-7">{{ trabajo.vehiculo.anio }}</dd>
+            {% endif %}
+
+            <dt class="col-5 text-muted">Km actual</dt>
+            <dd class="col-7">{{ trabajo.vehiculo.kilometraje_actual|default:"—"|floatformat:0 }} km</dd>
+          {% endif %}
+
+          {% if trabajo.cliente %}
+            <dt class="col-5 text-muted">Cliente</dt>
+            <dd class="col-7">
+              <a href="{% url 'taller:cliente_detail' trabajo.cliente.pk %}" style="color:var(--info);text-decoration:none;">
+                {{ trabajo.cliente.nombre_completo }}
+              </a>
+            </dd>
+            {% if trabajo.cliente.telefono %}
+              <dt class="col-5 text-muted">Teléfono</dt>
+              <dd class="col-7">
+                <a href="tel:{{ trabajo.cliente.telefono }}" style="color:var(--text-secondary);text-decoration:none;">{{ trabajo.cliente.telefono }}</a>
+              </dd>
+            {% endif %}
+          {% endif %}
+
+          {% if trabajo.estado_cubiertas_trabajo %}
+            <dt class="col-5 text-muted">Cubiertas</dt>
+            <dd class="col-7">{{ trabajo.estado_cubiertas_trabajo }}</dd>
+          {% endif %}
+
+          {% if trabajo.proximo_control_km %}
+            <dt class="col-5 text-muted">Próx. control</dt>
+            <dd class="col-7" style="color:#fbbf24;">{{ trabajo.proximo_control_km|floatformat:0 }} km</dd>
+          {% endif %}
+        </dl>
+
+        {% if trabajo.observaciones_internas %}
+          <div class="panel-soft p-3" style="border-color:var(--info-border);">
+            <div class="text-muted mb-1" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;">
+              <i class="bi bi-lock me-1"></i>Notas internas (no visibles al cliente)
+            </div>
+            <p class="small mb-0 pre" style="color:var(--text-secondary);">{{ trabajo.observaciones_internas }}</p>
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
 </div>
 
-<!-- ÍTEMS -->
-<div class="card-premium p-4">
-  {% with items_count=trabajo.items.count %}
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h2 class="h6 text-uppercase text-secondary mb-0">Detalle de ítems</h2>
-      {% if items_count %}<span class="small text-secondary">{{ items_count }} ítems</span>{% endif %}
-    </div>
+{# ── ÍTEMS ── #}
+<div class="card-premium p-0">
+  <div class="card-premium-header d-flex justify-content-between align-items-center">
+    <h2 class="h6 mb-0" style="color:var(--text-primary);">
+      <i class="bi bi-list-check me-2" style="color:#34d399;"></i>Detalle de ítems realizados
+    </h2>
+    {% with items_count=trabajo.items.count %}
+      {% if items_count %}
+        <span class="badge" style="background:rgba(255,255,255,0.06);color:var(--text-secondary);border:1px solid var(--border-strong);">
+          {{ items_count }} ítem{{ items_count|pluralize }}
+        </span>
+      {% endif %}
+    {% endwith %}
+  </div>
 
-    {% if items_count %}
+  <div class="p-3">
+    {% if trabajo.items.count %}
       <div class="table-responsive">
-        <table class="table table-dark table-sm align-middle table-dark-custom mb-0 small">
+        <table class="table table-dark-custom mb-0">
           <thead>
             <tr>
-              <th style="width:14%;">Tipo</th>
+              <th style="width:130px;">Tipo</th>
               <th>Descripción</th>
               <th class="text-end">Cant.</th>
               <th class="text-end">Precio unit.</th>
@@ -257,31 +286,57 @@
             {% for item in trabajo.items.all %}
               <tr>
                 <td>
-                  <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase">
-                    {{ item.get_tipo_display }}
-                  </span>
+                  {% if item.tipo == "MANO_OBRA" %}
+                    <span class="badge badge-ingresado">Mano obra</span>
+                  {% elif item.tipo == "REPUESTO" %}
+                    <span class="badge badge-en_proceso">Repuesto</span>
+                  {% elif item.tipo == "INSUMO" %}
+                    <span class="badge badge-finalizado">Insumo</span>
+                  {% else %}
+                    <span class="badge badge-borrador">{{ item.get_tipo_display }}</span>
+                  {% endif %}
                 </td>
-                <td>{{ item.descripcion }}</td>
-                <td class="text-end">{{ item.cantidad|floatformat:2 }}</td>
-                <td class="text-end">$ {{ item.precio_unitario|floatformat:2 }}</td>
-                <td class="text-end fw-semibold">$ {{ item.subtotal|floatformat:2 }}</td>
+                <td class="fw-semibold small" style="color:var(--text-primary);">{{ item.descripcion }}</td>
+                <td class="text-end text-secondary small">{{ item.cantidad|floatformat:2 }}</td>
+                <td class="text-end text-secondary small">$ {{ item.precio_unitario|floatformat:0 }}</td>
+                <td class="text-end fw-bold monto-total">$ {{ item.subtotal|floatformat:0 }}</td>
               </tr>
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4" class="text-end fw-bold text-muted small">Mano de obra</td>
+              <td class="text-end monto-pago fw-bold">$ {{ trabajo.total_mano_obra|floatformat:0 }}</td>
+            </tr>
+            <tr>
+              <td colspan="4" class="text-end fw-bold text-muted small">Repuestos / insumos</td>
+              <td class="text-end fw-bold" style="color:var(--text-primary);">$ {{ trabajo.total_repuestos|floatformat:0 }}</td>
+            </tr>
+            {% if trabajo.descuento and trabajo.descuento > 0 %}
+              <tr>
+                <td colspan="4" class="text-end fw-bold text-muted small">Descuento</td>
+                <td class="text-end monto-deuda fw-bold">− $ {{ trabajo.descuento|floatformat:0 }}</td>
+              </tr>
+            {% endif %}
+            <tr style="border-top:2px solid var(--border-strong);">
+              <td colspan="4" class="text-end fw-black" style="color:var(--text-primary);font-size:.9rem;">TOTAL</td>
+              <td class="text-end fw-black monto-total" style="font-size:1.15rem;">$ {{ trabajo.total|floatformat:0 }}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     {% else %}
-      <p class="text-secondary small mb-0">
-        Este trabajo todavía no tiene ítems cargados.
+      <div class="empty-state py-3">
+        <i class="bi bi-list-ul"></i>
+        <p>Sin ítems cargados en este trabajo.</p>
         {% if trabajo.activo %}
-          <a class="link-light link-underline-opacity-0 link-underline-opacity-100-hover"
-             href="{% url 'taller:trabajo_update' trabajo.pk %}">
-            Cargar ítems
+          <a href="{% url 'taller:trabajo_update' trabajo.pk %}" class="btn btn-outline-premium btn-sm mt-2">
+            <i class="bi bi-pencil me-1"></i>Cargar ítems
           </a>
         {% endif %}
-      </p>
+      </div>
     {% endif %}
-  {% endwith %}
+  </div>
 </div>
 
 {% endblock %}

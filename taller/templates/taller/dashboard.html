@@ -1,326 +1,427 @@
 {% extends "taller/base.html" %}
-
-{% block title %}Panel – Ale Gavilan Cars Solutions{% endblock %}
+{% block title %}Panel — Ale Gavilan Cars Solutions{% endblock %}
 
 {% block content %}
 
-<div class="card-premium p-4 p-lg-5 mb-4">
-  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-    <div class="pe-lg-3">
-      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-        <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
-          <i class="bi bi-speedometer2 me-1"></i> Panel
+{# ══════════════════════════════════════════════
+   HERO SECTION
+══════════════════════════════════════════════ #}
+<div class="dash-hero">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-4">
+
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+        <span class="dash-hero-badge">
+          <span class="pulse-dot"></span>Sistema activo
         </span>
-        <span class="badge rounded-pill bg-light bg-opacity-10 text-uppercase small">
-          Resumen operativo
-        </span>
-        <span class="badge rounded-pill bg-light bg-opacity-10 text-light border border-light border-opacity-25 small">
-          <i class="bi bi-clock me-1"></i> {% now "d/m/Y" %} · {% now "H:i" %} hs
+        <span class="text-muted" style="font-size:.8rem;">
+          <i class="bi bi-calendar3 me-1"></i>{% now "d/m/Y" %}
+          &nbsp;·&nbsp;
+          <i class="bi bi-clock me-1"></i>{% now "H:i" %} hs
         </span>
       </div>
-
-      <h1 class="h4 mb-1 gradient-text">Estado general del taller</h1>
-      <p class="text-secondary small mb-0">
-        Clientes, vehículos, trabajos y turnos — todo en un vistazo.
+      <h1 class="h3 mb-1 gradient-text">Ale Gavilan Cars Solutions</h1>
+      <p class="text-muted small mb-0">
+        Panel de control del taller — Bienvenido,
+        <strong style="color:var(--text-secondary);">{{ request.user.get_short_name|default:request.user.username }}</strong>
       </p>
     </div>
 
-    <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-lg-end">
-      <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm">
-        <i class="bi bi-clipboard-plus me-1"></i> Nuevo trabajo
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand">
+        <i class="bi bi-clipboard-plus"></i>
+        <span>Nuevo trabajo</span>
       </a>
-      <a href="{% url 'taller:turno_create' %}" class="btn btn-outline-premium btn-sm">
-        <i class="bi bi-calendar-plus me-1"></i> Nuevo turno
+      <a href="{% url 'taller:presupuesto_create' %}" class="btn btn-outline-premium">
+        <i class="bi bi-file-earmark-plus"></i>
+        <span class="d-none d-sm-inline">Presupuesto</span>
       </a>
-      <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-outline-premium btn-sm">
-        <i class="bi bi-car-front me-1"></i> Vehículo
-      </a>
-      <a href="{% url 'taller:cliente_create' %}" class="btn btn-outline-premium btn-sm">
-        <i class="bi bi-person-plus me-1"></i> Cliente
+      <a href="{% url 'taller:turno_create' %}" class="btn btn-outline-premium">
+        <i class="bi bi-calendar-plus"></i>
+        <span class="d-none d-sm-inline">Turno</span>
       </a>
     </div>
+
   </div>
 </div>
 
-<div class="row g-4 mb-4">
-  <div class="col-12 col-md-3">
-    <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
+{# ══════════════════════════════════════════════
+   ACCIONES RÁPIDAS
+══════════════════════════════════════════════ #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <a href="{% url 'taller:trabajo_create' %}" class="action-card action-red h-100">
+      <div class="action-card-icon action-icon-red">
+        <i class="bi bi-clipboard-plus"></i>
+      </div>
+      <div class="action-card-label">Nuevo<br>trabajo</div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="{% url 'taller:turno_create' %}" class="action-card action-blue h-100">
+      <div class="action-card-icon action-icon-blue">
+        <i class="bi bi-calendar-plus"></i>
+      </div>
+      <div class="action-card-label">Nuevo<br>turno</div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="{% url 'taller:presupuesto_create' %}" class="action-card action-purple h-100">
+      <div class="action-card-icon action-icon-purple">
+        <i class="bi bi-file-earmark-plus"></i>
+      </div>
+      <div class="action-card-label">Nuevo<br>presupuesto</div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="{% url 'taller:cliente_create' %}" class="action-card action-green h-100">
+      <div class="action-card-icon action-icon-green">
+        <i class="bi bi-person-plus"></i>
+      </div>
+      <div class="action-card-label">Nuevo<br>cliente</div>
+    </a>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════
+   KPIs PRINCIPALES
+══════════════════════════════════════════════ #}
+<div class="row g-3 mb-4">
+
+  <div class="col-6 col-lg-3">
+    <a href="{% url 'taller:cliente_list' %}" class="stat-pill h-100 d-block">
+      <div class="d-flex justify-content-between align-items-start mb-3">
         <span class="stat-label">Clientes</span>
-        <i class="bi bi-people text-muted"></i>
+        <span class="icon-circle icon-circle-neutral"><i class="bi bi-people-fill"></i></span>
       </div>
       <div class="stat-value">{{ total_clientes }}</div>
-      <div class="small text-secondary mt-1">Registrados y activos en el sistema.</div>
-    </div>
+      <div class="small text-muted mt-1">Registrados en el sistema</div>
+    </a>
   </div>
 
-  <div class="col-12 col-md-3">
-    <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
+  <div class="col-6 col-lg-3">
+    <a href="{% url 'taller:vehiculo_list' %}" class="stat-pill h-100 d-block">
+      <div class="d-flex justify-content-between align-items-start mb-3">
         <span class="stat-label">Vehículos</span>
-        <i class="bi bi-car-front text-muted"></i>
+        <span class="icon-circle icon-circle-neutral"><i class="bi bi-car-front-fill"></i></span>
       </div>
       <div class="stat-value">{{ total_vehiculos }}</div>
-      <div class="small text-secondary mt-1">Unidades para seguimiento y servicios.</div>
-    </div>
+      <div class="small text-muted mt-1">Unidades en seguimiento</div>
+    </a>
   </div>
 
-  <div class="col-12 col-md-3">
-    <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
+  <div class="col-6 col-lg-3">
+    <a href="{% url 'taller:trabajo_list' %}" class="stat-pill stat-warning h-100 d-block">
+      <div class="d-flex justify-content-between align-items-start mb-3">
         <span class="stat-label">Trabajos activos</span>
-        <i class="bi bi-wrench-adjustable text-muted"></i>
+        <span class="icon-circle icon-circle-warning"><i class="bi bi-wrench-adjustable"></i></span>
       </div>
       <div class="stat-value">{{ trabajos_activos }}</div>
-      <div class="small text-secondary mt-1">Ingresados, en proceso o listos.</div>
+      <div class="small text-muted mt-1">En proceso / ingresados</div>
+    </a>
+  </div>
+
+  <div class="col-6 col-lg-3">
+    <a href="{% url 'taller:turno_list' %}" class="stat-pill stat-info h-100 d-block">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <span class="stat-label">Turnos próximos</span>
+        <span class="icon-circle icon-circle-info"><i class="bi bi-calendar-event"></i></span>
+      </div>
+      <div class="stat-value">{{ turnos_proximos_count }}</div>
+      <div class="small text-muted mt-1">En agenda</div>
+    </a>
+  </div>
+
+</div>
+
+{# ══════════════════════════════════════════════
+   FINANCIERO
+══════════════════════════════════════════════ #}
+<div class="row g-3 mb-4">
+
+  <div class="col-12 col-md-5">
+    <div class="stat-pill stat-success h-100">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <span class="stat-label">Ingresos del mes</span>
+        <span class="icon-circle icon-circle-success"><i class="bi bi-cash-coin"></i></span>
+      </div>
+      <div class="stat-value-sm" style="color:#34d399;">$ {{ ingresos_mes_fmt|default:"0" }}</div>
+      <div class="small text-muted mt-1">Pagos cobrados este mes</div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="stat-pill {% if deudas_pendientes > 0 %}stat-danger{% endif %} h-100">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <span class="stat-label">Deudas pendientes</span>
+        <span class="icon-circle {% if deudas_pendientes > 0 %}icon-circle-danger{% else %}icon-circle-success{% endif %}">
+          <i class="bi bi-{% if deudas_pendientes > 0 %}exclamation-triangle{% else %}check-circle-fill{% endif %}"></i>
+        </span>
+      </div>
+      {% if deudas_pendientes > 0 %}
+        <div class="stat-value-sm saldo-positivo">$ {{ deudas_pendientes_fmt }}</div>
+        <div class="small text-muted mt-1">
+          <i class="bi bi-people me-1"></i>{{ clientes_con_deuda }} cliente{{ clientes_con_deuda|pluralize }} con saldo pendiente
+        </div>
+      {% else %}
+        <div class="stat-value-sm saldo-cero">$ 0</div>
+        <div class="small text-muted mt-1"><i class="bi bi-check-circle me-1" style="color:#34d399;"></i>Sin deudas — todo al día</div>
+      {% endif %}
     </div>
   </div>
 
   <div class="col-12 col-md-3">
     <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
-        <span class="stat-label">Turnos próximos</span>
-        <i class="bi bi-calendar-event text-muted"></i>
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <span class="stat-label">Papelera</span>
+        <span class="icon-circle icon-circle-neutral"><i class="bi bi-trash3"></i></span>
       </div>
-      <div class="stat-value">{{ turnos_proximos_count }}</div>
-      <div class="small text-secondary mt-1">En agenda (máx. 5).</div>
+      <div class="d-flex gap-4 mt-2">
+        <div>
+          <div class="fw-bold" style="font-size:1.6rem;color:var(--text-primary);font-variant-numeric:tabular-nums;line-height:1.1;">{{ trabajos_eliminados_count }}</div>
+          <div class="small text-muted">Trabajos</div>
+        </div>
+        <div>
+          <div class="fw-bold" style="font-size:1.6rem;color:var(--text-primary);font-variant-numeric:tabular-nums;line-height:1.1;">{{ presupuestos_eliminados_count }}</div>
+          <div class="small text-muted">Presupuestos</div>
+        </div>
+      </div>
+      {% if trabajos_eliminados_count > 0 %}
+        <a href="{% url 'taller:trabajo_papelera' %}" class="small text-decoration-none mt-2 d-inline-block" style="color:var(--text-muted);">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Ver eliminados
+        </a>
+      {% endif %}
     </div>
   </div>
+
 </div>
 
+{# ══════════════════════════════════════════════
+   ACTIVIDAD RECIENTE
+══════════════════════════════════════════════ #}
 <div class="row g-4 mb-4">
 
+  {# Próximos turnos #}
   <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-        <div>
-          <h2 class="h6 text-uppercase text-secondary mb-1">
-            <i class="bi bi-calendar-week me-2"></i>Próximos turnos
-          </h2>
-          <p class="small text-secondary mb-0">Agenda de corto plazo.</p>
-        </div>
-        <div class="text-end">
-          <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small mb-1">
-            {{ turnos_proximos_count }} en agenda
-          </span>
-          <div>
-            <a href="{% url 'taller:turno_list' %}" class="small text-decoration-none text-secondary">
-              Ver agenda <i class="bi bi-arrow-right-short"></i>
-            </a>
-          </div>
-        </div>
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-calendar-week me-2 text-info-custom"></i>Próximos turnos
+        </h2>
+        <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-premium btn-sm">
+          Ver agenda <i class="bi bi-arrow-right ms-1"></i>
+        </a>
       </div>
 
       {% if turnos_proximos %}
-        <ul class="list-unstyled mb-0 small">
-          {% for turno in turnos_proximos %}
-            <li class="py-2 border-bottom border-secondary-subtle">
-              <div class="d-flex justify-content-between align-items-start gap-3">
-                <div class="flex-grow-1">
-                  <div class="fw-semibold">
-                    <i class="bi bi-clock-history me-1"></i>
-                    {{ turno.fecha_hora|date:"d/m/Y H:i" }}
-                  </div>
-
-                  <div class="text-secondary mt-1">
-                    {{ turno.motivo|default:"Sin motivo detallado" }}
-                  </div>
-
-                  <div class="text-secondary mt-1">
-                    {% if turno.vehiculo %}
-                      <span class="fw-semibold">{{ turno.vehiculo.patente }}</span> – {{ turno.vehiculo.marca }} {{ turno.vehiculo.modelo }}
-                    {% endif %}
-                    {% if turno.cliente %}
-                      · {{ turno.cliente.nombre_completo }}
-                    {% endif %}
-                  </div>
+        {% for turno in turnos_proximos %}
+          <div class="activity-item {% if not forloop.last %}border-bottom-soft{% endif %}">
+            <div class="d-flex justify-content-between align-items-start gap-3">
+              <div class="flex-grow-1 min-w-0">
+                <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                  {% if turno.estado == "CONFIRMADO" %}<span class="badge badge-confirmado">Confirmado</span>
+                  {% elif turno.estado == "PENDIENTE" %}<span class="badge badge-pendiente">Pendiente</span>
+                  {% elif turno.estado == "CANCELADO" %}<span class="badge badge-cancelado">Cancelado</span>
+                  {% else %}<span class="badge badge-cumplido">{{ turno.get_estado_display }}</span>
+                  {% endif %}
+                  <span class="fw-semibold small" style="color:var(--text-primary);">
+                    <i class="bi bi-clock me-1 text-info-custom"></i>{{ turno.fecha_hora|date:"d/m" }} · {{ turno.fecha_hora|time:"H:i" }}
+                  </span>
                 </div>
-
-                <div class="text-end">
-                  {# Badge por estado (no rompe: si no matchea, cae al neutro) #}
-                  {% with e=turno.estado %}
-                    {% if e == "CANCELADO" or e == "CANCELADA" %}
-                      <span class="badge rounded-pill bg-danger bg-opacity-25 text-uppercase">Cancelado</span>
-                    {% elif e == "CONFIRMADO" or e == "CONFIRMADA" %}
-                      <span class="badge rounded-pill bg-success bg-opacity-25 text-uppercase">Confirmado</span>
-                    {% elif e == "COMPLETADO" or e == "COMPLETADA" %}
-                      <span class="badge rounded-pill bg-success bg-opacity-25 text-uppercase">Completado</span>
-                    {% elif e == "PENDIENTE" %}
-                      <span class="badge rounded-pill bg-warning bg-opacity-25 text-uppercase">Pendiente</span>
-                    {% else %}
-                      <span class="badge rounded-pill bg-light bg-opacity-10 text-uppercase">
-                        {{ turno.get_estado_display }}
-                      </span>
-                    {% endif %}
-                  {% endwith %}
+                <div class="small text-muted text-truncate">
+                  {% if turno.vehiculo %}<i class="bi bi-car-front me-1"></i>{{ turno.vehiculo.patente }}{% endif %}
+                  {% if turno.cliente %} · {{ turno.cliente.nombre_completo }}{% endif %}
                 </div>
+                {% if turno.motivo %}
+                  <div class="small text-muted mt-1 text-truncate" style="font-size:.75rem;">{{ turno.motivo }}</div>
+                {% endif %}
               </div>
-            </li>
-          {% endfor %}
-        </ul>
+              <a href="{% url 'taller:turno_detail' turno.pk %}" class="btn btn-outline-premium btn-sm flex-shrink-0">
+                <i class="bi bi-eye"></i>
+              </a>
+            </div>
+          </div>
+        {% endfor %}
       {% else %}
-        <p class="text-secondary small mb-0">
-          No hay turnos cargados todavía.
-        </p>
+        <div class="empty-state py-5">
+          <i class="bi bi-calendar-x"></i>
+          <p>Sin turnos en la agenda.</p>
+          <a href="{% url 'taller:turno_create' %}" class="btn btn-outline-premium btn-sm mt-2">
+            <i class="bi bi-calendar-plus me-1"></i>Nuevo turno
+          </a>
+        </div>
       {% endif %}
     </div>
   </div>
 
+  {# Trabajos recientes #}
   <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-        <div>
-          <h2 class="h6 text-uppercase text-secondary mb-1">
-            <i class="bi bi-clipboard-data me-2"></i>Trabajos recientes
-          </h2>
-          <p class="small text-secondary mb-0">Últimos movimientos del taller.</p>
-        </div>
-        <div class="text-end">
-          <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small mb-1">
-            {{ trabajos_recientes_count }} últimos
-          </span>
-          <div>
-            <a href="{% url 'taller:trabajo_list' %}" class="small text-decoration-none text-secondary">
-              Ver todos <i class="bi bi-arrow-right-short"></i>
-            </a>
-          </div>
-        </div>
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-clipboard-data me-2 text-warning-custom"></i>Trabajos recientes
+        </h2>
+        <a href="{% url 'taller:trabajo_list' %}" class="btn btn-outline-premium btn-sm">
+          Ver todos <i class="bi bi-arrow-right ms-1"></i>
+        </a>
       </div>
 
       {% if trabajos_recientes %}
-        <ul class="list-unstyled mb-0 small">
-          {% for trabajo in trabajos_recientes %}
-            <li class="py-2 border-bottom border-secondary-subtle">
-              <div class="d-flex justify-content-between align-items-center gap-3">
-                <div class="flex-grow-1">
-                  <div class="fw-semibold">
-                    #{{ trabajo.id }}
-                    {% if trabajo.vehiculo %} · <span class="fw-semibold">{{ trabajo.vehiculo.patente }}</span>{% endif %}
-                  </div>
-
-                  <div class="text-secondary mt-1">
-                    {{ trabajo.fecha_ingreso|date:"d/m/Y H:i" }}
-                    {% if trabajo.vehiculo %} · {{ trabajo.vehiculo.marca }} {{ trabajo.vehiculo.modelo }}{% endif %}
-                    {% if trabajo.cliente %} · {{ trabajo.cliente.nombre_completo }}{% endif %}
-                  </div>
-
-                  <div class="mt-2 d-flex align-items-center flex-wrap gap-2">
-                    {# Badge por estado (si no matchea, deja el display) #}
-                    {% with e=trabajo.estado %}
-                      {% if e == "CANCELADO" or e == "CANCELADA" %}
-                        <span class="badge rounded-pill bg-danger bg-opacity-25 text-uppercase small">Cancelado</span>
-                      {% elif e == "FINALIZADO" or e == "FINALIZADA" or e == "COMPLETADO" or e == "COMPLETADA" %}
-                        <span class="badge rounded-pill bg-success bg-opacity-25 text-uppercase small">Finalizado</span>
-                      {% elif e == "EN_PROCESO" %}
-                        <span class="badge rounded-pill bg-warning bg-opacity-25 text-uppercase small">En proceso</span>
-                      {% else %}
-                        <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
-                          {{ trabajo.get_estado_display }}
-                        </span>
-                      {% endif %}
-                    {% endwith %}
-
-                    {% if trabajo.total_safe %}
-                      <span class="small text-secondary">
-                        <span class="text-muted">Total:</span> <span class="fw-semibold">$ {{ trabajo.total_safe }}</span>
-                      </span>
+        {% for trabajo in trabajos_recientes %}
+          <div class="activity-item {% if not forloop.last %}border-bottom-soft{% endif %}">
+            <div class="d-flex justify-content-between align-items-start gap-3">
+              <div class="flex-grow-1 min-w-0">
+                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                  {% with e=trabajo.estado %}
+                    {% if e == "INGRESADO" %}<span class="badge badge-ingresado">Ingresado</span>
+                    {% elif e == "EN_PROCESO" %}<span class="badge badge-en_proceso">En proceso</span>
+                    {% elif e == "FINALIZADO" %}<span class="badge badge-finalizado">Finalizado</span>
+                    {% elif e == "ENTREGADO" %}<span class="badge badge-entregado">Entregado</span>
+                    {% elif e == "ANULADO" %}<span class="badge badge-anulado">Anulado</span>
                     {% endif %}
-                  </div>
+                  {% endwith %}
+                  {% if trabajo.vehiculo %}
+                    <span class="fw-bold small" style="color:var(--text-primary);letter-spacing:.05em;">{{ trabajo.vehiculo.patente }}</span>
+                  {% endif %}
+                  {% if trabajo.total %}
+                    <span class="ms-auto small monto-total">$ {{ trabajo.total|floatformat:0 }}</span>
+                  {% endif %}
                 </div>
-
-                <div class="text-end">
-                  <a href="{% url 'taller:trabajo_detail' trabajo.pk %}" class="btn btn-outline-premium btn-sm">
-                    Ver
-                  </a>
+                <div class="small text-muted text-truncate">
+                  {% if trabajo.vehiculo %}{{ trabajo.vehiculo.marca }} {{ trabajo.vehiculo.modelo }}{% endif %}
+                  {% if trabajo.cliente %} · {{ trabajo.cliente.nombre_completo }}{% endif %}
+                </div>
+                <div class="small text-muted mt-1" style="font-size:.72rem;">
+                  <i class="bi bi-clock me-1"></i>{{ trabajo.fecha_ingreso|date:"d/m/Y" }}
                 </div>
               </div>
-            </li>
-          {% endfor %}
-        </ul>
+              <a href="{% url 'taller:trabajo_detail' trabajo.pk %}" class="btn btn-outline-premium btn-sm flex-shrink-0">
+                <i class="bi bi-eye"></i>
+              </a>
+            </div>
+          </div>
+        {% endfor %}
       {% else %}
-        <p class="text-secondary small mb-0">
-          Todavía no hay trabajos registrados.
-        </p>
+        <div class="empty-state py-5">
+          <i class="bi bi-clipboard-x"></i>
+          <p>Sin trabajos registrados todavía.</p>
+          <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm mt-2">
+            <i class="bi bi-clipboard-plus me-1"></i>Cargar trabajo
+          </a>
+        </div>
       {% endif %}
     </div>
   </div>
 
 </div>
 
+{# ══════════════════════════════════════════════
+   PRESUPUESTOS + CLIENTES
+══════════════════════════════════════════════ #}
 <div class="row g-4">
 
-  <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h2 class="h6 text-uppercase text-secondary mb-0">
-          <i class="bi bi-star me-2"></i>Clientes con más vehículos
+  {# Presupuestos recientes #}
+  <div class="col-12 col-lg-7">
+    <div class="card-premium p-0">
+      <div class="card-premium-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-file-earmark-text me-2 text-purple-custom"></i>Presupuestos recientes
         </h2>
-        {% if clientes_top %}
-          <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
-            Top {{ clientes_top|length }}
-          </span>
-        {% endif %}
+        <a href="{% url 'taller:presupuesto_list' %}" class="btn btn-outline-premium btn-sm">
+          Ver todos <i class="bi bi-arrow-right ms-1"></i>
+        </a>
       </div>
-
-      {% if clientes_top %}
-        <ul class="list-unstyled mb-0 small">
-          {% for c in clientes_top %}
-            <li class="py-2 border-bottom border-secondary-subtle d-flex justify-content-between align-items-center gap-3">
-              <div class="flex-grow-1">
-                <div class="fw-semibold">{{ c.nombre_completo }}</div>
-                <div class="text-secondary mt-1">
-                  <i class="bi bi-telephone me-1"></i>{{ c.telefono|default:"Sin teléfono" }}
-                </div>
-              </div>
-              <div class="text-end">
-                <span class="badge rounded-pill bg-light text-dark">
-                  {{ c.cant_vehiculos }} vehículo{{ c.cant_vehiculos|pluralize }}
-                </span>
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
+      {% if presupuestos_recientes %}
+        <div class="table-responsive">
+          <table class="table table-dark-custom mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Cliente / Título</th>
+                <th>Estado</th>
+                <th class="text-end">Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in presupuestos_recientes %}
+                <tr>
+                  <td class="text-muted" style="font-size:.78rem;">#{{ p.id }}</td>
+                  <td>
+                    <div class="fw-semibold small" style="color:var(--text-primary);">{{ p.cliente.nombre_completo }}</div>
+                    <div class="text-muted" style="font-size:.72rem;">{{ p.titulo|truncatechars:32 }}</div>
+                  </td>
+                  <td>
+                    {% if p.estado == "BORRADOR" %}<span class="badge badge-borrador">Borrador</span>
+                    {% elif p.estado == "ENTREGADO" %}<span class="badge badge-ingresado">Entregado</span>
+                    {% elif p.estado == "APROBADO" %}<span class="badge badge-aprobado">Aprobado</span>
+                    {% elif p.estado == "RECHAZADO" %}<span class="badge badge-rechazado">Rechazado</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end fw-bold monto-total small">$ {{ p.total|floatformat:0 }}</td>
+                  <td class="text-end">
+                    <a href="{% url 'taller:presupuesto_detail' p.pk %}" class="btn btn-outline-premium btn-sm">
+                      <i class="bi bi-eye"></i>
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       {% else %}
-        <p class="text-secondary small mb-0">
-          Todavía no hay vehículos asociados a clientes.
-        </p>
+        <div class="empty-state py-4">
+          <i class="bi bi-file-earmark-x"></i>
+          <p>Sin presupuestos registrados todavía.</p>
+          <a href="{% url 'taller:presupuesto_create' %}" class="btn btn-outline-premium btn-sm mt-2">
+            <i class="bi bi-file-earmark-plus me-1"></i>Nuevo presupuesto
+          </a>
+        </div>
       {% endif %}
     </div>
   </div>
 
-  <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-        <div>
-          <h2 class="h6 text-uppercase text-secondary mb-1">
-            <i class="bi bi-lightning-charge me-2"></i>Atajos
-          </h2>
-          <p class="small text-secondary mb-0">Centro de control para operar rápido.</p>
-        </div>
-      </div>
-
-      <div class="panel-soft p-3 mb-3">
-        <ul class="small text-secondary mb-0">
-          <li>Creá un <strong>trabajo</strong> al ingresar un vehículo.</li>
-          <li>Revisá <strong>turnos</strong> del día y reprogramá si hace falta.</li>
-          <li>Usá <strong>clientes</strong> para teléfonos y datos a mano.</li>
-        </ul>
-      </div>
-
-      <div class="d-flex flex-wrap gap-2">
-        <a href="{% url 'taller:trabajo_create' %}" class="btn btn-outline-premium btn-sm">
-          <i class="bi bi-clipboard-plus me-1"></i> Cargar trabajo
-        </a>
-        <a href="{% url 'taller:turno_list' %}" class="btn btn-outline-premium btn-sm">
-          <i class="bi bi-calendar-week me-1"></i> Ver agenda
-        </a>
+  {# Clientes destacados #}
+  <div class="col-12 col-lg-5">
+    <div class="card-premium p-0">
+      <div class="card-premium-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-people-fill me-2 text-warning-custom"></i>Clientes destacados
+        </h2>
         <a href="{% url 'taller:cliente_list' %}" class="btn btn-outline-premium btn-sm">
-          <i class="bi bi-people me-1"></i> Ver clientes
-        </a>
-        <a href="{% url 'taller:presupuesto_list' %}" class="btn btn-outline-premium btn-sm">
-          <i class="bi bi-file-earmark-text me-1"></i> Presupuestos
+          Ver todos <i class="bi bi-arrow-right ms-1"></i>
         </a>
       </div>
+      {% if clientes_top %}
+        {% for c in clientes_top %}
+          <div class="activity-item {% if not forloop.last %}border-bottom-soft{% endif %}">
+            <div class="d-flex align-items-center gap-3">
+              <div class="client-avatar flex-shrink-0">{{ c.nombre_completo|first }}</div>
+              <div class="flex-grow-1 min-w-0">
+                <div class="fw-semibold small text-truncate" style="color:var(--text-primary);">{{ c.nombre_completo }}</div>
+                <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:.73rem;color:var(--text-muted);">
+                  {% if c.telefono %}<span><i class="bi bi-telephone me-1"></i>{{ c.telefono }}</span>{% endif %}
+                  <span><i class="bi bi-car-front me-1"></i>{{ c.cant_vehiculos }} veh.</span>
+                  {% if c.saldo_actual > 0 %}
+                    <span class="saldo-positivo"><i class="bi bi-exclamation-circle me-1"></i>Debe ${{ c.saldo_fmt }}</span>
+                  {% endif %}
+                </div>
+              </div>
+              <a href="{% url 'taller:cliente_detail' c.pk %}" class="btn btn-outline-premium btn-sm flex-shrink-0">
+                <i class="bi bi-eye"></i>
+              </a>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state py-4">
+          <i class="bi bi-people"></i>
+          <p>Sin clientes registrados todavía.</p>
+          <a href="{% url 'taller:cliente_create' %}" class="btn btn-outline-premium btn-sm mt-2">
+            <i class="bi bi-person-plus me-1"></i>Nuevo cliente
+          </a>
+        </div>
+      {% endif %}
     </div>
   </div>
 

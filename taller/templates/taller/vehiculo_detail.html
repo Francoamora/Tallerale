@@ -1,225 +1,185 @@
 {% extends "taller/base.html" %}
-
-{% block title %}Vehículo {{ vehiculo.patente }} – Taller Mecánico Ale Gavilan{% endblock %}
+{% block title %}{{ vehiculo.patente }} — Ale Gavilan Cars Solutions{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+
+<div class="page-header d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
-    <div class="d-flex align-items-center gap-2 mb-2">
-      <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
-        <i class="bi bi-car-front me-1"></i> Ficha de vehículo
-      </span>
-
+    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+      <a href="{% url 'taller:vehiculo_list' %}" style="color:var(--text-muted);font-size:.8rem;text-decoration:none;">
+        <i class="bi bi-car-front me-1"></i>Vehículos
+      </a>
+      <i class="bi bi-chevron-right text-muted" style="font-size:.7rem;"></i>
+      <span style="color:var(--text-secondary);font-size:.8rem;">{{ vehiculo.patente }}</span>
       {% if vehiculo.cliente %}
-        <span class="badge rounded-pill bg-primary-soft text-uppercase small">
-          Cliente: {{ vehiculo.cliente.nombre_completo }}
-        </span>
+        <a href="{% url 'taller:cliente_detail' vehiculo.cliente.pk %}"
+           class="badge" style="background:rgba(255,255,255,0.06);color:var(--info);border:1px solid rgba(14,165,233,0.25);text-decoration:none;">
+          <i class="bi bi-person me-1"></i>{{ vehiculo.cliente.nombre_completo }}
+        </a>
       {% endif %}
-
-      {# Chip de estado de service si tengo datos #}
-      {% if vehiculo.kilometraje_actual is not None and vehiculo.proximo_service_km %}
+      {% if vehiculo.kilometraje_actual and vehiculo.proximo_service_km %}
         {% if vehiculo.kilometraje_actual >= vehiculo.proximo_service_km %}
-          <span class="badge rounded-pill bg-danger bg-opacity-25 text-danger text-uppercase small">
-            Service vencido / próximo
-          </span>
+          <span class="badge badge-anulado"><i class="bi bi-exclamation-triangle me-1"></i>Service vencido</span>
         {% else %}
-          <span class="badge rounded-pill bg-success bg-opacity-25 text-success text-uppercase small">
-            Service en rango
-          </span>
+          <span class="badge badge-finalizado"><i class="bi bi-check-circle me-1"></i>Service al día</span>
         {% endif %}
       {% endif %}
     </div>
-
-    <h1 class="h4 mb-1 gradient-text">
-      {{ vehiculo.patente }}
-    </h1>
-    <p class="text-secondary small mb-0">
+    <h1 class="h4 mb-1 gradient-text">{{ vehiculo.patente }}</h1>
+    <p class="text-muted small mb-0">
       {{ vehiculo.marca }} {{ vehiculo.modelo }}
-      {% if vehiculo.anio %}· Año {{ vehiculo.anio }}{% endif %}
-      {% if vehiculo.color %}· Color {{ vehiculo.color }}{% endif %}
+      {% if vehiculo.anio %} · Año {{ vehiculo.anio }}{% endif %}
+      {% if vehiculo.color %} · {{ vehiculo.color }}{% endif %}
     </p>
   </div>
-
   <div class="d-flex flex-wrap gap-2">
     {% if vehiculo.cliente %}
       <a href="{% url 'taller:cliente_detail' vehiculo.cliente.pk %}" class="btn btn-outline-premium btn-sm">
-        <i class="bi bi-person me-1"></i> Ver cliente
+        <i class="bi bi-person me-1"></i>Ver cliente
       </a>
     {% endif %}
-    <a href="{% url 'taller:vehiculo_update' vehiculo.pk %}" class="btn btn-outline-light btn-sm">
-      <i class="bi bi-pencil-square me-1"></i> Editar vehículo
+    <a href="{% url 'taller:vehiculo_update' vehiculo.pk %}" class="btn btn-outline-premium btn-sm">
+      <i class="bi bi-pencil-square me-1"></i>Editar
     </a>
     <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm">
-      <i class="bi bi-clipboard-plus me-1"></i> Nuevo trabajo
-    </a>
-    <a href="{% url 'taller:vehiculo_list' %}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-arrow-left-short me-1"></i> Volver al listado
+      <i class="bi bi-clipboard-plus me-1"></i>Nuevo trabajo
     </a>
   </div>
 </div>
 
-{# STAT PILLS RÁPIDAS #}
+{# ── KPIs ── #}
 <div class="row g-3 mb-4">
-  <div class="col-12 col-md-4">
+  <div class="col-6 col-md-4">
     <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="d-flex justify-content-between align-items-start mb-2">
         <span class="stat-label">Km actual</span>
-        <i class="bi bi-speedometer2 text-muted"></i>
+        <span class="icon-circle icon-circle-neutral"><i class="bi bi-speedometer2"></i></span>
       </div>
-      <div class="stat-value">
-        {% if vehiculo.kilometraje_actual is not None %}
-          {{ vehiculo.kilometraje_actual }}
-        {% else %}
-          0
-        {% endif %}
-      </div>
-      <div class="small text-secondary mt-1">
-        Kilometraje registrado en la última visita / actualización.
-      </div>
+      <div class="stat-value-sm">{{ vehiculo.kilometraje_actual|default:"0"|floatformat:0 }}</div>
+      <div class="small text-muted mt-1">Última visita registrada</div>
     </div>
   </div>
-
-  <div class="col-12 col-md-4">
-    <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
+  <div class="col-6 col-md-4">
+    <div class="stat-pill h-100 {% if vehiculo.kilometraje_actual and vehiculo.proximo_service_km and vehiculo.kilometraje_actual >= vehiculo.proximo_service_km %}stat-danger{% endif %}">
+      <div class="d-flex justify-content-between align-items-start mb-2">
         <span class="stat-label">Próximo service</span>
-        <i class="bi bi-wrench-adjustable text-muted"></i>
+        <span class="icon-circle icon-circle-warning"><i class="bi bi-wrench-adjustable"></i></span>
       </div>
-      <div class="stat-value">
-        {% if vehiculo.proximo_service_km %}
-          {{ vehiculo.proximo_service_km }}
-        {% else %}
-          —
-        {% endif %}
-      </div>
-      <div class="small text-secondary mt-1">
-        Kilometraje sugerido para el próximo service.
-      </div>
+      <div class="stat-value-sm">{{ vehiculo.proximo_service_km|default:"—"|floatformat:0 }}</div>
+      <div class="small text-muted mt-1">Km sugeridos para control</div>
     </div>
   </div>
-
   <div class="col-12 col-md-4">
     <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
-        <span class="stat-label">Estado de cubiertas</span>
-        <i class="bi bi-circle-half text-muted"></i>
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <span class="stat-label">Estado cubiertas</span>
+        <span class="icon-circle icon-circle-neutral"><i class="bi bi-circle-half"></i></span>
       </div>
-      <div class="stat-value" style="font-size: 1.4rem;">
-        {% if vehiculo.estado_cubiertas %}
-          {{ vehiculo.estado_cubiertas|truncatechars:18 }}
-        {% else %}
-          N/D
-        {% endif %}
-      </div>
-      <div class="small text-secondary mt-1">
-        Referencia general tomada de las últimas revisiones.
+      <div class="small fw-semibold mt-2" style="color:var(--text-primary);">
+        {{ vehiculo.estado_cubiertas|default:"Sin datos" }}
       </div>
     </div>
   </div>
 </div>
 
 <div class="row g-4">
-  {# DATOS DEL VEHÍCULO #}
-  <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <h2 class="h6 text-uppercase text-secondary mb-3">
-        <i class="bi bi-card-text me-2"></i>Datos principales
-      </h2>
-      <dl class="row small mb-0">
-        <dt class="col-4 text-secondary">Patente</dt>
-        <dd class="col-8 fw-semibold">{{ vehiculo.patente }}</dd>
+  <div class="col-12 col-lg-5">
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-card-text me-2" style="color:#38bdf8;"></i>Datos del vehículo
+        </h2>
+      </div>
+      <div class="p-4">
+        <dl class="row small mb-0">
+          <dt class="col-5 text-muted">Patente</dt>
+          <dd class="col-7 fw-bold" style="color:var(--text-primary);letter-spacing:.06em;">{{ vehiculo.patente }}</dd>
 
-        <dt class="col-4 text-secondary">Marca / modelo</dt>
-        <dd class="col-8">
-          {{ vehiculo.marca|default:"" }} {{ vehiculo.modelo|default:"" }}
-        </dd>
+          <dt class="col-5 text-muted">Marca</dt>
+          <dd class="col-7">{{ vehiculo.marca|default:"—" }}</dd>
 
-        {% if vehiculo.anio %}
-          <dt class="col-4 text-secondary">Año</dt>
-          <dd class="col-8">{{ vehiculo.anio }}</dd>
-        {% endif %}
+          <dt class="col-5 text-muted">Modelo</dt>
+          <dd class="col-7">{{ vehiculo.modelo|default:"—" }}</dd>
 
-        {% if vehiculo.color %}
-          <dt class="col-4 text-secondary">Color</dt>
-          <dd class="col-8">{{ vehiculo.color }}</dd>
-        {% endif %}
+          <dt class="col-5 text-muted">Año</dt>
+          <dd class="col-7">{{ vehiculo.anio|default:"—" }}</dd>
 
-        {% if vehiculo.cliente %}
-          <dt class="col-4 text-secondary">Cliente</dt>
-          <dd class="col-8">
-            <a href="{% url 'taller:cliente_detail' vehiculo.cliente.pk %}"
-               class="link-light link-underline-opacity-0 link-underline-opacity-100-hover">
-              {{ vehiculo.cliente.nombre_completo }}
-            </a>
+          <dt class="col-5 text-muted">Color</dt>
+          <dd class="col-7">{{ vehiculo.color|default:"—" }}</dd>
+
+          <dt class="col-5 text-muted">Propietario</dt>
+          <dd class="col-7">
+            {% if vehiculo.cliente %}
+              <a href="{% url 'taller:cliente_detail' vehiculo.cliente.pk %}" style="color:var(--info);text-decoration:none;">
+                {{ vehiculo.cliente.nombre_completo }}
+              </a>
+            {% else %}—{% endif %}
           </dd>
+
+          <dt class="col-5 text-muted">Km actual</dt>
+          <dd class="col-7">{{ vehiculo.kilometraje_actual|default:"0"|floatformat:0 }} km</dd>
+
+          <dt class="col-5 text-muted">Próx. service</dt>
+          <dd class="col-7">
+            {% if vehiculo.proximo_service_km %}
+              {{ vehiculo.proximo_service_km|floatformat:0 }} km
+            {% else %}—{% endif %}
+          </dd>
+
+          {% if vehiculo.proximo_service_fecha %}
+            <dt class="col-5 text-muted">Fecha service</dt>
+            <dd class="col-7">{{ vehiculo.proximo_service_fecha|date:"d/m/Y" }}</dd>
+          {% endif %}
+
+          <dt class="col-5 text-muted">Cubiertas</dt>
+          <dd class="col-7">{{ vehiculo.estado_cubiertas|default:"—" }}</dd>
+        </dl>
+
+        {% if vehiculo.notas %}
+          <hr style="border-color:var(--border);">
+          <div class="small">
+            <div class="text-muted text-uppercase mb-1" style="font-size:.68rem;letter-spacing:.08em;">Notas</div>
+            <p class="mb-0" style="white-space:pre-wrap;color:var(--text-secondary);">{{ vehiculo.notas }}</p>
+          </div>
         {% endif %}
 
-        <dt class="col-4 text-secondary">Kilometraje actual</dt>
-        <dd class="col-8">
-          {% if vehiculo.kilometraje_actual is not None %}
-            {{ vehiculo.kilometraje_actual }} km
-          {% else %}
-            —
-          {% endif %}
-        </dd>
-
-        <dt class="col-4 text-secondary">Próximo service</dt>
-        <dd class="col-8">
-          {% if vehiculo.proximo_service_km %}
-            {{ vehiculo.proximo_service_km }} km
-          {% else %}
-            —
-          {% endif %}
-        </dd>
-
-        <dt class="col-4 text-secondary">Cubiertas</dt>
-        <dd class="col-8">
-          {{ vehiculo.estado_cubiertas|default:"—" }}
-        </dd>
-      </dl>
-
-      {% if vehiculo.notas %}
-        <hr class="border-secondary-subtle my-3">
-        <div class="small">
-          <div class="text-secondary text-uppercase mb-1">Notas del vehículo</div>
-          <p class="mb-0">{{ vehiculo.notas }}</p>
-        </div>
-      {% endif %}
-    </div>
-  </div>
-
-  {# USO EN EL TALLER + ACCIONES RÁPIDAS #}
-  <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <h2 class="h6 text-uppercase text-secondary mb-3">
-        <i class="bi bi-activity me-2"></i>Uso en el taller
-      </h2>
-      <p class="small text-secondary mb-3">
-        Desde esta ficha podés ver la información clave del vehículo y acceder rápido
-        a las acciones más usadas del día a día.
-      </p>
-
-      <ul class="small text-secondary mb-4">
-        <li>Recordar el <strong>kilometraje actual</strong> al ingreso y cuándo debería volver.</li>
-        <li>Ver rápidamente quién es el <strong>dueño</strong> y abrir su ficha para ver más datos.</li>
-        <li>Usar el estado de <strong>cubiertas</strong> como referencia para futuras recomendaciones.</li>
-      </ul>
-
-      <div class="border-top border-secondary-subtle pt-3 mt-2">
-        <p class="small text-secondary mb-2">Accesos rápidos:</p>
-        <div class="d-flex flex-wrap gap-2">
-          <a href="{% url 'taller:trabajo_create' %}" class="btn btn-outline-premium btn-sm">
-            <i class="bi bi-clipboard-plus me-1"></i> Nuevo trabajo
+        <hr style="border-color:var(--border);">
+        <div class="d-flex flex-column gap-2">
+          <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm">
+            <i class="bi bi-clipboard-plus me-1"></i>Nuevo trabajo para este vehículo
           </a>
-          <a href="{% url 'taller:trabajo_list' %}" class="btn btn-outline-premium btn-sm">
-            <i class="bi bi-clipboard-data me-1"></i> Ver trabajos
+          <a href="{% url 'taller:trabajo_list' %}?q={{ vehiculo.patente }}" class="btn btn-outline-premium btn-sm">
+            <i class="bi bi-clipboard-data me-1"></i>Ver trabajos de {{ vehiculo.patente }}
           </a>
-          <a href="{% url 'taller:cliente_list' %}" class="btn btn-outline-premium btn-sm">
-            <i class="bi bi-people me-1"></i> Ver clientes
+          <a href="{% url 'taller:turno_create' %}" class="btn btn-outline-premium btn-sm">
+            <i class="bi bi-calendar-plus me-1"></i>Nuevo turno
           </a>
         </div>
       </div>
     </div>
   </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-clipboard-data me-2" style="color:#fbbf24;"></i>Historial del vehículo
+        </h2>
+      </div>
+      <div class="p-4">
+        <div class="panel-soft p-3 mb-3">
+          <p class="small text-secondary mb-0">
+            <i class="bi bi-info-circle me-1" style="color:#38bdf8;"></i>
+            Los trabajos realizados para este vehículo se pueden ver filtrando la patente
+            <strong>{{ vehiculo.patente }}</strong> en el listado de trabajos.
+          </p>
+        </div>
+        <a href="{% url 'taller:trabajo_list' %}?q={{ vehiculo.patente }}" class="btn btn-outline-premium btn-sm">
+          <i class="bi bi-search me-1"></i>Buscar trabajos de {{ vehiculo.patente }}
+        </a>
+      </div>
+    </div>
+  </div>
 </div>
+
 {% endblock %}

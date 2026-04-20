@@ -1,387 +1,384 @@
 {% extends "taller/base.html" %}
 
-{% block title %}Cliente – {{ cliente.nombre_completo }} · Taller Mecánico Ale Gavilan{% endblock %}
+{% block title %}{{ cliente.nombre_completo }} — Ale Gavilan Cars Solutions{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
-  <div>
-    <div class="d-flex align-items-center gap-2 mb-2">
-      <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
-        <i class="bi bi-person-badge me-1"></i> Ficha de cliente
-      </span>
 
+{# ── HEADER ── #}
+<div class="page-header d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+  <div>
+    <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+      <a href="{% url 'taller:cliente_list' %}" class="text-decoration-none" style="color:var(--text-muted);font-size:.8rem;">
+        <i class="bi bi-people me-1"></i>Clientes
+      </a>
+      <i class="bi bi-chevron-right text-muted" style="font-size:.7rem;"></i>
+      <span style="color:var(--text-secondary);font-size:.8rem;">{{ cliente.nombre_completo }}</span>
+    </div>
+    <h1 class="h4 mb-1 gradient-text">{{ cliente.nombre_completo }}</h1>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
       {% if saldo_actual > 0 %}
-        <span class="badge rounded-pill bg-danger bg-opacity-25 text-danger text-uppercase small">
-          Debe $ {{ saldo_actual|floatformat:2 }}
+        <span class="badge badge-deuda">
+          <i class="bi bi-exclamation-triangle me-1"></i>Debe $&nbsp;{{ saldo_fmt }}
         </span>
       {% elif saldo_actual < 0 %}
-        <span class="badge rounded-pill bg-success bg-opacity-25 text-success text-uppercase small">
-          A favor $ {{ saldo_actual|floatformat:2 }}
+        <span class="badge badge-pago">
+          <i class="bi bi-check-circle me-1"></i>A favor $&nbsp;{{ saldo_fmt }}
         </span>
       {% else %}
-        <span class="badge rounded-pill bg-secondary bg-opacity-25 text-secondary text-uppercase small">
-          Cuenta en cero
+        <span class="badge" style="background:rgba(255,255,255,0.06);color:var(--text-secondary);border:1px solid var(--border-strong);">
+          <i class="bi bi-check2 me-1"></i>Cuenta en cero
         </span>
       {% endif %}
     </div>
-
-    <h1 class="h4 mb-1 gradient-text">
-      {{ cliente.nombre_completo }}
-    </h1>
-    <p class="text-secondary small mb-0">
-      Histórico de vehículos, trabajos y movimientos de cuenta de este cliente.
-    </p>
   </div>
 
   <div class="d-flex flex-wrap gap-2">
-    <a href="{% url 'taller:cliente_update' cliente.pk %}" class="btn btn-outline-premium btn-sm">
-      <i class="bi bi-pencil-square me-1"></i> Editar datos
-    </a>
-    <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-outline-premium btn-sm">
-      <i class="bi bi-car-front me-1"></i> Nuevo vehículo
+    <a href="{% url 'taller:movimiento_cuenta_create' cliente.pk %}?tipo=PAGO"
+       class="btn btn-sm" style="background:var(--success-light);color:#34d399;border:1px solid var(--success-border);">
+      <i class="bi bi-cash-coin me-1"></i>Registrar pago
     </a>
     <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm">
-      <i class="bi bi-tools me-1"></i> Nuevo trabajo
+      <i class="bi bi-tools me-1"></i>Nuevo trabajo
     </a>
-    <a href="{% url 'taller:cliente_list' %}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-arrow-left-short me-1"></i> Volver al listado
+    <a href="{% url 'taller:cliente_update' cliente.pk %}" class="btn btn-outline-premium btn-sm">
+      <i class="bi bi-pencil-square me-1"></i>Editar datos
+    </a>
+    <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-outline-premium btn-sm">
+      <i class="bi bi-car-front me-1"></i>Nuevo vehículo
     </a>
   </div>
 </div>
 
-{# RESUMEN RÁPIDO EN STAT PILLS #}
+{# ── KPIs ── #}
 <div class="row g-3 mb-4">
-  <div class="col-12 col-md-3">
-    <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
+  <div class="col-6 col-md-3">
+    <div class="stat-pill h-100 {% if saldo_actual > 0 %}stat-danger{% elif saldo_actual < 0 %}stat-success{% endif %}">
+      <div class="d-flex justify-content-between align-items-start mb-2">
         <span class="stat-label">Saldo actual</span>
-        <i class="bi bi-currency-dollar text-muted"></i>
+        <span class="icon-circle {% if saldo_actual > 0 %}icon-circle-danger{% elif saldo_actual < 0 %}icon-circle-success{% else %}icon-circle-neutral{% endif %}">
+          <i class="bi bi-wallet2"></i>
+        </span>
       </div>
-      <div class="stat-value">
-        {% if saldo_actual > 0 %}
-          -{{ saldo_actual|floatformat:0 }}
-        {% elif saldo_actual < 0 %}
-          +{{ saldo_actual|floatformat:0 }}
-        {% else %}
-          0
-        {% endif %}
-      </div>
-      <div class="small text-secondary mt-1">
-        {% if saldo_actual > 0 %}
-          El cliente tiene deuda pendiente.
-        {% elif saldo_actual < 0 %}
-          El cliente tiene saldo a favor.
-        {% else %}
-          Sin deudas ni saldo a favor.
-        {% endif %}
-      </div>
+      {% if saldo_actual > 0 %}
+        <div class="stat-value-sm saldo-positivo">-$&nbsp;{{ saldo_fmt }}</div>
+        <div class="small text-muted mt-1">Tiene deuda pendiente</div>
+      {% elif saldo_actual < 0 %}
+        <div class="stat-value-sm saldo-negativo">+$&nbsp;{{ saldo_fmt }}</div>
+        <div class="small text-muted mt-1">Tiene saldo a favor</div>
+      {% else %}
+        <div class="stat-value-sm saldo-cero">$ 0</div>
+        <div class="small text-muted mt-1">Sin deudas ni saldo a favor</div>
+      {% endif %}
     </div>
   </div>
-
-  <div class="col-12 col-md-3">
+  <div class="col-6 col-md-3">
     <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="d-flex justify-content-between align-items-start mb-2">
         <span class="stat-label">Vehículos</span>
-        <i class="bi bi-car-front text-muted"></i>
+        <span class="icon-circle icon-circle-neutral"><i class="bi bi-car-front"></i></span>
       </div>
-      <div class="stat-value">
-        {{ vehiculos|length }}
-      </div>
-      <div class="small text-secondary mt-1">
-        Unidades registradas para este cliente.
-      </div>
+      <div class="stat-value-sm">{{ vehiculos|length }}</div>
+      <div class="small text-muted mt-1">Unidades registradas</div>
     </div>
   </div>
-
-  <div class="col-12 col-md-3">
+  <div class="col-6 col-md-3">
     <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
-        <span class="stat-label">Trabajos recientes</span>
-        <i class="bi bi-clipboard-check text-muted"></i>
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <span class="stat-label">Trabajos</span>
+        <span class="icon-circle icon-circle-neutral"><i class="bi bi-clipboard-check"></i></span>
       </div>
-      <div class="stat-value">
-        {{ trabajos_recientes|length }}
-      </div>
-      <div class="small text-secondary mt-1">
-        Últimos trabajos realizados en el taller.
-      </div>
+      <div class="stat-value-sm">{{ trabajos_recientes|length }}</div>
+      <div class="small text-muted mt-1">Últimos realizados</div>
     </div>
   </div>
-
-  <div class="col-12 col-md-3">
+  <div class="col-6 col-md-3">
     <div class="stat-pill h-100">
-      <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="d-flex justify-content-between align-items-start mb-2">
         <span class="stat-label">Movimientos</span>
-        <i class="bi bi-journal-text text-muted"></i>
+        <span class="icon-circle icon-circle-neutral"><i class="bi bi-journal-text"></i></span>
       </div>
-      <div class="stat-value">
-        {{ movimientos|length }}
-      </div>
-      <div class="small text-secondary mt-1">
-        Movimientos de cuenta corriente registrados.
-      </div>
+      <div class="stat-value-sm">{{ movimientos|length }}</div>
+      <div class="small text-muted mt-1">En cuenta corriente</div>
     </div>
   </div>
 </div>
 
 <div class="row g-4 mb-4">
-  {# DATOS DEL CLIENTE + CUENTA #}
-  <div class="col-12 col-lg-5">
-    <div class="card-premium p-4 mb-4 h-100">
-      <h2 class="h6 text-uppercase text-secondary mb-3">
-        <i class="bi bi-person-lines-fill me-2"></i>Datos del cliente
-      </h2>
 
-      <dl class="row small mb-3">
-        <dt class="col-4 text-secondary">Nombre</dt>
-        <dd class="col-8">{{ cliente.nombre_completo }}</dd>
+  {# ── DATOS DEL CLIENTE ── #}
+  <div class="col-12 col-lg-4">
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-person-lines-fill me-2" style="color:#38bdf8;"></i>Datos del cliente
+        </h2>
+        <a href="{% url 'taller:cliente_update' cliente.pk %}" class="btn btn-outline-premium btn-sm" style="font-size:.72rem;padding:.2rem .6rem;">
+          <i class="bi bi-pencil me-1"></i>Editar
+        </a>
+      </div>
+      <div class="p-4">
+        <dl class="row small mb-0">
+          <dt class="col-5 text-muted">Nombre</dt>
+          <dd class="col-7 fw-semibold" style="color:var(--text-primary);">{{ cliente.nombre_completo }}</dd>
 
-        <dt class="col-4 text-secondary">Teléfono</dt>
-        <dd class="col-8">
-          {% if cliente.telefono %}
-            <a href="tel:{{ cliente.telefono }}" class="link-light link-underline-opacity-0 link-underline-opacity-100-hover">
-              {{ cliente.telefono }}
-            </a>
-          {% else %}
-            —
+          <dt class="col-5 text-muted">Teléfono</dt>
+          <dd class="col-7">
+            {% if cliente.telefono %}
+              <a href="tel:{{ cliente.telefono }}" class="text-decoration-none" style="color:var(--info);">{{ cliente.telefono }}</a>
+            {% else %}—{% endif %}
+          </dd>
+
+          <dt class="col-5 text-muted">Email</dt>
+          <dd class="col-7">
+            {% if cliente.email %}
+              <a href="mailto:{{ cliente.email }}" class="text-decoration-none" style="color:var(--info);font-size:.82rem;">{{ cliente.email }}</a>
+            {% else %}—{% endif %}
+          </dd>
+
+          <dt class="col-5 text-muted">DNI / CUIT</dt>
+          <dd class="col-7">{{ cliente.dni|default:"—" }}</dd>
+
+          <dt class="col-5 text-muted">Dirección</dt>
+          <dd class="col-7">{{ cliente.direccion|default:"—" }}</dd>
+
+          {% if cliente.notas %}
+            <dt class="col-5 text-muted">Notas</dt>
+            <dd class="col-7">
+              <span class="small" style="white-space:pre-wrap;">{{ cliente.notas }}</span>
+            </dd>
           {% endif %}
-        </dd>
+        </dl>
 
-        <dt class="col-4 text-secondary">Email</dt>
-        <dd class="col-8">
-          {% if cliente.email %}
-            <a href="mailto:{{ cliente.email }}" class="link-light link-underline-opacity-0 link-underline-opacity-100-hover">
-              {{ cliente.email }}
-            </a>
-          {% else %}
-            —
-          {% endif %}
-        </dd>
+        <hr style="border-color:var(--border);">
 
-        <dt class="col-4 text-secondary">Dirección</dt>
-        <dd class="col-8">{{ cliente.direccion|default:"—" }}</dd>
-      </dl>
-
-      <hr class="border-secondary-subtle">
-
-      <div class="small mb-2 text-secondary text-uppercase">Estado de cuenta</div>
-      <div class="d-flex align-items-center justify-content-between">
-        <div class="small text-secondary">
-          Saldo actual del cliente en el taller.
-        </div>
-        <div class="text-end">
-          {% if saldo_actual > 0 %}
-            <span class="badge rounded-pill bg-danger bg-opacity-25 text-danger">
-              Debe $ {{ saldo_actual|floatformat:2 }}
-            </span>
-          {% elif saldo_actual < 0 %}
-            <span class="badge rounded-pill bg-success bg-opacity-25 text-success">
-              A favor $ {{ saldo_actual|floatformat:2 }}
-            </span>
-          {% else %}
-            <span class="badge rounded-pill bg-secondary bg-opacity-25 text-secondary">
-              En cero
-            </span>
-          {% endif %}
+        {# Botones de acción rápida #}
+        <div class="d-flex flex-column gap-2">
+          <a href="{% url 'taller:movimiento_cuenta_create' cliente.pk %}?tipo=PAGO"
+             class="btn btn-sm d-flex align-items-center gap-2"
+             style="background:var(--success-light);color:#34d399;border:1px solid var(--success-border);">
+            <i class="bi bi-cash-coin"></i>Registrar pago
+          </a>
+          <a href="{% url 'taller:movimiento_cuenta_create' cliente.pk %}?tipo=DEUDA"
+             class="btn btn-sm d-flex align-items-center gap-2"
+             style="background:var(--danger-light);color:#fca5a5;border:1px solid var(--danger-border);">
+            <i class="bi bi-exclamation-triangle"></i>Registrar deuda manual
+          </a>
+          <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm">
+            <i class="bi bi-clipboard-plus me-1"></i>Nuevo trabajo
+          </a>
+          <a href="{% url 'taller:presupuesto_create' %}" class="btn btn-outline-premium btn-sm">
+            <i class="bi bi-file-earmark-plus me-1"></i>Nuevo presupuesto
+          </a>
         </div>
       </div>
     </div>
   </div>
 
-  {# VEHÍCULOS DEL CLIENTE #}
-  <div class="col-12 col-lg-7">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h2 class="h6 text-uppercase text-secondary mb-0">
-          <i class="bi bi-car-front me-2"></i>Vehículos del cliente
+  {# ── VEHÍCULOS ── #}
+  <div class="col-12 col-lg-8">
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-car-front me-2" style="color:#fbbf24;"></i>Vehículos del cliente
         </h2>
-        <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-outline-premium btn-sm">
-          <i class="bi bi-plus-lg me-1"></i> Agregar vehículo
+        <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-outline-premium btn-sm" style="font-size:.72rem;padding:.2rem .6rem;">
+          <i class="bi bi-plus-lg me-1"></i>Agregar
         </a>
       </div>
 
-      {% if vehiculos %}
-        <div class="table-responsive">
-          <table class="table table-dark table-sm align-middle table-dark-custom mb-0 small">
-            <thead>
-              <tr>
-                <th>Patente</th>
-                <th>Detalle</th>
-                <th class="text-end">Próx. service (km)</th>
-                <th class="text-end">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for v in vehiculos %}
+      <div class="p-3">
+        {% if vehiculos %}
+          <div class="table-responsive">
+            <table class="table table-dark-custom mb-0">
+              <thead>
                 <tr>
-                  <td class="fw-semibold">{{ v.patente }}</td>
-                  <td>
-                    <div class="fw-semibold">
-                      {{ v.marca|default:"" }} {{ v.modelo|default:"" }}
-                    </div>
-                    <div class="text-secondary small">
-                      {% if v.anio %}Año {{ v.anio }}{% else %}—{% endif %}
-                    </div>
-                  </td>
-                  <td class="text-end">
-                    {% if v.proximo_service_km %}
-                      {{ v.proximo_service_km }} km
-                    {% else %}
-                      —
-                    {% endif %}
-                  </td>
-                  <td class="text-end">
-                    <div class="btn-group btn-group-sm" role="group">
-                      <a
-                        href="{% url 'taller:vehiculo_detail' v.pk %}"
-                        class="btn btn-outline-premium btn-sm"
-                      >
-                        Ver
-                      </a>
-                      <a
-                        href="{% url 'taller:vehiculo_update' v.pk %}"
-                        class="btn btn-outline-light btn-sm"
-                      >
-                        Editar
-                      </a>
-                    </div>
-                  </td>
+                  <th>Patente</th>
+                  <th>Vehículo</th>
+                  <th class="text-center">Año</th>
+                  <th class="text-end">Km actual</th>
+                  <th class="text-end">Próx. service</th>
+                  <th class="text-end">Acciones</th>
                 </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <p class="text-secondary small mb-0">
-          Este cliente todavía no tiene vehículos asociados.
-        </p>
-      {% endif %}
+              </thead>
+              <tbody>
+                {% for v in vehiculos %}
+                  <tr>
+                    <td class="fw-bold" style="color:var(--text-primary);letter-spacing:.05em;">{{ v.patente }}</td>
+                    <td>
+                      <div class="fw-semibold small">{{ v.marca }} {{ v.modelo }}</div>
+                      {% if v.color %}<div class="text-muted" style="font-size:.75rem;">{{ v.color }}</div>{% endif %}
+                    </td>
+                    <td class="text-center text-secondary small">{{ v.anio|default:"—" }}</td>
+                    <td class="text-end text-secondary small">
+                      {% if v.kilometraje_actual %}{{ v.kilometraje_actual|floatformat:0 }} km{% else %}—{% endif %}
+                    </td>
+                    <td class="text-end small">
+                      {% if v.proximo_service_km %}
+                        <span style="color:#fbbf24;">{{ v.proximo_service_km|floatformat:0 }} km</span>
+                      {% else %}—{% endif %}
+                    </td>
+                    <td class="text-end">
+                      <div class="btn-group btn-group-sm">
+                        <a href="{% url 'taller:vehiculo_detail' v.pk %}" class="btn btn-outline-premium btn-sm">Ver</a>
+                        <a href="{% url 'taller:vehiculo_update' v.pk %}" class="btn btn-outline-premium btn-sm"><i class="bi bi-pencil"></i></a>
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty-state">
+            <i class="bi bi-car-front"></i>
+            <p>Sin vehículos asociados todavía.</p>
+            <a href="{% url 'taller:vehiculo_create' %}" class="btn btn-outline-premium btn-sm mt-2">
+              <i class="bi bi-plus me-1"></i>Agregar vehículo
+            </a>
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
+
 </div>
 
 <div class="row g-4">
-  {# TRABAJOS RECIENTES #}
+
+  {# ── TRABAJOS RECIENTES ── #}
   <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h2 class="h6 text-uppercase text-secondary mb-0">
-          <i class="bi bi-clipboard-check me-2"></i>Trabajos recientes
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0" style="color:var(--text-primary);">
+          <i class="bi bi-clipboard-check me-2" style="color:#a5b4fc;"></i>Trabajos recientes
         </h2>
-        <span class="badge rounded-pill bg-primary bg-opacity-25">
-          Últimos {{ trabajos_recientes|length }}
-        </span>
+        <a href="{% url 'taller:trabajo_create' %}" class="btn btn-brand btn-sm" style="font-size:.72rem;padding:.25rem .7rem;">
+          <i class="bi bi-plus me-1"></i>Nuevo
+        </a>
       </div>
-
-      {% if trabajos_recientes %}
-        <ul class="list-unstyled mb-0 small">
-          {% for t in trabajos_recientes %}
-            <li class="py-2 border-bottom border-secondary-subtle">
-              <div class="d-flex justify-content-between align-items-center gap-2">
-                <div>
-                  <div class="fw-semibold">
-                    #{{ t.id }}
-                    {% if t.vehiculo %}
-                      · {{ t.vehiculo.patente }}
-                    {% endif %}
-                  </div>
-                  <div class="text-secondary">
-                    {{ t.fecha_ingreso|date:"d/m/Y H:i" }}
-                    {% if t.vehiculo %}
-                      · {{ t.vehiculo.marca }} {{ t.vehiculo.modelo }}
-                    {% endif %}
-                  </div>
-                  <div class="mt-1">
-                    <span class="badge rounded-pill bg-primary bg-opacity-25 text-uppercase small">
-                      {{ t.get_estado_display }}
-                    </span>
-                    {% if t.total %}
-                      <span class="small text-secondary ms-2">
-                        Total: $ {{ t.total|floatformat:2 }}
-                      </span>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="text-end">
-                  <a href="{% url 'taller:trabajo_detail' t.pk %}" class="btn btn-outline-premium btn-sm">
-                    Ver
-                  </a>
-                </div>
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="text-secondary small mb-0">
-          Todavía no hay trabajos registrados para este cliente.
-        </p>
-      {% endif %}
-    </div>
-  </div>
-
-  {# MOVIMIENTOS DE CUENTA #}
-  <div class="col-12 col-lg-6">
-    <div class="card-premium p-4 h-100">
-      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h2 class="h6 text-uppercase text-secondary mb-0">
-          <i class="bi bi-wallet2 me-2"></i>Movimientos de cuenta
-        </h2>
-        {# acá después podés sumar un botón "Nuevo movimiento" cuando tengas la vista #}
-      </div>
-
-      {% if movimientos %}
-        <div class="table-responsive">
-          <table class="table table-dark table-sm align-middle table-dark-custom mb-0 small">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Tipo</th>
-                <th>Detalle</th>
-                <th class="text-end">Monto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for mov in movimientos %}
-                <tr>
-                  <td>{{ mov.fecha|date:"d/m/Y H:i" }}</td>
-                  <td>
-                    {% if mov.tipo == mov.TIPO_DEUDA %}
-                      <span class="badge rounded-pill bg-danger bg-opacity-25 text-danger">
-                        {{ mov.get_tipo_display }}
-                      </span>
-                    {% elif mov.tipo == mov.TIPO_PAGO %}
-                      <span class="badge rounded-pill bg-success bg-opacity-25 text-success">
-                        {{ mov.get_tipo_display }}
-                      </span>
-                    {% else %}
-                      <span class="badge rounded-pill bg-secondary bg-opacity-25 text-secondary">
-                        {{ mov.get_tipo_display }}
-                      </span>
-                    {% endif %}
-                  </td>
-                  <td>
-                    <div class="small">
-                      {% if mov.trabajo %}
-                        Trabajo #{{ mov.trabajo.id }} – {{ mov.descripcion|default:"Sin detalle" }}
-                      {% else %}
-                        {{ mov.descripcion|default:"Sin detalle" }}
+      <div class="p-3">
+        {% if trabajos_recientes %}
+          <ul class="list-unstyled mb-0">
+            {% for t in trabajos_recientes %}
+              <li class="list-item-premium px-1">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div class="flex-grow-1">
+                    <div class="small d-flex align-items-center gap-2">
+                      <span class="text-muted" style="font-size:.7rem;">#{{ t.id }}</span>
+                      {% if t.vehiculo %}
+                        <span class="fw-bold" style="color:var(--text-primary);">{{ t.vehiculo.patente }}</span>
+                        <span class="text-muted">{{ t.vehiculo.marca }} {{ t.vehiculo.modelo }}</span>
                       {% endif %}
                     </div>
-                  </td>
-                  <td class="text-end">
-                    $ {{ mov.monto|floatformat:2 }}
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <p class="text-secondary small mb-0">
-          No hay movimientos registrados en la cuenta de este cliente.
-        </p>
-      {% endif %}
+                    <div class="text-muted mt-1" style="font-size:.75rem;">{{ t.fecha_ingreso|date:"d/m/Y H:i" }}</div>
+                    <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                      {% with e=t.estado %}
+                        {% if e == "INGRESADO" %}<span class="badge badge-ingresado">Ingresado</span>
+                        {% elif e == "EN_PROCESO" %}<span class="badge badge-en_proceso">En proceso</span>
+                        {% elif e == "FINALIZADO" %}<span class="badge badge-finalizado">Finalizado</span>
+                        {% elif e == "ENTREGADO" %}<span class="badge badge-entregado">Entregado</span>
+                        {% elif e == "ANULADO" %}<span class="badge badge-anulado">Anulado</span>
+                        {% endif %}
+                      {% endwith %}
+                      {% if t.total %}<span class="small monto-total">$ {{ t.total|floatformat:0 }}</span>{% endif %}
+                    </div>
+                  </div>
+                  <a href="{% url 'taller:trabajo_detail' t.pk %}" class="btn btn-outline-premium btn-sm flex-shrink-0" style="font-size:.72rem;padding:.2rem .6rem;">Ver</a>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="empty-state py-3">
+            <i class="bi bi-clipboard-x"></i>
+            <p>Sin trabajos registrados para este cliente.</p>
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
+
+  {# ── CUENTA CORRIENTE ── #}
+  <div class="col-12 col-lg-6">
+    <div class="card-premium p-0 h-100">
+      <div class="card-premium-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h2 class="h6 mb-0" style="color:var(--text-primary);">
+            <i class="bi bi-wallet2 me-2" style="color:#34d399;"></i>Cuenta corriente
+          </h2>
+          <div class="mt-1">
+            {% if saldo_actual > 0 %}
+              <span class="saldo-positivo small">Saldo pendiente: -$&nbsp;{{ saldo_fmt }}</span>
+            {% elif saldo_actual < 0 %}
+              <span class="saldo-negativo small">A favor: +$&nbsp;{{ saldo_fmt }}</span>
+            {% else %}
+              <span class="saldo-cero small">Cuenta en cero</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="d-flex gap-1">
+          <a href="{% url 'taller:movimiento_cuenta_create' cliente.pk %}?tipo=PAGO"
+             class="btn btn-sm" style="background:var(--success-light);color:#34d399;border:1px solid var(--success-border);font-size:.72rem;padding:.25rem .7rem;">
+            <i class="bi bi-cash-coin me-1"></i>Registrar pago
+          </a>
+        </div>
+      </div>
+      <div class="p-3">
+        {% if movimientos %}
+          <div class="table-responsive">
+            <table class="table table-dark-custom mb-0">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Detalle</th>
+                  <th class="text-end">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for mov in movimientos %}
+                  <tr>
+                    <td class="text-muted" style="font-size:.75rem;white-space:nowrap;">{{ mov.fecha|date:"d/m/Y" }}</td>
+                    <td>
+                      {% if mov.tipo == mov.TIPO_DEUDA %}
+                        <span class="badge badge-deuda">Deuda</span>
+                      {% else %}
+                        <span class="badge badge-pago">Pago</span>
+                      {% endif %}
+                      {% if mov.metodo_pago %}
+                        <div class="text-muted" style="font-size:.7rem;">{{ mov.get_metodo_pago_display }}</div>
+                      {% endif %}
+                    </td>
+                    <td class="text-secondary" style="font-size:.8rem;">
+                      {% if mov.trabajo %}
+                        <a href="{% url 'taller:trabajo_detail' mov.trabajo.pk %}" style="color:var(--info);">Trab. #{{ mov.trabajo.id }}</a>
+                        {% if mov.descripcion %} — {{ mov.descripcion }}{% endif %}
+                      {% else %}
+                        {{ mov.descripcion|default:"—" }}
+                      {% endif %}
+                    </td>
+                    <td class="text-end fw-semibold">
+                      {% if mov.tipo == mov.TIPO_DEUDA %}
+                        <span class="monto-deuda">-$&nbsp;{{ mov.monto|floatformat:0 }}</span>
+                      {% else %}
+                        <span class="monto-pago">+$&nbsp;{{ mov.monto|floatformat:0 }}</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty-state py-3">
+            <i class="bi bi-journal-x"></i>
+            <p>Sin movimientos de cuenta registrados.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
 </div>
+
 {% endblock %}

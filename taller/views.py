@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -197,6 +197,38 @@ def _wsp_text_presupuesto(presupuesto) -> str:
     return "\n".join(lines)
 
 
+def _clientes_qs_for_user(user):
+    return Cliente.objects.filter(owner=user)
+
+
+def _vehiculos_qs_for_user(user):
+    return Vehiculo.objects.select_related("cliente").filter(owner=user)
+
+
+def _trabajos_qs_for_user(user):
+    return (
+        Trabajo.objects.select_related("vehiculo", "cliente")
+        .filter(Q(owner=user) | Q(owner__isnull=True, cliente__owner=user))
+        .distinct()
+    )
+
+
+def _turnos_qs_for_user(user):
+    return (
+        Turno.objects.select_related("cliente", "vehiculo")
+        .filter(Q(owner=user) | Q(owner__isnull=True, cliente__owner=user))
+        .distinct()
+    )
+
+
+def _presupuestos_qs_for_user(user):
+    return (
+        Presupuesto.objects.select_related("cliente", "vehiculo")
+        .filter(Q(owner=user) | Q(owner__isnull=True, cliente__owner=user))
+        .distinct()
+    )
+
+
 # ========================
 #    DASHBOARD
 # ========================
@@ -207,61 +239,82 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        user = self.request.user
 
-        ctx["total_clientes"] = Cliente.objects.count()
-        ctx["total_vehiculos"] = Vehiculo.objects.count()
+        clientes_qs = _clientes_qs_for_user(user)
+        vehiculos_qs = _vehiculos_qs_for_user(user)
+        trabajos_qs = _trabajos_qs_for_user(user)
+        turnos_qs_base = _turnos_qs_for_user(user)
+        presupuestos_qs_base = _presupuestos_qs_for_user(user)
 
-        ctx["trabajos_activos"] = Trabajo.objects.filter(activo=True).exclude(
+        ctx["total_clientes"] = clientes_qs.count()
+        ctx["total_vehiculos"] = vehiculos_qs.count()
+
+        ctx["trabajos_activos"] = trabajos_qs.filter(activo=True).exclude(
             estado__in=[Trabajo.ESTADO_ENTREGADO, Trabajo.ESTADO_ANULADO]
         ).count()
 
         ahora = timezone.now()
 
-        turnos_qs = (
-            Turno.objects.filter(fecha_hora__gte=ahora)
-            .select_related("cliente", "vehiculo")
-            .order_by("fecha_hora")[:5]
+        # ── Métricas financieras ──────────────────────────────────────
+        # Ingresos del mes actual (suma de pagos registrados)
+        inicio_mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        ingresos_mes = (
+            MovimientoCuenta.objects.filter(
+                owner=user,
+                tipo=MovimientoCuenta.TIPO_PAGO,
+                fecha__gte=inicio_mes,
+            ).aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
         )
+        ctx["ingresos_mes"] = ingresos_mes
+        ctx["ingresos_mes_fmt"] = _format_ars(ingresos_mes, 0)
+
+        # Deudas totales pendientes (deudas - pagos de todos los clientes)
+        total_deudas = (
+            MovimientoCuenta.objects.filter(owner=user, tipo=MovimientoCuenta.TIPO_DEUDA)
+            .aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+        )
+        total_pagos = (
+            MovimientoCuenta.objects.filter(owner=user, tipo=MovimientoCuenta.TIPO_PAGO)
+            .aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+        )
+        deudas_pendientes = total_deudas - total_pagos
+        if deudas_pendientes < 0:
+            deudas_pendientes = Decimal("0.00")
+        ctx["deudas_pendientes"] = deudas_pendientes
+        ctx["deudas_pendientes_fmt"] = _format_ars(deudas_pendientes, 0)
+
+        # Clientes con deuda
+        ctx["clientes_con_deuda"] = sum(
+            1 for c in clientes_qs.prefetch_related("movimientos_cuenta")
+            if c.saldo_actual > 0
+        )
+
+        # ── Turnos ───────────────────────────────────────────────────
+        turnos_qs = turnos_qs_base.filter(fecha_hora__gte=ahora).order_by("fecha_hora")[:5]
         ctx["turnos_proximos"] = list(turnos_qs)
         ctx["turnos_proximos_count"] = len(ctx["turnos_proximos"])
 
-        trabajos_qs = (
-            Trabajo.objects.filter(activo=True)
-            .select_related("vehiculo", "cliente")
-            .only(
-                "id", "estado", "fecha_ingreso",
-                "cliente__id", "cliente__nombre", "cliente__apellido",
-                "vehiculo__id", "vehiculo__patente", "vehiculo__marca", "vehiculo__modelo",
-            )
-            .order_by("-fecha_ingreso")[:5]
-        )
-        trabajos = list(trabajos_qs)
-        for t in trabajos:
-            t.total_safe = ""
+        # ── Trabajos recientes ────────────────────────────────────────
+        trabajos = list(trabajos_qs.filter(activo=True).order_by("-fecha_ingreso")[:5])
         ctx["trabajos_recientes"] = trabajos
         ctx["trabajos_recientes_count"] = len(trabajos)
 
         ctx["clientes_top"] = (
-            Cliente.objects.annotate(cant_vehiculos=Count("vehiculos"))
+            clientes_qs.annotate(cant_vehiculos=Count("vehiculos"))
             .order_by("-cant_vehiculos")[:5]
         )
 
-        presupuestos_qs = (
-            Presupuesto.objects.filter(activo=True)
-            .select_related("cliente", "vehiculo")
-            .only(
-                "id", "tipo", "estado", "fecha", "titulo",
-                "cliente__id", "cliente__nombre", "cliente__apellido",
-                "vehiculo__id", "vehiculo__patente", "vehiculo__marca", "vehiculo__modelo",
-            )
-            .order_by("-fecha")[:5]
-        )
-        presupuestos = list(presupuestos_qs)
+        presupuestos = list(presupuestos_qs_base.filter(activo=True).order_by("-fecha")[:5])
         ctx["presupuestos_recientes"] = presupuestos
         ctx["presupuestos_recientes_count"] = len(presupuestos)
 
-        ctx["trabajos_eliminados_count"] = Trabajo.objects.filter(activo=False).count()
-        ctx["presupuestos_eliminados_count"] = Presupuesto.objects.filter(activo=False).count()
+        ctx["trabajos_eliminados_count"] = trabajos_qs.filter(activo=False).count()
+        ctx["presupuestos_eliminados_count"] = presupuestos_qs_base.filter(activo=False).count()
+
+        # ── Formatear saldos para clientes top ────────────────────────
+        for c in ctx["clientes_top"]:
+            c.saldo_fmt = _format_ars(c.saldo_actual, 0)
 
         return ctx
 
@@ -278,7 +331,7 @@ class ClienteListView(LoginRequiredMixin, ListView):
     login_url = "login"
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = _clientes_qs_for_user(self.request.user)
         q = _get_q(self.request, "q")
         if q:
             qs = qs.filter(
@@ -299,6 +352,15 @@ class ClienteCreateView(LoginRequiredMixin, CreateView):
     success_url = reverse_lazy("taller:cliente_list")
     login_url = "login"
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
+
 
 class ClienteUpdateView(LoginRequiredMixin, UpdateView):
     model = Cliente
@@ -307,12 +369,23 @@ class ClienteUpdateView(LoginRequiredMixin, UpdateView):
     success_url = reverse_lazy("taller:cliente_list")
     login_url = "login"
 
+    def get_queryset(self):
+        return _clientes_qs_for_user(self.request.user)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
 
 class ClienteDetailView(LoginRequiredMixin, DetailView):
     model = Cliente
     template_name = "taller/cliente_detail.html"
     context_object_name = "cliente"
     login_url = "login"
+
+    def get_queryset(self):
+        return _clientes_qs_for_user(self.request.user)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -326,8 +399,10 @@ class ClienteDetailView(LoginRequiredMixin, DetailView):
             .order_by("-fecha_ingreso")[:5]
         )
 
-        ctx["movimientos"] = cliente.movimientos_cuenta.order_by("-fecha")[:15]
-        ctx["saldo_actual"] = cliente.saldo_actual
+        ctx["movimientos"] = cliente.movimientos_cuenta.order_by("-fecha")[:20]
+        saldo = cliente.saldo_actual
+        ctx["saldo_actual"] = saldo
+        ctx["saldo_fmt"] = _format_ars(abs(saldo), 2)
 
         ctx["presupuestos_recientes"] = (
             cliente.presupuestos.filter(activo=True)
@@ -350,7 +425,7 @@ class VehiculoListView(LoginRequiredMixin, ListView):
     login_url = "login"
 
     def get_queryset(self):
-        qs = Vehiculo.objects.select_related("cliente")
+        qs = _vehiculos_qs_for_user(self.request.user)
         q = _get_q(self.request, "q")
         if q:
             qs = qs.filter(
@@ -372,6 +447,11 @@ class VehiculoCreateView(LoginRequiredMixin, CreateView):
     success_url = reverse_lazy("taller:vehiculo_list")
     login_url = "login"
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
 
 class VehiculoUpdateView(LoginRequiredMixin, UpdateView):
     model = Vehiculo
@@ -380,12 +460,23 @@ class VehiculoUpdateView(LoginRequiredMixin, UpdateView):
     success_url = reverse_lazy("taller:vehiculo_list")
     login_url = "login"
 
+    def get_queryset(self):
+        return _vehiculos_qs_for_user(self.request.user)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
 
 class VehiculoDetailView(LoginRequiredMixin, DetailView):
     model = Vehiculo
     template_name = "taller/vehiculo_detail.html"
     context_object_name = "vehiculo"
     login_url = "login"
+
+    def get_queryset(self):
+        return _vehiculos_qs_for_user(self.request.user)
 
 
 # ========================
@@ -401,7 +492,7 @@ def vehiculos_por_cliente_json(request):
         return JsonResponse({"vehiculos": []})
 
     vehiculos = (
-        Vehiculo.objects.filter(cliente_id=cliente_id)
+        Vehiculo.objects.filter(cliente_id=cliente_id, owner=request.user)
         .order_by("patente")
         .only("id", "patente", "marca", "modelo")
     )
@@ -431,7 +522,7 @@ class TrabajoListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         show = _get_show(self.request, default="activos")
 
-        qs = Trabajo.objects.select_related("vehiculo", "cliente")
+        qs = _trabajos_qs_for_user(self.request.user)
 
         if show == "activos":
             qs = qs.filter(activo=True).order_by("-fecha_ingreso")
@@ -459,8 +550,9 @@ class TrabajoListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["show"] = _get_show(self.request, default="activos")
-        ctx["trabajos_activos_count"] = Trabajo.objects.filter(activo=True).count()
-        ctx["trabajos_eliminados_count"] = Trabajo.objects.filter(activo=False).count()
+        trabajos_qs = _trabajos_qs_for_user(self.request.user)
+        ctx["trabajos_activos_count"] = trabajos_qs.filter(activo=True).count()
+        ctx["trabajos_eliminados_count"] = trabajos_qs.filter(activo=False).count()
         return ctx
 
 
@@ -487,7 +579,7 @@ class TrabajoDetailView(LoginRequiredMixin, DetailView):
     login_url = "login"
 
     def get_queryset(self):
-        return Trabajo.objects.select_related("vehiculo", "cliente").prefetch_related("items")
+        return _trabajos_qs_for_user(self.request.user).prefetch_related("items")
 
 
 class TrabajoComprobanteView(LoginRequiredMixin, DetailView):
@@ -497,7 +589,7 @@ class TrabajoComprobanteView(LoginRequiredMixin, DetailView):
     login_url = "login"
 
     def get_queryset(self):
-        return Trabajo.objects.filter(activo=True).select_related("vehiculo", "cliente").prefetch_related("items")
+        return _trabajos_qs_for_user(self.request.user).filter(activo=True).prefetch_related("items")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -515,7 +607,7 @@ class TrabajoComprobantePDFView(LoginRequiredMixin, DetailView):
     login_url = "login"
 
     def get_queryset(self):
-        return Trabajo.objects.filter(activo=True).select_related("vehiculo", "cliente").prefetch_related("items")
+        return _trabajos_qs_for_user(self.request.user).filter(activo=True).prefetch_related("items")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -532,7 +624,7 @@ class TrabajoComprobantePDFView(LoginRequiredMixin, DetailView):
 @transaction.atomic
 def trabajo_create(request):
     if request.method == "POST":
-        form = TrabajoForm(request.POST)
+        form = TrabajoForm(request.POST, user=request.user)
         formset = TrabajoItemFormSet(request.POST, prefix="items")
 
         if form.is_valid() and formset.is_valid():
@@ -549,7 +641,7 @@ def trabajo_create(request):
 
         messages.error(request, "Revisá los campos marcados en rojo. Verificá datos e ítems cargados.")
     else:
-        form = TrabajoForm()
+        form = TrabajoForm(user=request.user)
         formset = TrabajoItemFormSet(prefix="items")
 
     return render(request, "taller/trabajo_form.html", {"form": form, "formset": formset, "trabajo": None})
@@ -558,14 +650,14 @@ def trabajo_create(request):
 @login_required(login_url="login")
 @transaction.atomic
 def trabajo_update(request, pk):
-    trabajo = get_object_or_404(Trabajo, pk=pk)
+    trabajo = get_object_or_404(_trabajos_qs_for_user(request.user), pk=pk)
 
     if not trabajo.activo:
         messages.error(request, "Este trabajo está en Eliminados. Restauralo para editarlo.")
         return redirect("taller:trabajo_detail", pk=trabajo.pk)
 
     if request.method == "POST":
-        form = TrabajoForm(request.POST, instance=trabajo)
+        form = TrabajoForm(request.POST, instance=trabajo, user=request.user)
         formset = TrabajoItemFormSet(request.POST, instance=trabajo, prefix="items")
 
         if form.is_valid() and formset.is_valid():
@@ -582,7 +674,7 @@ def trabajo_update(request, pk):
 
         messages.error(request, "Revisá los campos marcados en rojo. Verificá datos e ítems cargados.")
     else:
-        form = TrabajoForm(instance=trabajo)
+        form = TrabajoForm(instance=trabajo, user=request.user)
         formset = TrabajoItemFormSet(instance=trabajo, prefix="items")
 
     return render(request, "taller/trabajo_form.html", {"form": form, "formset": formset, "trabajo": trabajo})
@@ -594,19 +686,22 @@ def trabajo_update(request, pk):
 
 @login_required(login_url="login")
 def movimiento_cuenta_create(request, cliente_id):
-    cliente = get_object_or_404(Cliente, pk=cliente_id)
+    cliente = get_object_or_404(Cliente, pk=cliente_id, owner=request.user)
 
     if request.method == "POST":
-        form = MovimientoCuentaForm(request.POST)
+        form = MovimientoCuentaForm(request.POST, user=request.user)
         if form.is_valid():
             mov = form.save(commit=False)
+            mov.owner = request.user
             mov.cliente = cliente
 
             if not mov.descripcion:
                 if mov.tipo == MovimientoCuenta.TIPO_DEUDA and getattr(mov, "trabajo", None):
                     mov.descripcion = f"Deuda por trabajo #{mov.trabajo.id}"
                 elif mov.tipo == MovimientoCuenta.TIPO_PAGO:
-                    mov.descripcion = "Pago registrado en taller"
+                    metodo = mov.metodo_pago
+                    metodo_txt = dict(MovimientoCuenta.METODO_CHOICES).get(metodo, "")
+                    mov.descripcion = f"Pago registrado{' — ' + metodo_txt if metodo_txt else ''}"
                 else:
                     mov.descripcion = "Movimiento registrado"
 
@@ -620,7 +715,7 @@ def movimiento_cuenta_create(request, cliente_id):
         tipo = request.GET.get("tipo")
         if tipo in [MovimientoCuenta.TIPO_DEUDA, MovimientoCuenta.TIPO_PAGO]:
             initial["tipo"] = tipo
-        form = MovimientoCuentaForm(initial=initial)
+        form = MovimientoCuentaForm(initial=initial, user=request.user)
 
     return render(request, "taller/movimiento_cuenta_form.html", {"cliente": cliente, "form": form})
 
@@ -637,7 +732,7 @@ class TurnoListView(LoginRequiredMixin, ListView):
     login_url = "login"
 
     def get_queryset(self):
-        return Turno.objects.select_related("cliente", "vehiculo").order_by("fecha_hora")
+        return _turnos_qs_for_user(self.request.user).order_by("fecha_hora")
 
 
 class TurnoDetailView(LoginRequiredMixin, DetailView):
@@ -645,6 +740,9 @@ class TurnoDetailView(LoginRequiredMixin, DetailView):
     template_name = "taller/turno_detail.html"
     context_object_name = "turno"
     login_url = "login"
+
+    def get_queryset(self):
+        return _turnos_qs_for_user(self.request.user)
 
 
 class TurnoCreateView(LoginRequiredMixin, CreateView):
@@ -654,6 +752,15 @@ class TurnoCreateView(LoginRequiredMixin, CreateView):
     success_url = reverse_lazy("taller:turno_list")
     login_url = "login"
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        form.instance.owner = self.request.user
+        return super().form_valid(form)
+
 
 class TurnoUpdateView(LoginRequiredMixin, UpdateView):
     model = Turno
@@ -661,6 +768,19 @@ class TurnoUpdateView(LoginRequiredMixin, UpdateView):
     template_name = "taller/turno_form.html"
     success_url = reverse_lazy("taller:turno_list")
     login_url = "login"
+
+    def get_queryset(self):
+        return _turnos_qs_for_user(self.request.user)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        if form.instance.owner_id is None:
+            form.instance.owner = self.request.user
+        return super().form_valid(form)
 
 
 # ========================
@@ -677,7 +797,7 @@ class PresupuestoListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         show = _get_show(self.request, default="activos")
 
-        qs = Presupuesto.objects.select_related("cliente", "vehiculo")
+        qs = _presupuestos_qs_for_user(self.request.user)
 
         if show == "activos":
             qs = qs.filter(activo=True).order_by("-fecha")
@@ -706,8 +826,9 @@ class PresupuestoListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["show"] = _get_show(self.request, default="activos")
-        ctx["presupuestos_activos_count"] = Presupuesto.objects.filter(activo=True).count()
-        ctx["presupuestos_eliminados_count"] = Presupuesto.objects.filter(activo=False).count()
+        presupuestos_qs = _presupuestos_qs_for_user(self.request.user)
+        ctx["presupuestos_activos_count"] = presupuestos_qs.filter(activo=True).count()
+        ctx["presupuestos_eliminados_count"] = presupuestos_qs.filter(activo=False).count()
         return ctx
 
 
@@ -729,12 +850,14 @@ def _presupuesto_save_common(request, *, instance=None, tipo_forzado=None, modo_
     FormSetCls = PresupuestoItemFormSetRapido if modo_template == "rapido" else PresupuestoItemFormSet
 
     if request.method == "POST":
-        form = PresupuestoForm(request.POST, instance=instance)
+        form = PresupuestoForm(request.POST, instance=instance, user=request.user)
         formset = FormSetCls(request.POST, instance=instance, prefix="items")
 
         if form.is_valid() and formset.is_valid():
             with transaction.atomic():
                 presupuesto = form.save(commit=False)
+                if not instance:
+                    presupuesto.owner = request.user
 
                 if tipo_forzado:
                     presupuesto.tipo = tipo_forzado
@@ -768,7 +891,7 @@ def _presupuesto_save_common(request, *, instance=None, tipo_forzado=None, modo_
             elif tipo_forzado == Presupuesto.TIPO_DETALLADO:
                 initial.update({"tipo": Presupuesto.TIPO_DETALLADO, "titulo": "Presupuesto detallado", "descuento": "0"})
 
-        form = PresupuestoForm(instance=instance, initial=initial)
+        form = PresupuestoForm(instance=instance, initial=initial, user=request.user)
         formset = FormSetCls(instance=instance, prefix="items")
 
     return render(
@@ -800,7 +923,7 @@ def presupuesto_create_detallado(request):
 
 @login_required(login_url="login")
 def presupuesto_update(request, pk):
-    presupuesto = get_object_or_404(Presupuesto, pk=pk)
+    presupuesto = get_object_or_404(_presupuestos_qs_for_user(request.user), pk=pk)
     modo = "rapido" if presupuesto.tipo == Presupuesto.TIPO_RAPIDO else "detallado"
     return _presupuesto_save_common(
         request,
@@ -817,7 +940,7 @@ class PresupuestoDetailView(LoginRequiredMixin, DetailView):
     login_url = "login"
 
     def get_queryset(self):
-        return Presupuesto.objects.select_related("cliente", "vehiculo").prefetch_related("items")
+        return _presupuestos_qs_for_user(self.request.user).prefetch_related("items")
 
 
 class PresupuestoComprobanteView(LoginRequiredMixin, DetailView):
@@ -827,7 +950,7 @@ class PresupuestoComprobanteView(LoginRequiredMixin, DetailView):
     login_url = "login"
 
     def get_queryset(self):
-        return Presupuesto.objects.filter(activo=True).select_related("cliente", "vehiculo").prefetch_related("items")
+        return _presupuestos_qs_for_user(self.request.user).filter(activo=True).prefetch_related("items")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -852,8 +975,15 @@ class _SoftDeleteBase(LoginRequiredMixin, View):
     success_message = "Enviado a eliminados."
     object_label = "registro"
 
+    def get_queryset(self):
+        if self.model is Trabajo:
+            return _trabajos_qs_for_user(self.request.user)
+        if self.model is Presupuesto:
+            return _presupuestos_qs_for_user(self.request.user)
+        return self.model.objects.none()
+
     def get_object(self, pk):
-        return get_object_or_404(self.model, pk=pk)
+        return get_object_or_404(self.get_queryset(), pk=pk)
 
     def get(self, request, pk):
         obj = self.get_object(pk)
@@ -888,8 +1018,15 @@ class _RestoreBase(LoginRequiredMixin, View):
     detail_url_name = None
     success_message = "Restaurado correctamente."
 
+    def get_queryset(self):
+        if self.model is Trabajo:
+            return _trabajos_qs_for_user(self.request.user)
+        if self.model is Presupuesto:
+            return _presupuestos_qs_for_user(self.request.user)
+        return self.model.objects.none()
+
     def post(self, request, pk):
-        obj = get_object_or_404(self.model, pk=pk)
+        obj = get_object_or_404(self.get_queryset(), pk=pk)
 
         if getattr(obj, "activo", True) is True:
             messages.info(request, "Este registro ya estaba activo.")

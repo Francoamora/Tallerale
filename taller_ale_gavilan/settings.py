@@ -1,4 +1,4 @@
-# settings.py (READY TO REPLACE)
+# settings.py
 from pathlib import Path
 import os
 
@@ -20,35 +20,33 @@ def env_list(name: str, default: str = "") -> list[str]:
     raw = env(name, default).strip()
     if not raw:
         return []
-    # separado por coma
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 # =========================
 # CORE
 # =========================
-# ⚠️ IMPORTANTE:
-# - En local podés dejar DJANGO_SECRET_KEY vacío y usar fallback.
-# - En prod (PythonAnywhere) SI O SI setear DJANGO_SECRET_KEY.
 SECRET_KEY = env("DJANGO_SECRET_KEY", "django-insecure-LOCAL-DEV-ONLY-change-me")
 
 DEBUG = env_bool("DJANGO_DEBUG", True)
 
-# Hosts: en local funciona con 127.0.0.1/localhost
-# En prod: setear DJANGO_ALLOWED_HOSTS="tuuser.pythonanywhere.com"
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 
 INSTALLED_APPS = [
-    "django.contrib.admin",   # lo dejamos instalado (admin)
+    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Integraciones de terceros
+    "corsheaders",  # Requerido para permitir peticiones desde Next.js
+    # Aplicaciones locales
     "taller",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",  # Debe procesar la petición antes que CommonMiddleware
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -62,7 +60,7 @@ ROOT_URLCONF = "taller_ale_gavilan.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],  # ok
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -80,7 +78,6 @@ WSGI_APPLICATION = "taller_ale_gavilan.wsgi.application"
 # =========================
 # DATABASE
 # =========================
-# Por ahora SQLite (OK para arrancar).
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -104,8 +101,8 @@ USE_TZ = True
 # STATIC / MEDIA
 # =========================
 STATIC_URL = "/static/"
-STATICFILES_DIRS = [BASE_DIR / "static"]  # tus assets
-STATIC_ROOT = BASE_DIR / "staticfiles"    # collectstatic acá
+STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -113,35 +110,38 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # =========================
-# AUTH / LOGIN OBLIGATORIO
+# AUTH
 # =========================
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "taller:dashboard"
 LOGOUT_REDIRECT_URL = "login"
 
 # =========================
+# CORS & API CONFIGURATION
+# =========================
+# Si estamos en desarrollo (DEBUG=True), permitimos que cualquier frontend local consuma la API.
+# En producción, solo se permitirán los dominios especificados en DJANGO_CORS_ALLOWED_ORIGINS.
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = env_list("DJANGO_CORS_ALLOWED_ORIGINS", "")
+
+# Permite el envío de credenciales (cookies/tokens) entre dominios distintos
+CORS_ALLOW_CREDENTIALS = True
+
+# =========================
 # SECURITY (PROD)
 # =========================
-# Para PythonAnywhere / HTTPS:
-# Seteá DJANGO_CSRF_TRUSTED_ORIGINS="https://tuuser.pythonanywhere.com"
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 
 if not DEBUG:
-    # Si estás detrás de proxy (PythonAnywhere), esto evita problemas con HTTPS
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-    # Cookies seguras en prod
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-
-    # Clickjacking / sniffing
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
-
-    # HSTS (podés subir de a poco; arrancamos suave)
     SECURE_HSTS_SECONDS = int(env("DJANGO_HSTS_SECONDS", "3600"))
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = False
-
-    # Extra
     REFERRER_POLICY = "same-origin"

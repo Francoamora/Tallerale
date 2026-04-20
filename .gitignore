@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.sqlite3-journal
+.DS_Store
+.env
+.env.*
+venv/
+media/
+staticfiles/
+taller/**/__pycache__/
+taller_ale_gavilan/**/__pycache__/
