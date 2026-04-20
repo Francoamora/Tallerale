@@ -1,6 +1,7 @@
 # settings.py
 from pathlib import Path
 import os
+from urllib.parse import urlparse
 
 import dj_database_url
 
@@ -24,6 +25,29 @@ def env_list(name: str, default: str = "") -> list[str]:
         return []
     return [x.strip() for x in raw.split(",") if x.strip()]
 
+
+def _hostname_from_value(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = f"https://{raw}"
+    parsed = urlparse(raw)
+    return (parsed.hostname or "").strip()
+
+
+def _origin_from_value(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = f"https://{raw}"
+    parsed = urlparse(raw)
+    if not parsed.hostname:
+        return ""
+    scheme = parsed.scheme or "https"
+    return f"{scheme}://{parsed.hostname}"
+
 # =========================
 # CORE
 # =========================
@@ -32,6 +56,15 @@ SECRET_KEY = env("DJANGO_SECRET_KEY", "django-insecure-LOCAL-DEV-ONLY-change-me"
 DEBUG = env_bool("DJANGO_DEBUG", True)
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
+for dynamic_host in (
+    env("VERCEL_URL"),
+    env("VERCEL_PROJECT_PRODUCTION_URL"),
+    env("RAILWAY_PUBLIC_DOMAIN"),
+    env("RAILWAY_STATIC_URL"),
+):
+    host = _hostname_from_value(dynamic_host)
+    if host and host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -156,6 +189,15 @@ CORS_ALLOW_CREDENTIALS = True
 # SECURITY (PROD)
 # =========================
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
+for dynamic_origin in (
+    env("VERCEL_URL"),
+    env("VERCEL_PROJECT_PRODUCTION_URL"),
+    env("RAILWAY_PUBLIC_DOMAIN"),
+    env("RAILWAY_STATIC_URL"),
+):
+    origin = _origin_from_value(dynamic_origin)
+    if origin and origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
