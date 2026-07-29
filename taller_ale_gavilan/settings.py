@@ -53,7 +53,15 @@ def _origin_from_value(value: str) -> str:
 # =========================
 SECRET_KEY = env("DJANGO_SECRET_KEY", "django-insecure-LOCAL-DEV-ONLY-change-me")
 
-DEBUG = env_bool("DJANGO_DEBUG", True)
+# Sin base de datos externa se asume desarrollo local. Un despliegue con
+# DATABASE_URL queda seguro por defecto aunque se olvide DJANGO_DEBUG.
+DEBUG = env_bool("DJANGO_DEBUG", not bool(env("DATABASE_URL")))
+API_DOCS_ENABLED = env_bool("DJANGO_API_DOCS_ENABLED", DEBUG)
+# En producción el panel no se publica salvo que soporte defina una ruta.
+ADMIN_URL = env("DJANGO_ADMIN_URL", "admin/" if DEBUG else "").strip("/")
+
+if not DEBUG and SECRET_KEY.startswith("django-insecure-"):
+    raise RuntimeError("DJANGO_SECRET_KEY debe configurarse en producción.")
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 for dynamic_host in (
@@ -160,7 +168,7 @@ STORAGES = {
 }
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(env("DJANGO_MEDIA_ROOT", str(BASE_DIR / "media")))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -201,7 +209,10 @@ for dynamic_origin in (
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
     CSRF_COOKIE_SECURE = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"

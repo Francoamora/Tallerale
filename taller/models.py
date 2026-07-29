@@ -1,18 +1,36 @@
 # taller/models.py
 import secrets
 import uuid
+from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 from django.contrib.auth.models import User
 from django.db import models
 from django.db.models import Q
 from django.core.validators import MinValueValidator
 from django.utils import timezone
 
+
+def _portal_expiry_default():
+    """Los enlaces públicos son capacidades: expiran por defecto."""
+    return timezone.now() + timedelta(days=90)
+
+
+def _invitation_expiry_default():
+    return timezone.now() + timedelta(days=7)
+
+
+def logo_taller_upload_to(instance, filename):
+    """Evita colisiones y filtrar nombres originales entre talleres."""
+    extension = Path(filename).suffix.lower()
+    return f"taller/logos/{instance.user_id}/{uuid.uuid4().hex}{extension}"
+
 # ========================
 #    SISTEMA (SAAS / NUEVO)
 # ========================
 
 class ConfiguracionTaller(models.Model):
+    owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="configuracion_taller")
     nombre_taller = models.CharField(max_length=150)
     logo = models.ImageField(upload_to="taller/logos/", null=True, blank=True)
     moneda = models.CharField(max_length=5, default="$")
@@ -30,7 +48,7 @@ class ConfiguracionTaller(models.Model):
 # ========================
 
 class Cliente(models.Model):
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="clientes", null=True, blank=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="clientes")
     nombre = models.CharField(max_length=100)
     apellido = models.CharField(max_length=100, blank=True)
     telefono = models.CharField(max_length=50, blank=True)
@@ -64,7 +82,8 @@ class Cliente(models.Model):
 # ========================
 
 class Producto(models.Model):
-    codigo = models.CharField(max_length=50, unique=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="productos")
+    codigo = models.CharField(max_length=50)
     nombre = models.CharField(max_length=200)
     stock_actual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     stock_minimo = models.DecimalField(max_digits=10, decimal_places=2, default=5)
@@ -74,6 +93,9 @@ class Producto(models.Model):
     class Meta:
         verbose_name = "Producto / Repuesto"
         verbose_name_plural = "Productos y Repuestos"
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "codigo"], name="uniq_producto_owner_codigo"),
+        ]
 
     def __str__(self):
         return f"[{self.codigo}] {self.nombre}"
@@ -83,9 +105,11 @@ class Producto(models.Model):
 # ========================
 
 class Vehiculo(models.Model):
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="vehiculos", null=True, blank=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="vehiculos")
     cliente = models.ForeignKey(Cliente, related_name="vehiculos", on_delete=models.CASCADE)
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    portal_activo = models.BooleanField(default=True)
+    portal_expires_at = models.DateTimeField(default=_portal_expiry_default, db_index=True)
     patente = models.CharField(max_length=10, db_index=True)
     marca = models.CharField(max_length=50)
     modelo = models.CharField(max_length=100)
@@ -108,6 +132,10 @@ class Vehiculo(models.Model):
 
     def __str__(self):
         return f"{self.patente} – {self.marca} {self.modelo}"
+
+    @property
+    def cliente_nombre(self):
+        return self.cliente.nombre_completo
 
     def save(self, *args, **kwargs):
         if self.cliente_id and self.cliente and self.owner_id != self.cliente.owner_id:
@@ -143,13 +171,31 @@ class Trabajo(models.Model):
         (ESTADO_GENERAL_CRITICO, "Crítico"),
     ]
 
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="trabajos", null=True, blank=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="trabajos")
     vehiculo = models.ForeignKey(Vehiculo, related_name="trabajos", on_delete=models.CASCADE)
     cliente = models.ForeignKey(Cliente, related_name="trabajos", on_delete=models.PROTECT)
+    # Mantiene la trazabilidad: una OT creada desde una cotización nunca pierde
+    # el documento comercial que le dio origen.
+    presupuesto_origen = models.ForeignKey(
+        "Presupuesto",
+        related_name="trabajos_generados",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
 
     fecha_ingreso = models.DateTimeField(default=timezone.now)
     fecha_egreso_estimado = models.DateTimeField(null=True, blank=True)
     fecha_egreso_real = models.DateTimeField(null=True, blank=True)
+    iniciado_en = models.DateTimeField(null=True, blank=True)
+    finalizado_en = models.DateTimeField(null=True, blank=True)
+    responsable = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="trabajos_asignados",
+    )
 
     kilometraje = models.PositiveIntegerField()
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default=ESTADO_INGRESADO)
@@ -194,6 +240,12 @@ class Trabajo(models.Model):
         self.eliminado_en = timezone.now()
         self.save(update_fields=['activo', 'eliminado_en'])
 
+    @property
+    def responsable_nombre(self):
+        if not self.responsable:
+            return ""
+        return self.responsable.get_full_name() or self.responsable.email or self.responsable.username
+
 class TrabajoItem(models.Model):
     TIPO_MANO_OBRA = "MANO_OBRA"
     TIPO_REPUESTO = "REPUESTO"
@@ -207,6 +259,15 @@ class TrabajoItem(models.Model):
     cantidad = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1.00"))
     precio_unitario = models.DecimalField(max_digits=12, decimal_places=2)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), editable=False)
+    completado = models.BooleanField(default=False, db_index=True)
+    completado_en = models.DateTimeField(null=True, blank=True)
+    completado_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="items_trabajo_completados",
+    )
 
     class Meta:
         verbose_name = "Ítem de trabajo"
@@ -232,7 +293,7 @@ class MovimientoCuenta(models.Model):
     TIPO_CHOICES = [("DEUDA", "Deuda generada / Fiado"), ("PAGO", "Pago registrado")]
     METODO_CHOICES = [("EFECTIVO", "Efectivo"), ("TRANSFERENCIA", "Transferencia"), ("TARJETA", "Tarjeta"), ("CHEQUE", "Cheque"), ("CONTADO", "Contado")]
 
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="movimientos_cuenta", null=True, blank=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="movimientos_cuenta")
     cliente = models.ForeignKey(Cliente, related_name="movimientos_cuenta", on_delete=models.CASCADE)
     trabajo = models.ForeignKey(Trabajo, related_name="movimientos_cuenta", null=True, blank=True, on_delete=models.SET_NULL)
     fecha = models.DateTimeField(default=timezone.now)
@@ -264,7 +325,7 @@ class MovimientoCuenta(models.Model):
 class Turno(models.Model):
     ESTADO_CHOICES = [("PENDIENTE", "Pendiente"), ("CONFIRMADO", "Confirmado"), ("CANCELADO", "Cancelado"), ("CUMPLIDO", "Cumplido")]
 
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="turnos_agenda", null=True, blank=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="turnos_agenda")
     cliente = models.ForeignKey(Cliente, related_name="turnos", on_delete=models.SET_NULL, null=True, blank=True)
     vehiculo = models.ForeignKey(Vehiculo, related_name="turnos", on_delete=models.SET_NULL, null=True, blank=True)
     fecha_hora = models.DateTimeField()
@@ -281,10 +342,12 @@ class Presupuesto(models.Model):
     TIPO_CHOICES = [("RAPIDO", "Presupuesto rápido"), ("DETALLADO", "Presupuesto detallado")]
     ESTADO_CHOICES = [("BORRADOR", "Borrador"), ("ENVIADO", "Enviado al Cliente"), ("APROBADO", "Aprobado"), ("RECHAZADO", "Rechazado")]
 
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="presupuestos", null=True, blank=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="presupuestos")
     cliente = models.ForeignKey(Cliente, related_name="presupuestos", on_delete=models.PROTECT, null=True, blank=True)
     vehiculo = models.ForeignKey(Vehiculo, related_name="presupuestos", on_delete=models.PROTECT, null=True, blank=True)
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    portal_activo = models.BooleanField(default=True)
+    portal_expires_at = models.DateTimeField(default=_portal_expiry_default, db_index=True)
 
     # ---> CAMPOS LEGACY (Mantenidos para que no explote forms.py ni el admin viejo)
     tipo = models.CharField(max_length=15, choices=TIPO_CHOICES, default="DETALLADO")
@@ -342,9 +405,22 @@ class Gasto(models.Model):
         (TIPO_OTROS, "Otros Gastos"),
     ]
 
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="gastos", null=True, blank=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="gastos")
+    registrado_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gastos_registrados",
+    )
     fecha = models.DateTimeField(default=timezone.now)
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default=TIPO_REPUESTOS)
+    metodo_pago = models.CharField(
+        "Método de pago",
+        max_length=20,
+        choices=MovimientoCuenta.METODO_CHOICES,
+        default="EFECTIVO",
+    )
     descripcion = models.CharField(max_length=255)
     monto = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
     comprobante = models.CharField(max_length=50, blank=True)
@@ -354,6 +430,66 @@ class Gasto(models.Model):
 #    AUTH / SAAS
 # ========================
 
+class Taller(models.Model):
+    """Tenant formal: el contenedor aislado de datos y miembros."""
+    owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="taller_propietario")
+    nombre = models.CharField(max_length=150)
+    activo = models.BooleanField(default=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.nombre
+
+
+class MembresiaTaller(models.Model):
+    ROL_ADMIN = "ADMIN"
+    ROL_RECEPCION = "RECEPCION"
+    ROL_MECANICO = "MECANICO"
+    ROL_CONTADOR = "CONTADOR"
+    ROL_CHOICES = [
+        (ROL_ADMIN, "Administrador"),
+        (ROL_RECEPCION, "Recepción"),
+        (ROL_MECANICO, "Mecánico"),
+        (ROL_CONTADOR, "Contador"),
+    ]
+    taller = models.ForeignKey(Taller, on_delete=models.CASCADE, related_name="miembros")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="membresias_taller")
+    rol = models.CharField(max_length=20, choices=ROL_CHOICES, default=ROL_MECANICO)
+    activo = models.BooleanField(default=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["taller", "user"], name="uniq_membresia_taller_usuario")]
+
+
+class InvitacionTaller(models.Model):
+    taller = models.ForeignKey(Taller, on_delete=models.CASCADE, related_name="invitaciones")
+    email = models.EmailField()
+    rol = models.CharField(max_length=20, choices=MembresiaTaller.ROL_CHOICES)
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    expires_at = models.DateTimeField(default=_invitation_expiry_default)
+    aceptada_en = models.DateTimeField(null=True, blank=True)
+    creada_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="invitaciones_creadas")
+
+    @property
+    def vigente(self):
+        return self.aceptada_en is None and self.expires_at > timezone.now()
+
+
+class AuditoriaTaller(models.Model):
+    taller = models.ForeignKey(Taller, on_delete=models.CASCADE, related_name="auditoria")
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="acciones_taller")
+    accion = models.CharField(max_length=80)
+    detalle = models.CharField(max_length=255)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creado_en"]
+
+
+TRIAL_DAYS = 7
+
+
 class PerfilTaller(models.Model):
     """Perfil extendido del usuario: datos del taller para el SaaS multi-tenant."""
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="perfil")
@@ -361,7 +497,15 @@ class PerfilTaller(models.Model):
     taller_nombre = models.CharField(max_length=150)
     taller_ciudad = models.CharField(max_length=100, blank=True)
     taller_tel = models.CharField(max_length=50, blank=True)
+    taller_cuit = models.CharField("CUIT", max_length=20, blank=True)
+    logo = models.ImageField(upload_to=logo_taller_upload_to, null=True, blank=True)
     trial_start = models.DateTimeField(auto_now_add=True)
+    plan_activo_hasta = models.DateTimeField(
+        "Plan pago vigente hasta",
+        null=True,
+        blank=True,
+        help_text="Se completa a mano desde el admin al acordar el pago por WhatsApp. Vacío = solo corre el trial.",
+    )
 
     class Meta:
         verbose_name = "Perfil del Taller"
@@ -370,9 +514,26 @@ class PerfilTaller(models.Model):
     def __str__(self):
         return f"{self.taller_nombre} ({self.user.email})"
 
+    @property
+    def trial_vencido(self) -> bool:
+        return timezone.now() >= self.trial_start + timedelta(days=TRIAL_DAYS)
+
+    @property
+    def plan_vigente(self) -> bool:
+        return bool(self.plan_activo_hasta) and timezone.now() < self.plan_activo_hasta
+
+    @property
+    def acceso_vigente(self) -> bool:
+        """Puerta de acceso real: trial sin vencer o plan pago activo."""
+        return self.plan_vigente or not self.trial_vencido
+
 
 def _generar_token():
     return secrets.token_hex(32)
+
+
+def _token_expiry_default():
+    return timezone.now() + timedelta(days=30)
 
 
 class ApiToken(models.Model):
@@ -380,6 +541,7 @@ class ApiToken(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="api_token")
     key = models.CharField(max_length=64, unique=True, db_index=True, default=_generar_token)
     created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(default=_token_expiry_default, db_index=True)
 
     class Meta:
         verbose_name = "Token API"
@@ -390,5 +552,10 @@ class ApiToken(models.Model):
 
     def rotate(self):
         self.key = _generar_token()
-        self.save(update_fields=["key"])
+        self.expires_at = _token_expiry_default()
+        self.save(update_fields=["key", "expires_at"])
         return self
+
+    @property
+    def is_expired(self):
+        return self.expires_at <= timezone.now()

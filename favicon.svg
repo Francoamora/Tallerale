@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36">
+  
+  <rect width="36" height="36" rx="6" fill="#07080A"></rect>
+  
+  <rect x="0.5" y="0.5" width="35" height="35" rx="5.5" fill="none" stroke="rgba(74,222,128,0.18)" stroke-width="1"></rect>
+  
+  <rect x="4" y="4.5" width="16" height="1.8" rx="0.9" fill="rgba(74,222,128,0.55)"></rect>
+  
+  <text x="4" y="18.5" font-family="&#39;Courier New&#39;, Courier, monospace" font-size="9.5" font-weight="700" fill="#4ade80">~❯</text>
+  
+  <text x="4" y="30" font-family="&#39;Courier New&#39;, Courier, monospace" font-size="12.5" font-weight="700" fill="white" letter-spacing="1.2">FAM</text>
+</svg>

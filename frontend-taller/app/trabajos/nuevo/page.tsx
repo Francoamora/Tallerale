@@ -5,10 +5,9 @@ import { useEffect, useRef, useState, useTransition, Suspense, type ReactNode } 
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { SectionCard } from "@/components/section-card";
-import { StatusBadge } from "@/components/status-badge";
-import { getClientes, getVehiculos, getTrabajoById, crearTrabajo, editarTrabajo } from "@/lib/api";
+import { getClientes, getVehiculoById, getVehiculos, getTrabajoById, getPresupuestoById, crearTrabajo, editarTrabajo } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
-import type { Cliente, Vehiculo, Trabajo } from "@/lib/types";
+import type { Cliente, Vehiculo, TrabajoItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // --- Tipos ---
@@ -24,6 +23,12 @@ function createItem(id: number, tipo: TrabajoItemDraft["tipo"] = "MANO_OBRA"): T
   return { id, tipo, descripcion: "", cantidad: "1", precio_unitario: "0" };
 }
 
+function normalizeItemType(tipo: string): TrabajoItemDraft["tipo"] {
+  return ["MANO_OBRA", "REPUESTO", "INSUMO", "OTRO"].includes(tipo)
+    ? tipo as TrabajoItemDraft["tipo"]
+    : "MANO_OBRA";
+}
+
 function parseAmount(value: string) {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -36,6 +41,8 @@ function FormularioTrabajo() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("id"); // Detectar si estamos editando
+  const presupuestoOrigenId = searchParams.get("presupuesto");
+  const vehiculoPreId = searchParams.get("vehiculo");
   
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
@@ -74,7 +81,7 @@ function FormularioTrabajo() {
           setVehiculos(vehiculosData);
         }
 
-        // SI HAY ID EN LA URL, PRECISAMOS PRECARGAR EL FORMULARIO
+        // Si hay una OT, la precargamos para editarla.
         if (editId && active) {
           const trabajo = await getTrabajoById(Number(editId));
           
@@ -99,9 +106,9 @@ function FormularioTrabajo() {
           }
 
           if (trabajo.items && trabajo.items.length > 0) {
-            const itemsPrecargados: TrabajoItemDraft[] = trabajo.items.map((i: any, index: number) => ({
+            const itemsPrecargados: TrabajoItemDraft[] = trabajo.items.map((i: TrabajoItem, index: number) => ({
               id: index + 1,
-              tipo: i.tipo,
+              tipo: normalizeItemType(i.tipo),
               descripcion: i.descripcion,
               cantidad: i.cantidad.toString(),
               precio_unitario: i.precio_unitario.toString()
@@ -109,8 +116,57 @@ function FormularioTrabajo() {
             setItems(itemsPrecargados);
             setNextItemId(trabajo.items.length + 1);
           }
+        } else if (presupuestoOrigenId && active) {
+          const presupuestoId = Number(presupuestoOrigenId);
+          if (!Number.isSafeInteger(presupuestoId) || presupuestoId <= 0) {
+            setFeedback({ tone: "error", message: "El presupuesto indicado no es válido." });
+            return;
+          }
+
+          const presupuesto = await getPresupuestoById(presupuestoId);
+          if (!presupuesto.cliente || !presupuesto.vehiculo) {
+            setFeedback({ tone: "error", message: "Este presupuesto no tiene cliente y vehículo completos para convertirlo en una orden." });
+            return;
+          }
+          if (presupuesto.estado === "RECHAZADO") {
+            setFeedback({ tone: "error", message: "No se puede crear una orden desde un presupuesto rechazado." });
+            return;
+          }
+
+          const clienteId = presupuesto.cliente.id.toString();
+          setForm((current) => ({
+            ...current,
+            clienteId,
+            vehiculoId: presupuesto.vehiculo!.id.toString(),
+            kilometraje: presupuesto.vehiculo!.kilometraje_actual.toString(),
+            resumen_trabajos: presupuesto.resumen_corto || "",
+            descuento: presupuesto.descuento.toString(),
+          }));
+          setClienteBusqueda(presupuesto.cliente.nombre_completo);
+          setItems(
+            presupuesto.items.length
+              ? presupuesto.items.map((item, index) => ({
+                  id: index + 1,
+                  tipo: normalizeItemType(item.tipo),
+                  descripcion: item.descripcion,
+                  cantidad: item.cantidad.toString(),
+                  precio_unitario: item.precio_unitario.toString(),
+                }))
+              : [createItem(1)],
+          );
+          setNextItemId(Math.max(presupuesto.items.length + 1, 2));
+          setFeedback({ tone: "success", message: `Orden preparada desde el presupuesto P-${presupuesto.id}. Revisá el kilometraje y guardá para convertirlo.` });
+        } else if (vehiculoPreId && active) {
+          const vehiculo = await getVehiculoById(Number(vehiculoPreId));
+          setForm((current) => ({
+            ...current,
+            clienteId: vehiculo.cliente_id.toString(),
+            vehiculoId: vehiculo.id.toString(),
+            kilometraje: vehiculo.kilometraje_actual.toString(),
+          }));
+          setClienteBusqueda(vehiculo.cliente_nombre);
         }
-      } catch (error) {
+      } catch {
         if (active) setFeedback({ tone: "error", message: "Error al cargar la base de datos o la orden solicitada." });
       } finally {
         if (active) setIsLoading(false);
@@ -118,7 +174,7 @@ function FormularioTrabajo() {
     }
     init();
     return () => { active = false; };
-  }, [editId]);
+  }, [editId, presupuestoOrigenId, vehiculoPreId]);
 
   // Click-outside para el combobox de cliente
   useEffect(() => {
@@ -203,6 +259,7 @@ function FormularioTrabajo() {
         recomendaciones_proximo_service: form.recomendaciones_proximo_service.trim(),
         proximo_control_km: form.proximo_control_km ? Number(form.proximo_control_km) : null,
         descuento,
+        presupuesto_origen_id: !editId && presupuestoOrigenId ? Number(presupuestoOrigenId) : undefined,
         items: items.map(item => ({
           tipo: item.tipo,
           descripcion: item.descripcion.trim(),
@@ -219,9 +276,10 @@ function FormularioTrabajo() {
         setFeedback({ tone: "success", message: "¡Trabajo guardado exitosamente!" });
       }
       
-      startRedirect(() => { router.push("/trabajos"); router.refresh(); });
-    } catch (error: any) {
-      setFeedback({ tone: "error", message: error.message || "Error inesperado del servidor." });
+      startRedirect(() => router.push("/trabajos"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Error inesperado del servidor.";
+      setFeedback({ tone: "error", message });
       setIsSaving(false);
     }
   }
@@ -390,11 +448,25 @@ function FormularioTrabajo() {
                   </select>
                   <input required type="text" placeholder="Detalle..." value={item.descripcion} onChange={(e) => updateItem(item.id, "descripcion", e.target.value)} className={inputBase + " py-2 text-xs"} />
                   <input required min="0.01" step="0.01" type="number" placeholder="Cant." value={item.cantidad} onChange={(e) => updateItem(item.id, "cantidad", e.target.value)} className={inputBase + " py-2 text-xs"} />
-                  <input required min="0" step="0.01" type="number" placeholder="Precio U." value={item.precio_unitario} onChange={(e) => updateItem(item.id, "precio_unitario", e.target.value)} className={inputBase + " py-2 text-xs font-mono"} />
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
+                    <input
+                      required
+                      min="0"
+                      step="0.01"
+                      type="number"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={item.precio_unitario}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onChange={(e) => updateItem(item.id, "precio_unitario", e.target.value)}
+                      className={inputBase + " money-input py-2 pl-7 text-right font-mono text-xs font-bold tabular-nums"}
+                    />
+                  </div>
                   
                   <div className="flex items-center justify-between px-2 sm:justify-start">
                     <span className="text-xs font-bold sm:hidden text-slate-500">Subtotal:</span>
-                    <span className="font-mono text-sm font-semibold text-slate-900 dark:text-brand-400">{formatCurrency(subtotal)}</span>
+                    <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 font-mono text-sm font-black tabular-nums text-slate-900 dark:bg-slate-800 dark:text-white">{formatCurrency(subtotal)}</span>
                   </div>
 
                   <div className="absolute right-2 top-2 sm:static sm:flex sm:justify-center">
@@ -443,30 +515,38 @@ function FormularioTrabajo() {
 
       {/* COLUMNA LATERAL (RESUMEN EN VIVO) */}
       <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <h3 className="mb-5 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Total a Cobrar</h3>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="p-5 sm:p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-300">Total a Cobrar</h3>
+            <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">Resumen</span>
+          </div>
           
           <div className="space-y-4 border-b border-slate-100 pb-5 dark:border-slate-700">
             <div className="flex justify-between text-sm">
               <span className="font-medium text-slate-600 dark:text-slate-400">Mano de Obra</span>
-              <span className="font-mono font-semibold text-slate-900 dark:text-white">{formatCurrency(subtotalManoObra)}</span>
+              <span className="font-mono font-bold tabular-nums text-slate-950 dark:text-white">{formatCurrency(subtotalManoObra)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="font-medium text-slate-600 dark:text-slate-400">Repuestos/Insumos</span>
-              <span className="font-mono font-semibold text-slate-900 dark:text-white">{formatCurrency(subtotalOtros)}</span>
+              <span className="font-mono font-bold tabular-nums text-slate-950 dark:text-white">{formatCurrency(subtotalOtros)}</span>
             </div>
             <div className="flex items-center justify-between pt-2">
               <span className="text-sm font-medium text-brand-600 dark:text-brand-400">Descuento</span>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-                <input type="number" min="0" step="0.01" value={form.descuento} onChange={(e) => updateForm("descuento", e.target.value)} className="w-28 rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-7 pr-3 text-right font-mono text-sm font-bold text-slate-900 outline-none transition focus:border-brand-500 focus:bg-white dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
+                <input type="number" inputMode="decimal" min="0" step="0.01" value={form.descuento} onFocus={(event) => event.currentTarget.select()} onChange={(e) => updateForm("descuento", e.target.value)} className="money-input w-28 rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-7 pr-3 text-right font-mono text-sm font-bold tabular-nums text-slate-900 outline-none transition focus:border-brand-500 focus:bg-white dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
               </div>
             </div>
           </div>
+          </div>
 
-          <div className="mt-5 flex items-end justify-between">
-            <span className="text-xs font-bold uppercase tracking-widest text-slate-500">TOTAL</span>
-            <span className="font-mono text-4xl font-black tracking-tight text-slate-900 dark:text-brand-400">{formatCurrency(total)}</span>
+          <div className="flex items-center justify-between gap-4 bg-slate-950 px-5 py-5 dark:bg-slate-950 sm:px-6">
+            <div>
+              <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Total final</span>
+              <span className="mt-1 block text-[10px] font-medium text-slate-500">Importe estimado</span>
+            </div>
+            <span className="whitespace-nowrap font-mono text-3xl font-black tracking-tight tabular-nums text-white sm:text-4xl">{formatCurrency(total)}</span>
           </div>
         </div>
 

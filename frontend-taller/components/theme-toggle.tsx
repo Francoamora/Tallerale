@@ -6,17 +6,14 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
   const [isDark, setIsDark] = useState(false);
 
-  // Evitamos el error de hidratación de Next.js esperando a que el componente monte en el cliente
+  // El tema ya fue aplicado antes del primer pintado en app/layout.tsx. Acá solo
+  // sincronizamos el control con la clase que quedó activa en el documento.
   useEffect(() => {
-    setMounted(true);
-    // Verificamos si el usuario ya tenía el modo oscuro guardado en su navegador o sistema
-    const storedTheme = localStorage.getItem("theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    
-    if (storedTheme === "dark" || (!storedTheme && prefersDark)) {
-      setIsDark(true);
-      document.documentElement.classList.add("dark");
-    }
+    const frame = requestAnimationFrame(() => {
+      setIsDark(document.documentElement.classList.contains("dark"));
+      setMounted(true);
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   const toggleTheme = (dark: boolean) => {
@@ -28,11 +25,12 @@ export function ThemeToggle() {
       document.documentElement.classList.remove("dark");
       localStorage.setItem("theme", "light");
     }
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
   };
 
   // Skeleton sutil mientras carga para evitar saltos en la pantalla
   if (!mounted) {
-    return <div className="h-9 w-[72px] animate-pulse rounded-full bg-slate-100 border border-slate-200" />;
+    return <div className="h-9 w-[72px] animate-pulse rounded-full border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900" />;
   }
 
   return (

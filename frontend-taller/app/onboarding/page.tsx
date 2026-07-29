@@ -89,7 +89,10 @@ export default function OnboardingPage() {
       router.replace("/registro");
       return;
     }
-    setNombre(session.owner_nombre.split(" ")[0] || "Mecánico");
+    const frame = requestAnimationFrame(() => {
+      setNombre(session.owner_nombre.split(" ")[0] || "Mecánico");
+    });
+    return () => cancelAnimationFrame(frame);
   }, [router]);
 
   const pasoActual = PASOS[step];

@@ -10,9 +10,15 @@
   /* Tu color naranja corporativo */
   --color-brand-50: #fff7ed;
   --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-300: #fdba74;
+  --color-brand-400: #fb923c;
   --color-brand-500: #f97316;
   --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+  --color-brand-800: #9a3412;
   --color-brand-900: #7c2d12;
+  --color-brand-950: #431407;
 }
 
 /* Scrollbar invisible pero útil */
@@ -20,3 +26,37 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { @apply bg-slate-300 dark:bg-slate-700 rounded-full; }
 ::-webkit-scrollbar-thumb:hover { @apply bg-brand-500; }
+
+/* Desplazamiento táctil disponible sin dibujar una barra dentro de paneles
+   laterales y menús compactos. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* iOS Safari ignora el padding de los <input type="date"> y los renderiza
+   mucho más altos que el resto de los campos (rompe la consistencia visual
+   de los filtros en mobile). Forzamos una altura fija igual a los demás. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2.75rem;
+}
+
+/* Los controles nativos de incremento ensucian los importes y varían entre
+   navegadores. Los ocultamos solamente en campos monetarios. */
+input.money-input::-webkit-outer-spin-button,
+input.money-input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+input.money-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+  font-variant-numeric: tabular-nums;
+}

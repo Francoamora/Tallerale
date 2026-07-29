@@ -10,6 +10,7 @@ import { getClienteById, getVehiculosPorCliente, getTrabajosPorCliente, getMovim
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
 import type { Cliente, Trabajo, Vehiculo, MovimientoCuenta } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -32,7 +33,7 @@ export default function PerfilCliente({ params }: PageProps) {
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState({ nombre: "", telefono: "", email: "", dni: "" });
+  const [formData, setFormData] = useState({ nombre: "", apellido: "", telefono: "", email: "", dni: "" });
 
   useEffect(() => {
     async function cargarPerfil() {
@@ -47,7 +48,8 @@ export default function PerfilCliente({ params }: PageProps) {
 
         setCliente(clienteData);
         setFormData({
-          nombre: clienteData.nombre_completo,
+          nombre: clienteData.nombre,
+          apellido: clienteData.apellido || "",
           telefono: clienteData.telefono || "",
           email: clienteData.email || "",
           dni: clienteData.dni || "",
@@ -55,7 +57,7 @@ export default function PerfilCliente({ params }: PageProps) {
         setVehiculos(vehiculosData);
         setTrabajos(trabajosData);
         setMovimientos(movimientosData);
-      } catch (err) {
+      } catch {
         setError("No se pudo cargar el expediente del cliente.");
       } finally {
         setLoading(false);
@@ -69,14 +71,18 @@ export default function PerfilCliente({ params }: PageProps) {
       mostrarNotificacion("El nombre es obligatorio", true);
       return;
     }
+    if (formData.telefono.trim() && !normalizeWhatsAppPhone(formData.telefono)) {
+      mostrarNotificacion("Revisá el celular: usá código de área + número, sin el 15.", true);
+      return;
+    }
     setIsSaving(true);
     try {
       const clienteActualizado = await editarCliente(clienteId, formData);
       setCliente(clienteActualizado);
       setIsEditing(false);
       mostrarNotificacion("Perfil actualizado correctamente");
-    } catch (e: any) {
-      mostrarNotificacion(e.message || "Error al actualizar", true);
+    } catch (error) {
+      mostrarNotificacion(error instanceof Error ? error.message : "Error al actualizar", true);
     } finally {
       setIsSaving(false);
     }
@@ -88,8 +94,8 @@ export default function PerfilCliente({ params }: PageProps) {
   }
 
   const getWhatsAppLink = (telefono: string) => {
-    if (!telefono) return null;
-    return `https://wa.me/${telefono.replace(/\D/g, "")}`;
+    const normalizado = normalizeWhatsAppPhone(telefono);
+    return normalizado ? `https://wa.me/${normalizado}` : null;
   };
 
   if (loading) {
@@ -121,11 +127,12 @@ export default function PerfilCliente({ params }: PageProps) {
   return (
     <AppShell
       currentPath="/clientes"
+      compact
       badge="Perfil de Cliente"
       title={isEditing ? "Editando Perfil..." : cliente.nombre_completo}
       description={`Cliente #${cliente.id} · ${vehiculos.length} vehículo${vehiculos.length !== 1 ? "s" : ""} registrado${vehiculos.length !== 1 ? "s" : ""}`}
     >
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
 
         {/* TOAST */}
         {notificacion.msg && (
@@ -135,51 +142,60 @@ export default function PerfilCliente({ params }: PageProps) {
         )}
 
         {/* BARRA DE ACCIONES */}
-        <div className="flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <Link href="/clientes" className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 transition">
+        <div className="grid grid-cols-[auto_1fr] gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex sm:flex-wrap sm:gap-3 sm:p-4">
+          <Link href="/clientes" aria-label="Volver a clientes" className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           </Link>
 
           {waLink && !isEditing && (
-            <a href={waLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-600 transition hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400">
+            <a href={waLink} className="flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-50 px-4 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 sm:justify-start">
               <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>
               WhatsApp
             </a>
           )}
+          {!waLink && !isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="flex h-10 items-center justify-center rounded-xl bg-amber-50 px-3 text-xs font-bold text-amber-700 transition hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-300"
+            >
+              Agregar celular para WhatsApp
+            </button>
+          )}
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="col-span-2 grid grid-cols-3 gap-2 sm:ml-auto sm:flex sm:items-center sm:gap-3">
             {isEditing ? (
               <>
-                <button onClick={() => setIsEditing(false)} className="rounded-xl px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white transition">Cancelar</button>
-                <button onClick={handleGuardar} disabled={isSaving} className="rounded-xl bg-brand-600 px-6 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-50">
+                <button onClick={() => setIsEditing(false)} className="col-span-1 h-10 rounded-xl px-3 text-xs font-bold text-slate-500 transition hover:text-slate-900 dark:hover:text-white sm:px-4 sm:text-sm">Cancelar</button>
+                <button onClick={handleGuardar} disabled={isSaving} className="col-span-2 h-10 rounded-xl bg-brand-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-50 sm:px-6 sm:text-sm">
                   {isSaving ? "Guardando..." : "Guardar"}
                 </button>
               </>
             ) : (
               <>
-                <button onClick={() => setIsEditing(true)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">
-                  Editar Perfil
+                <button onClick={() => setIsEditing(true)} className="h-10 rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 sm:px-4 sm:text-sm">
+                  Editar
                 </button>
-                <Link href={`/presupuestos/nuevo?cliente=${cliente.id}`} className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-700 transition hover:bg-sky-100 dark:border-sky-800/50 dark:bg-sky-900/20 dark:text-sky-400">
+                <Link href={`/presupuestos/nuevo?cliente=${cliente.id}`} className="flex h-10 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-3 text-xs font-bold text-sky-700 transition hover:bg-sky-100 dark:border-sky-800/50 dark:bg-sky-900/20 dark:text-sky-400 sm:px-4 sm:text-sm">
                   + Presupuesto
                 </Link>
-                <Link href={`/trabajos/nuevo?cliente=${cliente.id}`} className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-500">
-                  + Nueva Orden
+                <Link href={`/trabajos/nuevo?cliente=${cliente.id}`} className="flex h-10 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-500 sm:px-5 sm:text-sm">
+                  + Nueva OT
                 </Link>
               </>
             )}
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+        <div className="grid min-w-0 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
 
           {/* COLUMNA IZQUIERDA */}
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-4 sm:space-y-6">
 
             {/* FLOTA REGISTRADA */}
             <SectionCard
               title="Flota Registrada"
               description="Vehículos asociados a este titular."
+              compact
               action={
                 <Link
                   href={`/vehiculos/nuevo?cliente=${cliente.id}`}
@@ -190,18 +206,19 @@ export default function PerfilCliente({ params }: PageProps) {
               }
             >
               {vehiculos.length > 0 ? (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2.5 sm:grid-cols-2">
                   {vehiculos.map((v) => (
-                    <div key={v.id} className="group relative rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-brand-300 dark:border-slate-700 dark:bg-slate-800/50">
+                    <div key={v.id} className="group relative min-w-0 rounded-xl bg-slate-50 p-3.5 ring-1 ring-inset ring-slate-200 transition hover:ring-brand-300 dark:bg-slate-900/35 dark:ring-slate-700">
                       <div className="flex items-center justify-between">
                         <span className="inline-flex items-center rounded-md bg-slate-900 px-2.5 py-1 font-mono text-[11px] font-bold tracking-widest text-white dark:bg-slate-700">
                           {v.patente}
                         </span>
-                        <Link href={`/trabajos/nuevo?vehiculo=${v.id}`} className="rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[10px] font-bold text-brand-600 opacity-0 transition group-hover:opacity-100 dark:border-brand-900/50 dark:bg-brand-900/20 dark:text-brand-400 hover:bg-brand-600 hover:text-white">
-                          OT
+                        <Link href={`/trabajos/nuevo?vehiculo=${v.id}`} className="shrink-0 rounded-lg bg-brand-50 px-2.5 py-1 text-[10px] font-bold text-brand-700 transition hover:bg-brand-600 hover:text-white dark:bg-brand-900/25 dark:text-brand-300 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                          <span className="sm:hidden">OT</span>
+                          <span className="hidden sm:inline">Nueva OT</span>
                         </Link>
                       </div>
-                      <p className="mt-2 font-semibold uppercase text-slate-700 dark:text-slate-300">
+                      <p className="mt-2 truncate text-sm font-bold text-slate-800 dark:text-slate-200">
                         {v.marca} {v.modelo}
                         {v.anio && <span className="ml-1 text-xs font-normal text-slate-400">{v.anio}</span>}
                       </p>
@@ -226,16 +243,16 @@ export default function PerfilCliente({ params }: PageProps) {
 
             {/* TABS: HISTORIAL / CUENTA */}
             <div>
-              <div className="mb-4 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800/50 w-fit">
+              <div className="mb-3 flex w-full rounded-xl bg-slate-100 p-1 dark:bg-slate-800/50 sm:mb-4 sm:w-fit">
                 <button
                   onClick={() => setTabActiva("historial")}
-                  className={cn("rounded-lg px-5 py-2 text-sm font-bold transition-all", tabActiva === "historial" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}
+                  className={cn("flex-1 whitespace-nowrap rounded-lg px-2 py-2 text-xs font-bold transition-all sm:flex-none sm:px-5 sm:text-sm", tabActiva === "historial" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}
                 >
-                  Historial de Órdenes
+                  Historial
                 </button>
                 <button
                   onClick={() => setTabActiva("cuenta")}
-                  className={cn("rounded-lg px-5 py-2 text-sm font-bold transition-all", tabActiva === "cuenta" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}
+                  className={cn("flex-1 whitespace-nowrap rounded-lg px-2 py-2 text-xs font-bold transition-all sm:flex-none sm:px-5 sm:text-sm", tabActiva === "cuenta" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}
                 >
                   Cuenta Corriente
                   {movimientos.length > 0 && (
@@ -247,8 +264,32 @@ export default function PerfilCliente({ params }: PageProps) {
               </div>
 
               {tabActiva === "historial" && (
-                <SectionCard title="Registro de Trabajos">
-                  <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                <SectionCard title="Registro de trabajos" compact>
+                  <div className="space-y-2 md:hidden">
+                    {trabajos.length > 0 ? (
+                      trabajos.map((t) => (
+                        <Link
+                          key={t.id}
+                          href={`/trabajos/${t.id}`}
+                          className="grid grid-cols-[1fr_auto] gap-2 rounded-xl bg-slate-50 p-3.5 ring-1 ring-inset ring-slate-200 dark:bg-slate-900/35 dark:ring-slate-700"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="font-mono text-xs font-black text-slate-900 dark:text-white">{t.patente}</span>
+                              <StatusBadge status={t.estado} />
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">{formatDateTime(t.fecha_ingreso).split(",")[0]}</p>
+                          </div>
+                          <span className="self-center whitespace-nowrap font-mono text-sm font-black text-slate-900 dark:text-white">
+                            {formatCurrency(t.total)}
+                          </span>
+                        </Link>
+                      ))
+                    ) : (
+                      <p className="py-5 text-center text-sm text-slate-500">Sin historial operativo.</p>
+                    )}
+                  </div>
+                  <div className="hidden overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 md:block">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-50 dark:bg-slate-800/50">
                         <tr>
@@ -284,8 +325,28 @@ export default function PerfilCliente({ params }: PageProps) {
               )}
 
               {tabActiva === "cuenta" && (
-                <SectionCard title="Movimientos de Cuenta">
-                  <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                <SectionCard title="Movimientos de cuenta" compact>
+                  <div className="space-y-2 md:hidden">
+                    {movimientos.length > 0 ? (
+                      movimientos.map((m) => {
+                        const esPago = m.tipo === "PAGO";
+                        return (
+                          <div key={m.id} className="grid grid-cols-[1fr_auto] gap-2 rounded-xl bg-slate-50 p-3.5 ring-1 ring-inset ring-slate-200 dark:bg-slate-900/35 dark:ring-slate-700">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-bold text-slate-800 dark:text-slate-200">{m.descripcion || (esPago ? "Pago" : "Deuda generada")}</p>
+                              <p className="mt-1 text-[11px] text-slate-500">{formatDateTime(m.fecha).split(",")[0]} · {m.metodo_pago || "Sin método"}</p>
+                            </div>
+                            <span className={cn("self-center whitespace-nowrap font-mono text-sm font-black", esPago ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+                              {esPago ? "−" : "+"}{formatCurrency(m.monto)}
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="py-5 text-center text-sm text-slate-500">Sin movimientos registrados.</p>
+                    )}
+                  </div>
+                  <div className="hidden overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 md:block">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-50 dark:bg-slate-800/50">
                         <tr>
@@ -326,29 +387,52 @@ export default function PerfilCliente({ params }: PageProps) {
           </div>
 
           {/* COLUMNA DERECHA */}
-          <aside className="space-y-6">
+          <aside className="order-first flex min-w-0 flex-col gap-4 lg:order-none lg:block lg:space-y-6">
 
             {/* DATOS DE CONTACTO */}
-            <div className={cn("rounded-2xl border bg-white p-6 shadow-sm transition-colors dark:bg-slate-800", isEditing ? "border-brand-400 ring-4 ring-brand-500/10 dark:border-brand-500" : "border-slate-200 dark:border-slate-700")}>
-              <h3 className="mb-5 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            <div className={cn("order-2 rounded-2xl border bg-white p-4 shadow-sm transition-colors dark:bg-slate-800 sm:p-6 lg:order-none", isEditing ? "border-brand-400 ring-4 ring-brand-500/10 dark:border-brand-500" : "border-slate-200 dark:border-slate-700")}>
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 sm:mb-5">
                 {isEditing ? "Editando Información" : "Información de Contacto"}
               </h3>
 
-              <div className="space-y-4 text-sm">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Nombre / Razón Social</p>
+              <div className={cn("text-sm", isEditing ? "space-y-4" : "grid grid-cols-2 gap-x-4 gap-y-3")}>
+                <div className={cn(!isEditing && "col-span-2 min-w-0")}>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Nombre</p>
                   {isEditing ? (
                     <input type="text" value={formData.nombre} onChange={(e) => setFormData({ ...formData, nombre: e.target.value })} className={inputStyle} />
                   ) : (
-                    <p className="mt-1 font-bold text-slate-900 dark:text-white">{cliente.nombre_completo}</p>
+                    <p className="mt-1 font-bold text-slate-900 dark:text-white">{cliente.nombre}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Apellido / Razón Social</p>
+                  {isEditing ? (
+                    <input type="text" value={formData.apellido} onChange={(e) => setFormData({ ...formData, apellido: e.target.value })} className={inputStyle} />
+                  ) : (
+                    <p className="mt-1 font-medium text-slate-900 dark:text-white">{cliente.apellido || <span className="italic text-slate-400">No especificado</span>}</p>
                   )}
                 </div>
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Teléfono</p>
                   {isEditing ? (
-                    <input type="text" value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className={inputStyle} />
+                    <>
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        value={formData.telefono}
+                        onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                        placeholder="Ej: 342 5551234"
+                        className={inputStyle}
+                      />
+                      <p className="mt-1.5 text-[11px] leading-4 text-emerald-700 dark:text-emerald-400">
+                        Código de área + número, sin 15. Se usará para enviar por WhatsApp.
+                      </p>
+                    </>
                   ) : (
-                    <p className="mt-1 font-medium text-slate-900 dark:text-white">{cliente.telefono || <span className="italic text-slate-400">No especificado</span>}</p>
+                    <p className="mt-1 font-medium text-slate-900 dark:text-white">
+                      {cliente.telefono || <span className="font-semibold text-amber-600 dark:text-amber-400">Falta cargarlo para usar WhatsApp</span>}
+                    </p>
                   )}
                 </div>
                 <div>
@@ -359,20 +443,20 @@ export default function PerfilCliente({ params }: PageProps) {
                     <p className="mt-1 font-mono font-medium text-slate-900 dark:text-white">{cliente.dni || <span className="italic text-slate-400">No especificado</span>}</p>
                   )}
                 </div>
-                <div>
+                <div className={cn(!isEditing && "col-span-2 min-w-0")}>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Email</p>
                   {isEditing ? (
                     <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className={inputStyle} />
                   ) : (
-                    <p className="mt-1 font-medium text-slate-900 dark:text-white">{cliente.email || <span className="italic text-slate-400">No especificado</span>}</p>
+                    <p className="mt-1 break-all font-medium text-slate-900 dark:text-white">{cliente.email || <span className="italic text-slate-400">No especificado</span>}</p>
                   )}
                 </div>
               </div>
             </div>
 
             {/* ESTADO DE CUENTA */}
-            <div className={cn("overflow-hidden rounded-2xl border shadow-sm", tieneDeuda ? "border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-red-950/20" : "border-emerald-200 bg-emerald-50 dark:border-emerald-900/30 dark:bg-emerald-950/20")}>
-              <div className="p-6">
+            <div className={cn("order-1 overflow-hidden rounded-2xl border shadow-sm lg:order-none", tieneDeuda ? "border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-red-950/20" : "border-emerald-200 bg-emerald-50 dark:border-emerald-900/30 dark:bg-emerald-950/20")}>
+              <div className="p-4 sm:p-6">
                 <h3 className={cn("text-xs font-bold uppercase tracking-widest", tieneDeuda ? "text-red-800 dark:text-red-400" : "text-emerald-800 dark:text-emerald-400")}>
                   Estado de Cuenta
                 </h3>
@@ -380,13 +464,13 @@ export default function PerfilCliente({ params }: PageProps) {
                   <p className={cn("text-sm font-medium", tieneDeuda ? "text-red-700 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300")}>
                     {tieneDeuda ? "Deuda Pendiente" : "Al Día"}
                   </p>
-                  <p className={cn("mt-1 font-mono text-4xl font-black tracking-tight", tieneDeuda ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400")}>
+                  <p className={cn("mt-1 font-mono text-2xl font-black tracking-tight sm:text-4xl", tieneDeuda ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400")}>
                     {formatCurrency(Math.abs(saldo))}
                   </p>
                 </div>
               </div>
               {tieneDeuda && (
-                <div className="bg-red-100 px-6 py-4 dark:bg-red-900/40">
+                <div className="bg-red-100 px-4 py-3 dark:bg-red-900/40 sm:px-6 sm:py-4">
                   <Link
                     href={`/pagos/registrar?cliente=${cliente.id}`}
                     className="flex w-full items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-red-700"
@@ -398,7 +482,7 @@ export default function PerfilCliente({ params }: PageProps) {
             </div>
 
             {/* ACCIONES RÁPIDAS */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="order-3 hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:block lg:order-none">
               <h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Acciones Rápidas</h3>
               <div className="space-y-2">
                 <Link href={`/trabajos/nuevo?cliente=${cliente.id}`} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:bg-brand-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">
@@ -418,6 +502,17 @@ export default function PerfilCliente({ params }: PageProps) {
                   Registrar Vehículo
                 </Link>
               </div>
+            </div>
+
+            <div className="order-3 grid grid-cols-2 gap-2 sm:hidden">
+              <Link href={`/turnos/nuevo?cliente=${cliente.id}`} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-xs font-bold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">
+                <svg className="h-4 w-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                Agendar turno
+              </Link>
+              <Link href={`/vehiculos/nuevo?cliente=${cliente.id}`} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-3 text-xs font-bold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">
+                <svg className="h-4 w-4 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m6-6H6" /></svg>
+                Agregar vehículo
+              </Link>
             </div>
           </aside>
         </div>

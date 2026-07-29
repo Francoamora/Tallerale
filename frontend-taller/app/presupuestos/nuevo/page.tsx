@@ -5,9 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { SectionCard } from "@/components/section-card";
-import { getClientes, getVehiculos, getVehiculosPorCliente, getPresupuestoById, crearPresupuesto, editarPresupuesto } from "@/lib/api";
+import { getClientes, getVehiculoById, getVehiculosPorCliente, getPresupuestoById, crearPresupuesto, editarPresupuesto } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
-import type { Cliente, Vehiculo } from "@/lib/types";
+import type { Cliente, PresupuestoItem, Vehiculo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // --- Tipos ---
@@ -21,6 +21,12 @@ function createItem(id: number, tipo: ItemDraft["tipo"] = "MANO_OBRA"): ItemDraf
   return { id, tipo, descripcion: "", cantidad: "1", precio_unitario: "0" };
 }
 
+function normalizeItemType(tipo: string): ItemDraft["tipo"] {
+  return ["MANO_OBRA", "REPUESTO", "INSUMO", "OTRO"].includes(tipo)
+    ? tipo as ItemDraft["tipo"]
+    : "MANO_OBRA";
+}
+
 function parseAmount(value: string) {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -32,6 +38,7 @@ function FormularioPresupuesto() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("id");
+  const vehiculoPreId = searchParams.get("vehiculo");
   
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
@@ -50,7 +57,7 @@ function FormularioPresupuesto() {
   const [nextItemId, setNextItemId] = useState(2);
   
   // Modos de UI
-  const [modoCliente, setModoCliente] = useState<"DIRECTORIO" | "EXPRESS">("EXPRESS"); 
+  const [modoCliente, setModoCliente] = useState<"DIRECTORIO" | "EXPRESS">("DIRECTORIO");
   const [expressData, setExpressData] = useState<ExpressState>(INITIAL_EXPRESS);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -67,6 +74,16 @@ function FormularioPresupuesto() {
 
         if (active) {
           setClientes(clientesData);
+        }
+
+        if (vehiculoPreId && active) {
+          const vehiculo = await getVehiculoById(Number(vehiculoPreId));
+          const vehiculosDelTitular = await getVehiculosPorCliente(vehiculo.cliente_id);
+          setModoCliente("DIRECTORIO");
+          setClienteId(vehiculo.cliente_id.toString());
+          setVehiculoId(vehiculo.id.toString());
+          setClienteBusqueda(vehiculo.cliente_nombre);
+          setVehiculos(vehiculosDelTitular);
         }
 
         // BLOQUE BLINDADO (Si falla el ID, atrapamos el 404 acá)
@@ -93,9 +110,9 @@ function FormularioPresupuesto() {
             }
             
             if (presupuesto.items && presupuesto.items.length > 0) {
-              setItems(presupuesto.items.map((i: any, idx: number) => ({
+              setItems(presupuesto.items.map((i: PresupuestoItem, idx: number) => ({
                 id: idx + 1,
-                tipo: i.tipo || "MANO_OBRA",
+                tipo: normalizeItemType(i.tipo),
                 descripcion: i.descripcion || "",
                 cantidad: i.cantidad?.toString() || "1",
                 precio_unitario: i.precio_unitario?.toString() || "0"
@@ -107,7 +124,7 @@ function FormularioPresupuesto() {
              setFeedback({ tone: "error", message: "La cotización que intentás abrir no existe o fue eliminada." });
           }
         }
-      } catch (error) {
+      } catch {
         if (active) setFeedback({ tone: "error", message: "Error crítico al sincronizar con la base de datos." });
       } finally {
         if (active) setIsLoading(false);
@@ -115,7 +132,7 @@ function FormularioPresupuesto() {
     }
     init();
     return () => { active = false; };
-  }, [editId]);
+  }, [editId, vehiculoPreId]);
 
   function updateExpress<K extends keyof ExpressState>(key: K, value: ExpressState[K]) { setExpressData(curr => ({ ...curr, [key]: value })); }
   function updateItem(itemId: number, key: keyof Omit<ItemDraft, "id">, value: string) { setItems(curr => curr.map(item => (item.id === itemId ? { ...item, [key]: value } : item))); }
@@ -186,9 +203,10 @@ function FormularioPresupuesto() {
         setFeedback({ tone: "success", message: "¡Cotización guardada exitosamente!" });
       }
 
-      startRedirect(() => { router.push("/presupuestos"); router.refresh(); });
-    } catch (error: any) {
-      setFeedback({ tone: "error", message: error.message || "Error inesperado." });
+      startRedirect(() => router.push("/presupuestos"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Error inesperado.";
+      setFeedback({ tone: "error", message });
       setIsSaving(false);
     }
   }
@@ -213,12 +231,12 @@ function FormularioPresupuesto() {
           
           {/* Switch de Alta Express vs Directorio (Solo visible al crear) */}
           {!editId && (
-            <div className="mb-6 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800/50 w-full sm:w-fit">
-              <button type="button" onClick={() => setModoCliente("EXPRESS")} className={cn("flex-1 sm:px-6 rounded-lg py-2 text-sm font-bold transition-all", modoCliente === "EXPRESS" ? "bg-white text-sky-600 shadow-sm dark:bg-slate-700 dark:text-sky-400" : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}>
-                ⚡ Alta Express
-              </button>
+            <div className="mb-6 flex w-full rounded-xl bg-slate-100 p-1 dark:bg-slate-800/50 sm:w-fit">
               <button type="button" onClick={() => setModoCliente("DIRECTORIO")} className={cn("flex-1 sm:px-6 rounded-lg py-2 text-sm font-bold transition-all", modoCliente === "DIRECTORIO" ? "bg-white text-sky-600 shadow-sm dark:bg-slate-700 dark:text-sky-400" : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}>
-                Buscar en Directorio
+                Cliente registrado
+              </button>
+              <button type="button" onClick={() => setModoCliente("EXPRESS")} className={cn("flex-1 sm:px-6 rounded-lg py-2 text-sm font-bold transition-all", modoCliente === "EXPRESS" ? "bg-white text-sky-600 shadow-sm dark:bg-slate-700 dark:text-sky-400" : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}>
+                Alta rápida
               </button>
             </div>
           )}
@@ -319,13 +337,13 @@ function FormularioPresupuesto() {
               </>
             ) : (
               <>
-                <div className="space-y-4 rounded-2xl border border-sky-200 bg-sky-50/50 p-5 dark:border-sky-900/30 dark:bg-sky-900/10">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-sky-600 dark:text-sky-400">Datos Rápidos</h4>
+                <div className="space-y-4 rounded-xl bg-slate-50 p-5 dark:bg-slate-900/50">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Cliente nuevo</h4>
                   <input autoFocus type="text" placeholder="Nombre y Apellido *" value={expressData.clienteNombre} onChange={e => updateExpress("clienteNombre", e.target.value)} className={inputBase} />
                   <input type="text" placeholder="Teléfono de Contacto" value={expressData.clienteTelefono} onChange={e => updateExpress("clienteTelefono", e.target.value)} className={inputBase} />
                 </div>
-                <div className="space-y-4 rounded-2xl border border-sky-200 bg-sky-50/50 p-5 dark:border-sky-900/30 dark:bg-sky-900/10">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-sky-600 dark:text-sky-400">Datos del Auto</h4>
+                <div className="space-y-4 rounded-xl bg-amber-50/60 p-5 dark:bg-amber-950/10">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">Vehículo nuevo</h4>
                   <input type="text" placeholder="Patente (Ej: AB123CD) *" value={expressData.vehiculoPatente} onChange={e => updateExpress("vehiculoPatente", e.target.value.toUpperCase())} className={cn(inputBase, "font-mono font-bold uppercase")} />
                   <input type="text" placeholder="Vehículo (Ej: VW Gol) *" value={expressData.vehiculoMarca} onChange={e => updateExpress("vehiculoMarca", e.target.value)} className={inputBase} />
                 </div>
@@ -369,6 +387,7 @@ function FormularioPresupuesto() {
                     <option value="MANO_OBRA">Mano de Obra</option>
                     <option value="REPUESTO">Repuesto</option>
                     <option value="INSUMO">Insumo</option>
+                    <option value="OTRO">Otro</option>
                   </select>
                   <input required type="text" placeholder="Detalle..." value={item.descripcion} onChange={(e) => updateItem(item.id, "descripcion", e.target.value)} className={inputBase + " py-2 text-xs"} />
                   <input required min="0.01" step="0.01" type="number" placeholder="Cant." value={item.cantidad} onChange={(e) => updateItem(item.id, "cantidad", e.target.value)} className={inputBase + " py-2 text-xs"} />
@@ -403,10 +422,10 @@ function FormularioPresupuesto() {
 
       {/* COLUMNA LATERAL (RESUMEN EN VIVO) */}
       <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
-        <div className="rounded-2xl border border-sky-200 bg-sky-50/50 p-6 shadow-sm dark:border-sky-900/30 dark:bg-sky-900/10">
-          <h3 className="mb-5 text-xs font-bold uppercase tracking-widest text-sky-600 dark:text-sky-400">Cotización Total</h3>
+        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/40 p-6 shadow-sm dark:border-amber-900/30 dark:bg-amber-950/10">
+          <h3 className="mb-5 text-xs font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400">Resumen de la cotización</h3>
           
-          <div className="space-y-4 border-b border-sky-200/50 pb-5 dark:border-sky-800/50">
+          <div className="space-y-4 border-b border-amber-200/70 pb-5 dark:border-amber-900/40">
             <div className="flex justify-between text-sm">
               <span className="font-medium text-slate-600 dark:text-slate-400">Mano de Obra</span>
               <span className="font-mono font-semibold text-slate-900 dark:text-white">{formatCurrency(subtotalManoObra)}</span>
@@ -416,7 +435,7 @@ function FormularioPresupuesto() {
               <span className="font-mono font-semibold text-slate-900 dark:text-white">{formatCurrency(subtotalOtros)}</span>
             </div>
             <div className="flex items-center justify-between pt-2">
-              <span className="text-sm font-medium text-sky-600 dark:text-sky-400">Descuento</span>
+              <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Descuento</span>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                 <input type="number" min="0" step="0.01" value={descuento} onChange={(e) => setDescuento(e.target.value)} className="w-28 rounded-lg border border-sky-200 bg-white py-1.5 pl-7 pr-3 text-right font-mono text-sm font-bold text-slate-900 outline-none transition focus:border-sky-500 dark:border-sky-700 dark:bg-slate-900 dark:text-white" />
@@ -425,8 +444,8 @@ function FormularioPresupuesto() {
           </div>
 
           <div className="mt-5 flex items-end justify-between">
-            <span className="text-xs font-bold uppercase tracking-widest text-sky-600 dark:text-sky-500">TOTAL</span>
-            <span className="font-mono text-4xl font-black tracking-tight text-slate-900 dark:text-sky-400">{formatCurrency(total)}</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Total</span>
+            <span className="font-mono text-4xl font-black tracking-tight text-slate-900 dark:text-white">{formatCurrency(total)}</span>
           </div>
         </div>
       </aside>
@@ -438,8 +457,8 @@ export default function Page() {
   return (
     <AppShell
       currentPath="/presupuestos"
-      title="Nueva Cotización"
-      description="Armá presupuestos rápidos con cálculo automático."
+      title="Crear o editar cotización"
+      description="Cliente, vehículo, conceptos y total en una sola pantalla."
     >
       <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800"></div>}>
         <FormularioPresupuesto />

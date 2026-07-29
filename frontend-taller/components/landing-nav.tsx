@@ -7,11 +7,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { WA_SOPORTE } from "@/lib/trial";
 
+// Sin link a "Probá gratis" acá: ya está el botón "Probar gratis" al lado,
+// repetirlo como link de texto solo suma ruido.
 const NAV_LINKS = [
   { href: "#features",  label: "Funciones" },
-  { href: "#portal",    label: "Portal del Cliente" },
-  { href: "#prueba",    label: "Probá gratis" },
+  { href: "#portal",    label: "Cómo funciona" },
   { href: "#contacto",  label: "Contacto" },
 ];
 
@@ -38,24 +40,32 @@ export function LandingNav() {
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-8 lg:py-5">
 
-          {/* ── Logo ── */}
-          <Link href="/landing" onClick={close} className="flex items-center gap-2.5 transition active:scale-95">
-            <LogoOS />
-            <div className="flex flex-col leading-none">
-              <span className="text-[15px] font-black tracking-tight">
+          {/* ── Logo + firma de la casa ── */}
+          {/* El link a FAM va afuera del <Link> del logo: anidar anchors es HTML inválido. */}
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Link href="/landing" onClick={close} className="shrink-0 transition active:scale-95">
+              <LogoOS />
+            </Link>
+            <div className="flex min-w-0 flex-col leading-none">
+              <Link href="/landing" onClick={close} className="text-[15px] font-black tracking-tight transition active:scale-95">
                 <span className="text-slate-900">Taller</span>
                 <span className="text-orange-500">OS</span>
-              </span>
-              <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
-                Para talleres mecánicos
-              </span>
+              </Link>
+              <a
+                href="https://famdesarrollos.com.ar"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-0.5 truncate text-[7px] font-bold uppercase tracking-wider text-slate-400 transition hover:text-orange-500 sm:text-[9px]"
+              >
+                Creado por FAM Desarrollos
+              </a>
             </div>
-          </Link>
+          </div>
 
           {/* ── Nav desktop ── */}
-          <nav className="hidden items-center gap-7 md:flex">
+          <nav className="hidden items-center gap-9 md:flex">
             {NAV_LINKS.map(l => (
               <a key={l.href} href={l.href}
                 className="text-sm font-semibold text-slate-500 transition hover:text-slate-900">
@@ -65,31 +75,35 @@ export function LandingNav() {
           </nav>
 
           {/* ── CTAs ── */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-5">
             <Link href="/login"
               className="hidden text-sm font-semibold text-slate-600 transition hover:text-slate-900 sm:block">
               Acceder
             </Link>
+            {/* En mobile va compacto: la firma de FAM comparte la fila y el espacio es poco. */}
             <Link href="/registro"
-              className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700 active:scale-95">
-              Probar gratis
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 active:scale-95 sm:px-4">
+              <span className="sm:hidden">Probar</span>
+              <span className="hidden sm:inline">Probar gratis</span>
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </Link>
 
-            {/* Hamburger — solo mobile */}
+            {/* Hamburger — solo mobile. 44×44 mínimo (Apple HIG) para que sea fácil de tocar. */}
             <button
+              type="button"
               onClick={() => setOpen(!open)}
               aria-label={open ? "Cerrar menú" : "Abrir menú"}
-              className="ml-1 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 md:hidden"
+              aria-expanded={open}
+              className="-mr-1 ml-1 flex h-11 w-11 touch-manipulation items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm transition active:scale-95 active:bg-slate-100 md:hidden"
             >
               {open ? (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               ) : (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               )}
@@ -135,9 +149,7 @@ export function LandingNav() {
 
               {/* WA mobile */}
               <a
-                href="https://wa.me/543482277706?text=Hola!%20Quiero%20info%20sobre%20TallerOS"
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero info sobre TallerOS")}`}
                 onClick={close}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#25D366]/30 bg-[#25D366]/5 py-3 text-sm font-semibold text-[#1a9e4f] transition hover:bg-[#25D366]/10"
               >

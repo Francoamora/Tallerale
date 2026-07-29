@@ -8,6 +8,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LandingNav } from "@/components/landing-nav";
+import { CarIcon, CheckIcon, XIcon } from "@/components/icons";
+import { WA_SOPORTE } from "@/lib/trial";
 
 export const metadata: Metadata = {
   title: "TallerOS · El sistema operativo de tu taller mecánico",
@@ -62,6 +64,26 @@ const I = {
   wa: (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+    </svg>
+  ),
+  link: (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+    </svg>
+  ),
+  checkCircle: (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  bolt: (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+    </svg>
+  ),
+  pdf: (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 3h6m-7 6h8a2 2 0 002-2V7.828a2 2 0 00-.586-1.414l-3.828-3.828A2 2 0 0011.172 2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
     </svg>
   ),
 };
@@ -119,76 +141,94 @@ export default function LandingPage() {
       <LandingNav />
 
       {/* ══ HERO ════════════════════════════════════════════════════════════════ */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-4 py-24 sm:py-36">
-        {/* Blobs decorativos */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 -translate-y-1/4 rounded-full bg-orange-500/10 blur-3xl" />
-          <div className="absolute bottom-0 left-0 h-72 w-72 rounded-full bg-blue-500/8 blur-3xl" />
-          <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full bg-orange-500/8 blur-3xl" />
-          {/* Grid pattern sutil */}
-          <div className="absolute inset-0 opacity-[0.03]" style={{
-            backgroundImage: "linear-gradient(rgba(255,255,255,.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.8) 1px, transparent 1px)",
-            backgroundSize: "60px 60px",
-          }} />
-        </div>
+      {/* Composición única: el taller ocupa todo el fondo, el contenido flota   */}
+      {/* encima. Nada de "foto adentro de una tarjeta" — es un solo plano.      */}
+      {/* min-h-dvh: el video siempre llena como mínimo la primera pantalla,      */}
+      {/* sin importar la relación de ancho/alto — nada de franja blanca abajo. */}
+      <section className="relative isolate flex min-h-dvh flex-col overflow-hidden bg-slate-950">
 
-        <div className="relative mx-auto max-w-4xl text-center">
-          {/* Badge animado */}
-          <div className="mb-8 inline-flex items-center gap-2.5 rounded-full bg-orange-500/10 px-5 py-2 ring-1 ring-orange-500/25">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
-            <span className="text-xs font-bold uppercase tracking-widest text-orange-300">
-              🇦🇷 Hecho para talleres argentinos
-            </span>
-          </div>
+        {/* ── Fondo: video del taller (loop, sin sonido, cámara fija) ── */}
+        <video
+          className="absolute inset-0 h-full w-full object-cover object-[30%_28%]"
+          poster="/images/taller-hero-poster.jpg"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+        >
+          <source src="/videos/taller-hero.mp4" type="video/mp4" />
+        </video>
 
-          {/* Headline */}
-          <h1 className="text-5xl font-black leading-[1.05] tracking-tight text-white sm:text-7xl">
-            El sistema{" "}
-            <br className="hidden sm:block" />
-            operativo de{" "}
-            <span className="bg-gradient-to-r from-orange-400 via-orange-500 to-orange-400 bg-clip-text text-transparent">
-              tu taller
-            </span>
-          </h1>
+        {/* ── Overlay: degradado horizontal oscuro→transparente ── */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(90deg, rgba(2,6,23,.95) 0%, rgba(2,6,23,.88) 26%, rgba(2,6,23,.58) 52%, rgba(2,6,23,.24) 76%, rgba(2,6,23,.15) 100%)",
+          }}
+        />
 
-          {/* Subtítulo */}
-          <p className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-slate-400 sm:text-xl">
-            Presupuestos digitales, órdenes de trabajo, estado del taller,{" "}
-            <strong className="font-semibold text-slate-200">portal del cliente</strong>{" "}
-            y control de caja. Todo desde el celular, sin papeles, sin complicaciones.
-          </p>
+        {/* ── Overlay: viñeta sutil ── */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, transparent 45%, rgba(2,6,23,.4) 100%)",
+          }}
+        />
 
-          {/* CTAs */}
-          <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-            <Link
-              href="/registro"
-              className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 px-8 py-4 text-base font-black text-white shadow-2xl shadow-orange-500/40 transition hover:from-orange-600 hover:to-orange-700 active:scale-[0.98] sm:w-auto"
-            >
-              Empezar gratis — 7 días
-              <svg className="h-4 w-4 transition group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-            <a
-              href="#portal"
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 px-8 py-4 text-base font-semibold text-slate-300 transition hover:border-white/25 hover:bg-white/5 hover:text-white sm:w-auto"
-            >
-              Ver Portal del Cliente
-            </a>
-          </div>
+        {/* ── Overlay: glow naranja detrás del mecánico ── */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at 58% 42%, rgba(249,115,22,.16), transparent 55%)",
+          }}
+        />
 
-          {/* Stats strip */}
-          <div className="mt-16 grid grid-cols-3 gap-4 border-t border-white/10 pt-12 sm:gap-12">
-            {[
-              { v: "100%",  l: "Digital · Sin papel" },
-              { v: "5 min", l: "Para crear una OT completa" },
-              { v: "📱",    l: "Funciona en el celular" },
-            ].map(({ v, l }) => (
-              <div key={l} className="text-center">
-                <p className="text-3xl font-black text-white sm:text-4xl">{v}</p>
-                <p className="mt-1 text-xs font-medium text-slate-500 sm:text-sm">{l}</p>
-              </div>
-            ))}
+        {/* ── Contenido — flota a la izquierda, ancla arriba (sin centrado que */}
+        {/* deje huecos impredecibles), aprovechando el ancho disponible ── */}
+        {/* Sin mx-auto/max-w acá: si lo centramos en un contenedor angosto,     */}
+        {/* en pantallas anchas el texto queda lejos del borde real izquierdo. */}
+        <div className="relative mt-auto w-full px-4 pb-16 pt-24 sm:pb-20 lg:pb-24">
+          <div className="max-w-2xl">
+            {/* Headline */}
+            <h1 className="text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-6xl 2xl:text-7xl">
+              El sistema{" "}
+              <br />
+              operativo de{" "}
+              <span className="bg-gradient-to-r from-orange-400 via-orange-500 to-orange-400 bg-clip-text text-transparent">
+                tu taller
+              </span>
+            </h1>
+
+            {/* Subtítulo */}
+            <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-300 sm:mt-5 sm:text-xl">
+              Presupuestos digitales, órdenes de trabajo, estado del taller,{" "}
+              <strong className="font-semibold text-white">portal del cliente</strong>{" "}
+              y control de caja. Todo desde el celular, sin papeles, sin complicaciones.
+            </p>
+
+            {/* CTAs */}
+            <div className="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:gap-4">
+              <Link
+                href="/registro"
+                className="group flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3.5 text-sm font-black text-white shadow-2xl shadow-orange-500/40 transition hover:from-orange-600 hover:to-orange-700 active:scale-[0.98] sm:px-8 sm:py-4 sm:text-base"
+              >
+                Empezar gratis — 7 días
+                <svg className="h-4 w-4 transition group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+              <a
+                href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero saber más sobre TallerOS")}`}
+                className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:border-white/30 hover:bg-white/10 sm:px-8 sm:py-4 sm:text-base"
+              >
+                {I.wa}
+                Contactanos
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -204,8 +244,8 @@ export default function LandingPage() {
               Un sistema hecho para talleres reales
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-base text-slate-500">
-              No es un ERP genérico adaptado. Es la herramienta que un mecánico
-              necesita, pensada desde cero para el día a día del taller argentino.
+              Nada de programas de oficina complicados. Está pensado desde cero
+              para el día a día de un taller argentino: simple, claro y sin vueltas.
             </p>
           </div>
 
@@ -241,9 +281,9 @@ export default function LandingPage() {
               color="bg-violet-50 text-violet-600"
               items={[
                 "Vista tipo tablero por estado",
-                "Auto-refresh cada 60 segundos",
-                "Total de facturación por columna",
-                "Alertas de días en taller",
+                "Se actualiza solo, sin recargar la página",
+                "Total de facturación por estado",
+                "Avisa si un auto lleva muchos días en el taller",
               ]}
             />
             <FeatureCard
@@ -253,7 +293,7 @@ export default function LandingPage() {
               color="bg-emerald-50 text-emerald-600"
               items={[
                 "Cuenta corriente con saldo de deuda",
-                "Historial completo de OTs y presupuestos",
+                "Historial completo de trabajos y presupuestos",
                 "Filtro rápido 'Solo con deuda'",
                 "WhatsApp directo desde la ficha",
               ]}
@@ -264,22 +304,22 @@ export default function LandingPage() {
               desc="Registrá cobros, gastos y consultá el balance en tiempo real. Nunca más perder plata sin registrar."
               color="bg-rose-50 text-rose-600"
               items={[
-                "Ingresos y egresos categorizados",
-                "Evolución de facturación mensual",
-                "Ticket promedio y tendencias",
+                "Ingresos y gastos ordenados por categoría",
+                "Evolución de facturación mes a mes",
+                "Promedio de facturación por trabajo",
                 "Cuenta corriente por cliente",
               ]}
             />
             <FeatureCard
               icon={I.phone}
-              title="100% Mobile-First"
-              desc="Diseñado para el celular. Sin apps que instalar — todo desde el navegador, en cualquier dispositivo."
+              title="Desde el celular o la PC"
+              desc="Sin programas para instalar. Se abre desde el navegador y funciona en cualquier dispositivo."
               color="bg-slate-100 text-slate-600"
               items={[
-                "Navbar inferior nativa para móvil",
-                "Botones touch del tamaño correcto",
-                "Compartir por WhatsApp en un tap",
-                "Modo oscuro automático",
+                "Pensado para usarlo con una mano",
+                "Botones grandes, fáciles de tocar",
+                "Compartís por WhatsApp con un toque",
+                "Modo claro y oscuro",
               ]}
             />
           </div>
@@ -287,124 +327,209 @@ export default function LandingPage() {
       </section>
 
       {/* ══ PORTAL DEL CLIENTE ══════════════════════════════════════════════════ */}
-      <section id="portal" className="bg-gradient-to-b from-slate-900 to-slate-800 px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-5xl">
-          <div className="grid items-center gap-14 lg:grid-cols-2">
+      <section id="portal" className="bg-gradient-to-b from-slate-900 to-slate-800 px-4 py-16 sm:py-20 lg:py-24">
+        <div className="mx-auto max-w-7xl">
+          {/* 3 columnas corriendo en paralelo — texto, tarjetas y teléfono — en vez  */}
+          {/* de apilar todo lo visual en serie, que era lo que hacía gigante la sección. */}
+          <div className="grid items-center gap-10 lg:grid-cols-[1fr_0.85fr_0.95fr] lg:gap-8">
 
             {/* Texto */}
             <div>
               <p className="mb-3 text-[11px] font-black uppercase tracking-widest text-orange-400">
-                La diferencia que te pone adelante
+                Cómo funciona
               </p>
               <h2 className="text-3xl font-black leading-tight tracking-tight text-white sm:text-4xl">
-                Tu competencia manda PDFs.{" "}
-                <span className="text-orange-400">Vos mandás un link.</span>
+                Así se ve{" "}
+                <span className="text-orange-400">TallerOS por dentro.</span>
               </h2>
               <p className="mt-5 text-base leading-relaxed text-slate-400">
-                El Portal del Cliente de TallerOS es una página personalizada para cada
-                presupuesto u orden de trabajo. El cliente la abre en su celular, ve todo
-                el detalle y <strong className="font-semibold text-slate-200">puede aprobar o rechazar con un botón</strong> — sin apps, sin PDF de 5MB, sin llamadas.
+                Cada presupuesto se convierte en un documento prolijo y en un Portal
+                donde tu cliente lo ve en su celular y <strong className="font-semibold text-slate-200">aprueba con un botón</strong>.
+                Vos, mientras tanto, ves el historial de cada auto y la plata que
+                entra y sale — todo en el mismo lugar, sin planillas aparte.
               </p>
 
-              <ul className="mt-8 space-y-4">
+              <ul className="mt-8 space-y-5">
                 {[
-                  { e: "🔗", t: "Link único por presupuesto — el cliente no necesita cuenta ni contraseña" },
-                  { e: "✅", t: "Aprueba o rechaza con un botón. Vos recibís la notificación al instante" },
-                  { e: "🚗", t: "Portal del vehículo: historial completo + barra de próximo service en KM" },
-                  { e: "📤", t: "Compartí por WhatsApp con navigator.share() nativo del celular" },
-                  { e: "🎊", t: "Confetti animado cuando el cliente aprueba — experiencia memorable" },
-                ].map(({ e, t }) => (
+                  { icon: I.link, t: "Un link, no una app. Lo abre y ya está — sin cuenta, sin contraseña." },
+                  { icon: I.checkCircle, t: "Aprueba o rechaza con un botón. Te enterás en el momento, no cuando te acordás de llamarlo." },
+                  { icon: <CarIcon className="h-5 w-5" />, t: "Historial completo del vehículo, con cada service registrado — vos y tu cliente ven lo mismo." },
+                  {
+                    icon: (
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    ),
+                    t: "Cada cobro queda anotado en tu caja al toque, sin planilla aparte.",
+                  },
+                  { icon: I.bolt, t: "Menos llamadas explicando presupuestos por teléfono. El trabajo arranca antes." },
+                ].map(({ icon, t }) => (
                   <li key={t} className="flex items-start gap-3.5">
-                    <span className="shrink-0 text-xl">{e}</span>
-                    <span className="text-sm leading-snug text-slate-300">{t}</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-orange-400 ring-1 ring-white/10">
+                      {icon}
+                    </span>
+                    <span className="pt-2 text-sm leading-snug text-slate-300">{t}</span>
                   </li>
                 ))}
               </ul>
-
-              <div className="mt-10">
-                <Link
-                  href="/registro"
-                  className="inline-flex items-center gap-2 rounded-2xl bg-orange-500 px-7 py-4 text-sm font-black text-white shadow-lg shadow-orange-500/30 transition hover:bg-orange-600 active:scale-95"
-                >
-                  Probarlo ahora — 7 días gratis
-                  <span>{I.arrow}</span>
-                </Link>
-              </div>
             </div>
 
-            {/* Mockup del portal */}
-            <div className="relative mx-auto w-72">
-              {/* Teléfono */}
-              <div className="mx-auto w-64 rounded-[2.5rem] bg-slate-700 p-3 shadow-2xl ring-4 ring-white/5">
-                <div className="overflow-hidden rounded-[2rem] bg-gradient-to-b from-slate-50 to-white">
-                  {/* Notch */}
-                  <div className="flex justify-center pt-3 pb-2">
-                    <div className="h-1.5 w-12 rounded-full bg-slate-200" />
-                  </div>
-                  {/* Header portal */}
-                  <div className="border-b border-slate-100 px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500 text-[8px] font-black text-white">OS</div>
-                      <div>
-                        <p className="text-[9px] font-black text-slate-900">TallerOS</p>
-                        <p className="text-[7px] font-bold uppercase tracking-wider text-slate-400">Portal del Cliente</p>
-                      </div>
-                      <span className="ml-auto rounded-full bg-orange-50 px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-orange-600 ring-1 ring-orange-200">Portal</span>
+            {/* Columna de tarjetas — Comprobante, Historial y Caja, apiladas   */}
+            {/* en una sola fila angosta, no repartidas en dos filas anchas.   */}
+            <div className="mx-auto w-full max-w-[260px] space-y-3">
+              {/* Comprobante */}
+              <div className="overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div style={{ height: 4, background: "#efd38f" }} />
+                <div className="p-3.5">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-[9px] font-black"
+                      style={{ color: "#92400e" }}
+                    >
+                      MT
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-[10px] font-black leading-tight text-slate-900">Mi Taller</p>
+                      <p className="text-[7px] font-black uppercase tracking-widest" style={{ color: "#a16207" }}>Presupuesto</p>
                     </div>
                   </div>
-                  {/* Contenido */}
-                  <div className="space-y-2.5 p-4">
-                    <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Presupuesto</p>
-                          <p className="font-mono text-base font-black text-slate-900">P-0042</p>
-                          <p className="text-[9px] font-medium text-slate-500">Cambio de pastillas de freno</p>
-                        </div>
-                        <div className="rounded-xl bg-sky-50 px-2 py-1 text-center ring-1 ring-sky-200">
-                          <span className="block text-sm">📨</span>
-                          <span className="block text-[7px] font-black uppercase text-sky-600">Enviado</span>
-                        </div>
-                      </div>
-                      <div className="mt-2.5 flex items-center justify-between rounded-xl bg-slate-900 px-3 py-2">
-                        <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">Total</span>
-                        <span className="font-mono text-sm font-black text-orange-400">$48.500</span>
-                      </div>
+                  <div className="mt-2.5 space-y-1 border-t border-slate-100 pt-2">
+                    <div className="flex justify-between text-[8px]">
+                      <span className="text-slate-500">Mano de obra</span>
+                      <span className="font-mono font-bold text-slate-700">$20.000</span>
                     </div>
-                    <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
-                      <p className="mb-1 text-[8px] font-black uppercase tracking-wider text-slate-400">Vehículo</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">🚗</span>
-                        <div>
-                          <p className="font-mono text-xs font-black text-slate-900">ABC 123</p>
-                          <p className="text-[9px] text-slate-500">Toyota Corolla · 2019</p>
-                        </div>
-                      </div>
+                    <div className="flex justify-between text-[8px]">
+                      <span className="text-slate-500">Pastillas</span>
+                      <span className="font-mono font-bold text-slate-700">$28.500</span>
                     </div>
                   </div>
-                  {/* Sticky bar */}
-                  <div className="border-t border-slate-100 bg-white px-3 py-3">
-                    <p className="mb-2 text-center text-[8px] font-semibold text-slate-400">¿Aprobás este presupuesto?</p>
-                    <div className="flex gap-2">
-                      <div className="flex flex-1 items-center justify-center gap-1 rounded-xl border-2 border-slate-200 py-2 text-[9px] font-black text-slate-500">
-                        ✕ Rechazar
-                      </div>
-                      <div className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-emerald-500 py-2 text-[9px] font-black text-white shadow-md shadow-emerald-500/30">
-                        ✓ Aprobar
-                      </div>
-                    </div>
+                  <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-900 px-2 py-1.5">
+                    <span className="text-[7px] font-black uppercase tracking-widest text-slate-400">Total</span>
+                    <span className="font-mono text-[11px] font-black text-orange-400">$48.500</span>
                   </div>
                 </div>
               </div>
 
-              {/* Floating badges */}
-              <div className="absolute -right-6 top-16 animate-bounce rounded-2xl bg-emerald-500 px-3 py-2 shadow-xl" style={{ animationDuration: "2.5s" }}>
-                <p className="text-xs font-black text-white">🎊 ¡Aprobado!</p>
+              {/* Historial del vehículo */}
+              <div className="rounded-2xl bg-white p-3.5 shadow-2xl">
+                <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-slate-400">Historial</p>
+                <div className="space-y-2.5">
+                  {[
+                    { ot: "OT-0006", estado: "Entregado", dot: "bg-blue-400" },
+                    { ot: "OT-0004", estado: "Ingresado", dot: "bg-slate-400" },
+                  ].map((item, i) => (
+                    <div key={item.ot} className="flex items-center gap-2">
+                      <div className="flex flex-col items-center self-stretch">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.dot}`} />
+                        {i < 1 && <span className="mt-0.5 w-px flex-1 bg-slate-200" />}
+                      </div>
+                      <div className="min-w-0 flex-1 pb-1">
+                        <p className="truncate text-[9px] font-black text-slate-800">{item.ot}</p>
+                        <p className="text-[7px] font-bold uppercase tracking-wider text-slate-400">{item.estado}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="absolute -left-6 bottom-28 rounded-2xl bg-white px-3 py-2 shadow-xl ring-1 ring-slate-200">
-                <p className="text-[10px] font-bold text-slate-600">📲 Compartido por WA</p>
+
+              {/* Caja */}
+              <div className="rounded-2xl bg-white p-3.5 shadow-2xl">
+                <div className="flex items-center justify-between">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Caja del mes</p>
+                  <span className="font-mono text-[10px] font-black text-emerald-600">+18%</span>
+                </div>
+                <div className="mt-2.5 flex h-8 items-end gap-1">
+                  {[38, 55, 46, 70, 62, 95].map((h, i) => (
+                    <div key={i} className="flex-1 rounded-t-sm bg-gradient-to-t from-orange-300 to-orange-500" style={{ height: `${h}%` }} />
+                  ))}
+                </div>
+                <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2.5">
+                  <span className="text-[9px] text-slate-500">Ingresos del mes</span>
+                  <span className="font-mono text-[11px] font-black text-slate-900">$517.000</span>
+                </div>
               </div>
             </div>
+
+            {/* Teléfono — columna propia, corre en paralelo a las tarjetas */}
+            <div className="relative mx-auto w-full max-w-[260px]">
+                <div className="mx-auto w-64 rounded-[2.5rem] bg-slate-700 p-3 shadow-2xl ring-4 ring-white/5">
+                  <div className="overflow-hidden rounded-[2rem] bg-gradient-to-b from-slate-50 to-white">
+                    {/* Notch */}
+                    <div className="flex justify-center pt-3 pb-2">
+                      <div className="h-1.5 w-12 rounded-full bg-slate-200" />
+                    </div>
+                    {/* Header portal */}
+                    <div className="border-b border-slate-100 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500 text-[8px] font-black text-white">OS</div>
+                        <div>
+                          <p className="text-[9px] font-black text-slate-900">TallerOS</p>
+                          <p className="text-[7px] font-bold uppercase tracking-wider text-slate-400">Portal del Cliente</p>
+                        </div>
+                        <span className="ml-auto rounded-full bg-orange-50 px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-orange-600 ring-1 ring-orange-200">Portal</span>
+                      </div>
+                    </div>
+                    {/* Contenido */}
+                    <div className="space-y-2.5 p-4">
+                      <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Presupuesto</p>
+                            <p className="font-mono text-base font-black text-slate-900">P-0042</p>
+                            <p className="text-[9px] font-medium text-slate-500">Cambio de pastillas de freno</p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1 rounded-full border border-sky-200 bg-white px-2 py-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                            <span className="text-[7px] font-black uppercase text-sky-700">Enviado</span>
+                          </div>
+                        </div>
+                        <div className="mt-2.5 flex items-center justify-between rounded-xl bg-slate-900 px-3 py-2">
+                          <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">Total</span>
+                          <span className="font-mono text-sm font-black text-orange-400">$48.500</span>
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
+                        <p className="mb-1 text-[8px] font-black uppercase tracking-wider text-slate-400">Vehículo</p>
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
+                            <CarIcon className="h-3.5 w-3.5" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-mono text-xs font-black text-slate-900">ABC 123</p>
+                            <p className="text-[9px] text-slate-500">Toyota Corolla · 2019</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-[9px] font-black text-slate-700">4 services</p>
+                            <p className="text-[7px] font-bold uppercase tracking-wider text-slate-400">historial</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Sticky bar */}
+                    <div className="border-t border-slate-100 bg-white px-3 py-3">
+                      <p className="mb-2 text-center text-[8px] font-semibold text-slate-400">¿Aprobás este presupuesto?</p>
+                      <div className="flex gap-2">
+                        <div className="flex flex-1 items-center justify-center gap-1 rounded-xl border-2 border-slate-200 py-2 text-[9px] font-black text-slate-500">
+                          <XIcon className="h-2.5 w-2.5" /> Rechazar
+                        </div>
+                        <div className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-emerald-500 py-2 text-[9px] font-black text-white shadow-md shadow-emerald-500/30">
+                          <CheckIcon className="h-2.5 w-2.5" /> Aprobar
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Placas flotantes — calmas, sin rebote ni confetti */}
+                <div className="absolute -right-4 top-14 flex items-center gap-1.5 rounded-2xl bg-emerald-500 px-3 py-2 shadow-xl">
+                  <CheckIcon className="h-3.5 w-3.5 text-white" />
+                  <p className="text-xs font-black text-white">Aprobado</p>
+                </div>
+                <div className="absolute -left-4 bottom-24 flex items-center gap-1.5 rounded-2xl bg-white px-3 py-2 shadow-xl ring-1 ring-slate-200">
+                  <span className="text-emerald-500">{I.wa}</span>
+                  <p className="text-[10px] font-bold text-slate-600">Compartido por WA</p>
+                </div>
+              </div>
           </div>
         </div>
       </section>
@@ -419,7 +544,7 @@ export default function LandingPage() {
               <p className="mb-3 text-[11px] font-black uppercase tracking-widest text-orange-500">
                 Sin tarjeta · Sin contrato · Sin riesgos
               </p>
-              <h2 className="text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl">
+              <h2 className="text-3xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl">
                 Probá el sistema{" "}
                 <span className="text-orange-500">7 días</span>{" "}
                 completamente gratis
@@ -434,7 +559,7 @@ export default function LandingPage() {
               <ol className="mt-8 space-y-4">
                 {[
                   { n: "01", t: "Registrate", d: "Nombre, taller y listo. 2 minutos." },
-                  { n: "02", t: "Explorá el sistema", d: "Cargá clientes, vehículos, OTs y presupuestos." },
+                  { n: "02", t: "Explorá el sistema", d: "Cargá clientes, vehículos, órdenes de trabajo y presupuestos." },
                   { n: "03", t: "Si te gusta, seguimos", d: "Nos escribís y te asesoramos personalmente por WhatsApp." },
                 ].map(({ n, t, d }) => (
                   <li key={n} className="flex items-start gap-4">
@@ -458,9 +583,7 @@ export default function LandingPage() {
                   <span>{I.arrow}</span>
                 </Link>
                 <a
-                  href="https://wa.me/543482277706?text=Hola!%20Quiero%20saber%20m%C3%A1s%20sobre%20TallerOS%20antes%20de%20registrarme"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero saber más sobre TallerOS antes de registrarme")}`}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-7 py-4 text-sm font-black text-white transition hover:bg-[#1ebe5d] active:scale-95"
                 >
                   {I.wa}
@@ -485,7 +608,7 @@ export default function LandingPage() {
                   "Portal del cliente con aprobación online",
                   "Control de caja y cuenta corriente",
                   "Agenda de turnos",
-                  "Modo oscuro · Mobile-First",
+                  "Anda perfecto desde el celular",
                   "Soporte por WhatsApp si te trabás",
                 ].map((f) => (
                   <li key={f} className="flex items-center gap-3 text-sm text-slate-300">
@@ -509,47 +632,67 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ══ CTA FINAL ═══════════════════════════════════════════════════════════ */}
-      <section id="contacto" className="bg-slate-50 px-4 py-20 sm:py-28">
-        <div className="mx-auto max-w-3xl">
-          <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-8 py-16 text-center shadow-2xl ring-1 ring-white/5">
-            {/* Glow */}
-            <div className="pointer-events-none absolute inset-0">
-              <div className="absolute left-1/2 top-0 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange-500/15 blur-3xl" />
+      {/* ══ CTA FINAL + FAM DESARROLLOS ═══════════════════════════════════════════ */}
+      {/* Lado a lado en vez de apilado: son dos mensajes independientes, uno       */}
+      {/* debajo del otro solo estiraba la sección sin necesidad.                  */}
+      <section id="contacto" className="relative overflow-hidden bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-4 py-20 sm:py-24">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute left-1/4 top-0 h-64 w-64 -translate-y-1/2 rounded-full bg-orange-500/15 blur-3xl" />
+          <div className="absolute -right-20 bottom-0 h-72 w-72 rounded-full bg-orange-500/10 blur-3xl" />
+        </div>
+
+        <div className="relative mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-16">
+
+          {/* Oferta principal */}
+          <div className="text-center lg:text-left">
+            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-2xl shadow-orange-500/40 lg:mx-0">
+              <span className="text-lg font-black text-white">OS</span>
             </div>
 
-            <div className="relative">
-              {/* Logo grande */}
-              <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-2xl shadow-orange-500/40">
-                <span className="text-xl font-black text-white">OS</span>
-              </div>
+            <h2 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+              ¿Listo para modernizar tu taller?
+            </h2>
+            <p className="mx-auto mt-4 max-w-md text-base text-slate-400 lg:mx-0">
+              Empezá hoy. Sin instalación, sin contrato. Abrís el navegador
+              y ya está funcionando — desde el celular o la PC.
+            </p>
 
-              <h2 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
-                ¿Listo para modernizar tu taller?
-              </h2>
-              <p className="mx-auto mt-4 max-w-md text-base text-slate-400">
-                Empezá hoy. Sin instalación, sin contrato. Abrís el navegador
-                y ya está funcionando — desde el celular o la PC.
-              </p>
+            <div className="mt-8 flex justify-center lg:justify-start">
+              <Link
+                href="/registro"
+                className="flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 px-8 py-4 text-base font-black text-white shadow-lg shadow-orange-500/30 transition hover:from-orange-600 hover:to-orange-700 active:scale-[0.98] sm:w-auto"
+              >
+                Empezar 7 días gratis
+                <span>{I.arrow}</span>
+              </Link>
+            </div>
+          </div>
 
-              <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-                <Link
-                  href="/registro"
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 px-8 py-4 text-base font-black text-white shadow-lg shadow-orange-500/30 transition hover:from-orange-600 hover:to-orange-700 active:scale-[0.98] sm:w-auto"
-                >
-                  Empezar 7 días gratis
-                  <span>{I.arrow}</span>
-                </Link>
-                <a
-                  href="https://wa.me/543482277706?text=Hola!%20Quiero%20info%20sobre%20TallerOS"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-8 py-4 text-base font-black text-white transition hover:bg-[#1ebe5d] active:scale-[0.98] sm:w-auto"
-                >
-                  {I.wa}
-                  Consultar por WhatsApp
-                </a>
-              </div>
+          {/* Nota de la casa — separada por un borde, no apilada abajo */}
+          <div className="border-t border-white/10 pt-10 text-center lg:border-l lg:border-t-0 lg:pl-16 lg:pt-0 lg:text-left">
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-orange-400">
+              Un producto de FAM Desarrollos
+            </p>
+            <h3 className="mt-2.5 text-xl font-black tracking-tight text-white sm:text-2xl">
+              ¿Tu negocio necesita algo a medida?
+            </h3>
+            <p className="mx-auto mt-2.5 max-w-sm text-sm leading-relaxed text-slate-400 lg:mx-0">
+              TallerOS es nuestro sistema listo para usar. Si lo tuyo es otro rubro,
+              también desarrollamos sitios y sistemas desde cero.
+            </p>
+
+            <div className="mt-5 flex justify-center lg:justify-start">
+              <a
+                href="https://famdesarrollos.com.ar"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group inline-flex items-center gap-2 rounded-2xl border border-white/15 px-6 py-3.5 text-sm font-bold text-white transition hover:border-orange-500/50 hover:bg-orange-500/10"
+              >
+                famdesarrollos.com.ar
+                <svg className="h-4 w-4 transition group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </a>
             </div>
           </div>
         </div>
@@ -557,13 +700,15 @@ export default function LandingPage() {
 
       {/* ══ FOOTER ══════════════════════════════════════════════════════════════ */}
       <footer className="border-t border-slate-200 bg-slate-50">
-        {/* Footer principal */}
-        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-          <div className="flex flex-col items-center justify-between gap-8 sm:flex-row sm:items-start">
+        {/* Footer principal — marca a la izquierda, enlaces agrupados y     */}
+        {/* pegados entre sí a la derecha, un solo hueco intencional entre   */}
+        {/* ambos en vez de tres columnas fr que se estiran cada una sola.   */}
+        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-12 lg:flex-row lg:items-start lg:justify-between lg:gap-20">
 
             {/* Marca */}
-            <div className="text-center sm:text-left">
-              <div className="flex items-center justify-center gap-3 sm:justify-start">
+            <div className="max-w-xs">
+              <div className="flex items-center gap-3">
                 <LogoOS size="sm" />
                 <div>
                   <BrandName className="text-base font-black" />
@@ -572,56 +717,73 @@ export default function LandingPage() {
                   </p>
                 </div>
               </div>
+              <p className="mt-4 text-sm leading-relaxed text-slate-500">
+                Presupuestos, órdenes de trabajo, estado del taller y portal del cliente,
+                todo en un solo lugar.
+              </p>
               <p className="mt-3 text-xs text-slate-400">
-                🇦🇷 Software argentino para talleres mecánicos argentinos
+                Pensado para los mejores talleres
               </p>
             </div>
 
-            {/* Links */}
-            <div className="flex flex-wrap justify-center gap-x-8 gap-y-2 sm:justify-end">
-              <a href="#features" className="text-sm font-medium text-slate-500 transition hover:text-slate-900">Funciones</a>
-              <a href="#portal" className="text-sm font-medium text-slate-500 transition hover:text-slate-900">Portal del Cliente</a>
-              <a href="#prueba" className="text-sm font-medium text-slate-500 transition hover:text-slate-900">Probá gratis</a>
-              <Link href="/login" className="text-sm font-medium text-slate-500 transition hover:text-slate-900">Acceder</Link>
-              <a
-                href="https://wa.me/543482277706"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-medium text-[#25D366] transition hover:text-[#1ebe5d]"
-              >
-                WhatsApp
-              </a>
+            {/* Enlaces — Producto y Cuenta, uno al lado del otro, compactos */}
+            <div className="flex gap-16 sm:gap-20">
+              <div>
+                <p className="mb-3.5 text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Producto
+                </p>
+                <ul className="space-y-2.5">
+                  <li><a href="#features" className="text-sm font-medium text-slate-600 transition hover:text-slate-900">Funciones</a></li>
+                  <li><a href="#portal" className="text-sm font-medium text-slate-600 transition hover:text-slate-900">Cómo funciona</a></li>
+                  <li><a href="#prueba" className="text-sm font-medium text-slate-600 transition hover:text-slate-900">Probá gratis</a></li>
+                </ul>
+              </div>
+
+              <div>
+                <p className="mb-3.5 text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Cuenta
+                </p>
+                <ul className="space-y-2.5">
+                  <li><Link href="/login" className="text-sm font-medium text-slate-600 transition hover:text-slate-900">Acceder</Link></li>
+                  <li><Link href="/registro" className="text-sm font-medium text-slate-600 transition hover:text-slate-900">Crear cuenta</Link></li>
+                  <li>
+                    <a
+                      href={`https://wa.me/${WA_SOPORTE}`}
+                      className="text-sm font-medium text-[#25D366] transition hover:text-[#1ebe5d]"
+                    >
+                      WhatsApp
+                    </a>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Footer inferior — copyright + crédito */}
         <div className="border-t border-slate-200 bg-white px-4 py-4 sm:px-6">
-          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 sm:flex-row">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 sm:flex-row lg:px-4">
             <p className="text-xs text-slate-400">
               © {new Date().getFullYear()}{" "}
               <span className="font-semibold">
                 <span className="text-slate-600">Taller</span>
                 <span className="text-orange-500">OS</span>
               </span>
-              {" "}· tutallermecanico.com.ar · Todos los derechos reservados
+              {" "}· Todos los derechos reservados
             </p>
 
-            {/* ── Crédito FAM Soluciones con tooltip de teléfono ── */}
-            <div className="group relative inline-flex items-center gap-1.5">
-              <span className="text-xs text-slate-400">Desarrollado por</span>
-              <span className="relative cursor-default">
-                <span className="text-xs font-bold text-slate-600 transition group-hover:text-orange-500">
-                  FAM Soluciones
-                </span>
-                {/* Tooltip con teléfono — aparece al hover */}
-                <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-xl bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white opacity-0 shadow-lg transition-all duration-200 group-hover:-translate-y-1 group-hover:opacity-100">
-                  📱 3482277706
-                  {/* Triangulito */}
-                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
-                </span>
-              </span>
-            </div>
+            {/* ── Crédito de la casa ── */}
+            <p className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+              Desarrollado por
+              <a
+                href="https://famdesarrollos.com.ar"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-slate-600 underline-offset-2 transition hover:text-orange-500 hover:underline"
+              >
+                FAM Desarrollos
+              </a>
+            </p>
           </div>
         </div>
       </footer>

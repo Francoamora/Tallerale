@@ -1,21 +1,9 @@
 // src/lib/api.ts
 import type { Cliente, DashboardStats, Gasto, MovimientoCuenta, Presupuesto, PresupuestoDetalle, Trabajo, TrabajoDetalle, Turno, Vehiculo } from "@/lib/types";
-import { getAuthToken, clearSession } from "@/lib/trial";
+import { clearSession } from "@/lib/trial";
 
 const FALLBACK_API_ROOT = "http://127.0.0.1:8000/api";
-
-function resolveApiRoot() {
-  const configured = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (configured) return configured.replace(/\/$/, "");
-
-  if (process.env.NODE_ENV !== "production") {
-    return FALLBACK_API_ROOT;
-  }
-
-  return "";
-}
-
-export const API_ROOT = resolveApiRoot();
+export const API_ROOT = "/api/backend";
 
 export const PUBLIC_API_ROOT = (
   process.env.NEXT_PUBLIC_API_BASE_URL ??
@@ -49,23 +37,21 @@ async function apiRequest<T>(path: string, options: FetchOptions = {}): Promise<
 
   if (params) {
     const cleanParams = Object.fromEntries(
-      Object.entries(params).filter(([_, v]) => v !== undefined && v !== "")
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== "")
     ) as Record<string, string>;
 
     const queryString = new URLSearchParams(cleanParams).toString();
     if (queryString) url += `?${queryString}`;
   }
 
-  // ── TOKEN DE AUTH ──────────────────────────────────────────────────────────
-  // Lee el token Django del usuario logueado y lo adjunta en cada request.
-  // Sin token válido Django rechazará la petición (401) o devolverá datos
-  // del "anonimo" si la view no tiene IsAuthenticated — ambos casos se manejan.
-  const token = typeof window !== "undefined" ? getAuthToken() : "";
+  // FormData (subida de archivos) necesita que el browser fije su propio
+  // Content-Type con el boundary del multipart — si lo pisamos con
+  // application/json, Django no puede parsear el body.
+  const esFormData = typeof FormData !== "undefined" && customConfig.body instanceof FormData;
 
   const headers: HeadersInit = {
     Accept: "application/json",
-    ...(token ? { Authorization: `Token ${token}` } : {}),
-    ...(customConfig.body ? { "Content-Type": "application/json" } : {}),
+    ...(customConfig.body && !esFormData ? { "Content-Type": "application/json" } : {}),
     ...customConfig.headers,
   };
 
@@ -78,9 +64,9 @@ async function apiRequest<T>(path: string, options: FetchOptions = {}): Promise<
   try {
     const response = await fetch(url, config);
 
-    // ── INTERCEPTOR 401 / 403 ─────────────────────────────────────────────
-    // Token expirado o inválido → limpiar sesión y redirigir al login.
-    if (response.status === 401 || response.status === 403) {
+    // 401 invalida la sesión. Un 403 solo significa que el rol no tiene acceso:
+    // nunca debe expulsar a un usuario autenticado.
+    if (response.status === 401) {
       if (typeof window !== "undefined") {
         clearSession();
         window.location.href = "/login?expired=1";
@@ -94,7 +80,7 @@ async function apiRequest<T>(path: string, options: FetchOptions = {}): Promise<
         const errorData = await response.json();
         if (errorData.detail) errorMessage = errorData.detail;
         else if (errorData.message) errorMessage = errorData.message;
-      } catch (e) {
+      } catch {
         // Fallback silencioso si no es JSON válido
       }
       throw new Error(errorMessage);
@@ -123,6 +109,21 @@ export type MovimientoCaja = {
   metodo: string;
 };
 
+export type CajaResumen = {
+  ingresos: number;
+  egresos: number;
+  resultado: number;
+  cantidad_movimientos: number;
+};
+
+export type GastosResumen = {
+  mes_actual: number;
+  mes_anterior: number;
+  total_periodo: number;
+  cantidad_periodo: number;
+  por_tipo: Array<{ tipo: string; total: number; cantidad: number }>;
+};
+
 export type TrabajoKanban = {
   id: number;
   estado: string;
@@ -133,6 +134,10 @@ export type TrabajoKanban = {
   fecha_ingreso: string;
   resumen_corto: string;
   dias_en_taller: number;
+  items_total: number;
+  items_completados: number;
+  responsable_nombre: string;
+  iniciado_en: string | null;
 };
 
 export type TableroData = {
@@ -148,16 +153,26 @@ export type TableroData = {
 // ==========================================
 
 export interface AuthResponse {
-  token: string;          // DRF Token key
+  token?: string;         // El proxy lo conserva en una cookie HttpOnly.
   user_id: number;
   email: string;
   nombre: string;
   taller_nombre: string;
   taller_ciudad?: string;
   taller_tel?: string;
+  taller_cuit?: string;
+  taller_logo_url?: string | null;
   taller_id?: number;
   trial_start?: string;   // ISO — solo en register
+  plan_activo_hasta?: string | null; // ISO — presente si hay un plan pago acordado
+  rol?: "ADMIN" | "RECEPCION" | "MECANICO" | "CONTADOR";
 }
+
+export type MiembroEquipo = { id: number; user_id: number; nombre: string; email: string; rol: string; activo: boolean };
+export function getEquipo() { return apiRequest<MiembroEquipo[]>("/equipo/"); }
+export function crearMiembro(payload: { nombre: string; email: string; password: string; rol: string }) { return apiRequest<MiembroEquipo>("/equipo/", { method: "POST", body: JSON.stringify(payload) }); }
+export function actualizarMiembro(id: number, payload: { rol?: string; activo?: boolean }) { return apiRequest<MiembroEquipo>(`/equipo/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
+export function crearInvitacion(payload: { email: string; rol: string }) { return apiRequest<{ message: string }>("/equipo/invitaciones/", { method: "POST", body: JSON.stringify(payload) }); }
 
 /**
  * Autentica contra Django y devuelve el token de sesión.
@@ -219,16 +234,10 @@ export async function registerDjango(payload: {
 }
 
 export async function logoutDjango(): Promise<void> {
-  const token = typeof window !== "undefined" ? getAuthToken() : "";
-  if (!token) return;
-
   const url = buildUrl("/auth/logout/");
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Token ${token}`,
-    },
+    headers: { Accept: "application/json" },
     cache: "no-store",
   });
 
@@ -253,6 +262,8 @@ export interface PerfilTallerData {
   taller_nombre: string;
   taller_ciudad: string;
   taller_tel: string;
+  taller_cuit: string;
+  logo_url?: string | null;
 }
 
 export async function getPerfilTaller(): Promise<PerfilTallerData> {
@@ -265,6 +276,18 @@ export async function updatePerfilTaller(data: PerfilTallerData): Promise<Perfil
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
+}
+
+/** Sube (o reemplaza) el logo del taller. Se usa en presupuestos y comprobantes. */
+export async function subirLogoTaller(archivo: File): Promise<PerfilTallerData> {
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+  return apiRequest<PerfilTallerData>("/perfil/logo/", { method: "POST", body: formData });
+}
+
+/** Quita el logo del taller — vuelve a mostrarse el placeholder de iniciales. */
+export async function eliminarLogoTaller(): Promise<PerfilTallerData> {
+  return apiRequest<PerfilTallerData>("/perfil/logo/", { method: "DELETE" });
 }
 
 // ==========================================
@@ -285,6 +308,12 @@ export function getClienteById(id: number) {
 }
 export function crearCliente(payload: unknown) {
   return apiRequest<Cliente>("/clientes/", { method: "POST", body: JSON.stringify(payload) });
+}
+export function crearClienteConVehiculo(payload: unknown) {
+  return apiRequest<{ cliente: Cliente; vehiculo: Vehiculo }>("/directorio/alta-completa", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 export function editarCliente(id: number, payload: unknown) {
   return apiRequest<Cliente>(`/clientes/${id}`, { method: "PUT", body: JSON.stringify(payload) });
@@ -326,6 +355,18 @@ export function crearTrabajo(payload: unknown) {
 export function actualizarEstadoTrabajo(id: number, estado: string) {
   return apiRequest(`/trabajos/${id}/estado`, { method: "PATCH", body: JSON.stringify({ estado }) });
 }
+export function actualizarItemTrabajo(trabajoId: number, itemId: number, completado: boolean) {
+  return apiRequest<{
+    id: number;
+    completado: boolean;
+    completado_en: string | null;
+    items_total: number;
+    items_completados: number;
+  }>(`/trabajos/${trabajoId}/items/${itemId}/completado`, {
+    method: "PATCH",
+    body: JSON.stringify({ completado }),
+  });
+}
 export function editarTrabajo(id: number, payload: unknown) {
   return apiRequest<TrabajoDetalle>(`/trabajos/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 }
@@ -334,14 +375,59 @@ export function eliminarTrabajo(id: number) {
 }
 
 // ─── Tesorería (Caja Diaria) ───
-export function getMovimientosCaja() {
-  return apiRequest<MovimientoCaja[]>("/finanzas/caja");
+export function getMovimientosCaja(params?: {
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  metodo?: string;
+}) {
+  return apiRequest<MovimientoCaja[]>("/finanzas/caja", { params });
 }
-export function getGastos() {
-  return apiRequest<Gasto[]>("/finanzas/gastos");
+export function getResumenCaja(params?: {
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  metodo?: string;
+}) {
+  return apiRequest<CajaResumen>("/finanzas/caja/resumen", { params });
 }
-export function crearGasto(payload: unknown) {
+export function getGastos(params?: {
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  tipo?: string;
+  metodo?: string;
+  buscar?: string;
+}) {
+  return apiRequest<Gasto[]>("/finanzas/gastos", { params });
+}
+export function getResumenGastos(params?: {
+  fecha_desde?: string;
+  fecha_hasta?: string;
+}) {
+  return apiRequest<GastosResumen>("/finanzas/gastos/resumen", { params });
+}
+export function crearGasto(payload: {
+  tipo: string;
+  descripcion: string;
+  monto: number;
+  comprobante: string;
+  metodo_pago: string;
+  fecha: string;
+}) {
   return apiRequest("/compras/", { method: "POST", body: JSON.stringify(payload) });
+}
+export type RegistrarPagoPayload = {
+  cliente_id?: number;
+  cliente_express?: { nombre: string; telefono?: string };
+  monto_total_venta: number;
+  monto_pagado: number;
+  metodo_pago: string;
+  descripcion: string;
+  fecha_promesa?: string;
+};
+export function registrarPago(payload: RegistrarPagoPayload) {
+  return apiRequest<{ message: string; nuevo_saldo: number }>("/pagos/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 // ─── Turnos (Agenda) ───

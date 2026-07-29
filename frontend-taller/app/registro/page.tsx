@@ -138,10 +138,11 @@ export default function RegistroPage() {
         taller_ciudad:   tallerCiudad.trim(),
         taller_tel:      tallerTel.trim(),
         trial_start:     auth.trial_start ?? new Date().toISOString(),
+        plan_activo_hasta: auth.plan_activo_hasta ?? null,
         onboarding_done: false,
-        token:           auth.token,
         taller_id:       auth.taller_id,
         user_id:         auth.user_id,
+        rol:             auth.rol ?? "ADMIN",
       });
 
       setStep(3);
@@ -150,7 +151,7 @@ export default function RegistroPage() {
       if (msg.includes("already") || msg.toLowerCase().includes("existe") || msg.toLowerCase().includes("email")) {
         setError("Ya existe una cuenta con ese email. ¿Querés iniciar sesión?");
       } else if (msg.includes("404") || msg.includes("Cannot")) {
-        setError("No se pudo conectar con el servidor. Contactá a FAM Soluciones por WhatsApp.");
+        setError("No se pudo conectar con el servidor. Contactá a FAM Desarrollos por WhatsApp.");
       } else {
         setError(msg);
       }
@@ -170,10 +171,7 @@ export default function RegistroPage() {
       {/* Fondo decorativo */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-orange-500/8 blur-3xl" />
-        <div className="absolute inset-0 opacity-[0.02]" style={{
-          backgroundImage: "linear-gradient(rgba(255,255,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)",
-          backgroundSize: "50px 50px",
-        }} />
+        <div className="absolute -bottom-40 -left-20 h-[420px] w-[420px] rounded-full bg-sky-500/[0.06] blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-[400px]">

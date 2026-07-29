@@ -1,285 +1,251 @@
 "use client";
 
-import { useEffect, useState, useTransition, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { SectionCard } from "@/components/section-card";
-import { getClientes, getVehiculos, crearTurno, editarTurno, getTurnoById } from "@/lib/api";
+import { SearchableSelect } from "@/components/searchable-select";
+import { crearTurno, editarTurno, getClientes, getTurnoById, getVehiculos } from "@/lib/api";
 import type { Cliente, Vehiculo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// Estilo base unificado para los inputs
-const inputBase = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 transition-all focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-purple-500/10 dark:border-slate-700 dark:bg-slate-900/50 dark:text-white dark:focus:border-purple-500 dark:focus:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed";
+const inputBase = "h-11 w-full rounded-xl bg-slate-50 px-4 text-sm text-slate-900 outline-none ring-1 ring-slate-200 transition focus:bg-white focus:ring-2 focus:ring-brand-400 dark:bg-slate-950 dark:text-white dark:ring-slate-800 dark:focus:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50";
 
-// Hacemos un componente interno para poder usar useSearchParams (requiere Suspense)
 function FormularioTurno() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const editId = searchParams.get("id"); // Si hay ID, estamos en modo Edición
+  const editId = searchParams.get("id");
+  const clientePreId = searchParams.get("cliente");
+  const vehiculoPreId = searchParams.get("vehiculo");
 
-  // --- ESTADOS DE DIRECTORIO ---
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [vehiculosFiltrados, setVehiculosFiltrados] = useState<Vehiculo[]>([]);
-
-  // --- MODOS DE UI ---
   const [modoCliente, setModoCliente] = useState<"DIRECTORIO" | "EXPRESS">("DIRECTORIO");
-  
-  // --- ESTADOS DEL FORMULARIO ---
+
   const [fechaHora, setFechaHora] = useState("");
   const [motivo, setMotivo] = useState("");
   const [notas, setNotas] = useState("");
-  
-  // Selección de Directorio
   const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState("");
   const [vehiculoSeleccionadoId, setVehiculoSeleccionadoId] = useState("");
-  
-  // Alta Express
   const [expressNombre, setExpressNombre] = useState("");
   const [expressTelefono, setExpressTelefono] = useState("");
   const [expressPatente, setExpressPatente] = useState("");
   const [expressMarca, setExpressMarca] = useState("");
 
-  // --- FEEDBACK Y CARGA ---
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isRedirecting, startRedirect] = useTransition();
   const [feedback, setFeedback] = useState({ tone: "idle", message: "" });
 
-  // 1. CARGA INICIAL (Directorio y Modo Edición)
   useEffect(() => {
     let active = true;
     async function init() {
       try {
-        const [clientesData, vehiculosData] = await Promise.all([
-          getClientes(),
-          getVehiculos()
-        ]);
-        
-        if (active) {
-          setClientes(clientesData);
-          setVehiculos(vehiculosData);
-        }
+        const [clientesData, vehiculosData] = await Promise.all([getClientes(), getVehiculos()]);
+        if (!active) return;
+        setClientes(clientesData);
+        setVehiculos(vehiculosData);
 
-        // Si estamos editando, traemos los datos del turno y pre-cargamos
-        if (editId && active) {
+        if (editId) {
           const turno = await getTurnoById(Number(editId));
-          
-          // Formateamos la fecha para el input datetime-local (YYYY-MM-DDThh:mm)
-          const dateObj = new Date(turno.fecha_hora);
-          const isoString = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-          
-          setFechaHora(isoString);
+          if (!active) return;
+          const fecha = new Date(turno.fecha_hora);
+          setFechaHora(new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
           setMotivo(turno.motivo);
           setNotas(turno.notas || "");
-
-          // Como el endpoint getTurnoById actualmente no devuelve el ID crudo del cliente/vehiculo (devuelve strings), 
-          // lo buscamos en el directorio haciendo match por nombre/patente para pre-seleccionarlo.
-          const clienteMatch = clientesData.find(c => turno.cliente_nombre?.includes(c.nombre));
-          if (clienteMatch) {
-            setClienteSeleccionadoId(clienteMatch.id.toString());
-            const vehiculosDelCliente = vehiculosData.filter(v => v.cliente_id === clienteMatch.id);
-            setVehiculosFiltrados(vehiculosDelCliente);
-            
-            const vehiculoMatch = vehiculosDelCliente.find(v => turno.vehiculo_desc?.includes(v.patente) || turno.patente === v.patente);
-            if (vehiculoMatch) setVehiculoSeleccionadoId(vehiculoMatch.id.toString());
+          const cliente = clientesData.find((item) => turno.cliente_nombre?.includes(item.nombre));
+          if (cliente) {
+            const autos = vehiculosData.filter((vehiculo) => vehiculo.cliente_id === cliente.id);
+            const auto = autos.find((vehiculo) => turno.vehiculo_desc?.includes(vehiculo.patente) || turno.patente === vehiculo.patente);
+            setClienteSeleccionadoId(cliente.id.toString());
+            setVehiculosFiltrados(autos);
+            if (auto) setVehiculoSeleccionadoId(auto.id.toString());
+          }
+        } else if (vehiculoPreId) {
+          const auto = vehiculosData.find((vehiculo) => vehiculo.id === Number(vehiculoPreId));
+          if (auto) {
+            setClienteSeleccionadoId(auto.cliente_id.toString());
+            setVehiculoSeleccionadoId(auto.id.toString());
+            setVehiculosFiltrados(vehiculosData.filter((vehiculo) => vehiculo.cliente_id === auto.cliente_id));
+          }
+        } else if (clientePreId) {
+          const clienteExiste = clientesData.some((cliente) => cliente.id === Number(clientePreId));
+          if (clienteExiste) {
+            setClienteSeleccionadoId(clientePreId);
+            setVehiculosFiltrados(vehiculosData.filter((vehiculo) => vehiculo.cliente_id === Number(clientePreId)));
           }
         }
-      } catch (err) {
-        if (active) setFeedback({ tone: "error", message: "Error al cargar datos del servidor." });
+      } catch {
+        if (active) setFeedback({ tone: "error", message: "No pudimos cargar los datos necesarios para programar el turno." });
       } finally {
         if (active) setIsLoading(false);
       }
     }
     init();
     return () => { active = false; };
-  }, [editId]);
+  }, [clientePreId, editId, vehiculoPreId]);
 
-  // 2. LÓGICA DE CASCADA (Al elegir un cliente, mostrar solo sus autos)
-  function handleClienteChange(idString: string) {
-    setClienteSeleccionadoId(idString);
-    setVehiculoSeleccionadoId(""); // Reseteamos el auto al cambiar de dueño
-    
-    if (!idString) {
-      setVehiculosFiltrados([]);
-      return;
-    }
-    
-    const filtrados = vehiculos.filter(v => v.cliente_id === Number(idString));
-    setVehiculosFiltrados(filtrados);
+  function handleClienteChange(id: string) {
+    setClienteSeleccionadoId(id);
+    setVehiculoSeleccionadoId("");
+    setVehiculosFiltrados(id ? vehiculos.filter((vehiculo) => vehiculo.cliente_id === Number(id)) : []);
   }
 
-  // 3. ENVÍO DEL FORMULARIO (Crear o Editar)
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setFeedback({ tone: "idle", message: "" });
-
-    // Validaciones Front-end
-    if (!fechaHora) return setFeedback({ tone: "error", message: "La fecha y hora son obligatorias." });
-    if (!motivo.trim()) return setFeedback({ tone: "error", message: "El motivo del turno es obligatorio." });
-    
-    if (modoCliente === "DIRECTORIO" && !editId) {
-      if (!clienteSeleccionadoId) return setFeedback({ tone: "error", message: "Selecciona un cliente del directorio." });
-      if (!vehiculoSeleccionadoId) return setFeedback({ tone: "error", message: "Selecciona el vehículo del cliente." });
-    } else if (modoCliente === "EXPRESS" && !editId) {
-      if (!expressNombre.trim() || !expressPatente.trim() || !expressMarca.trim()) {
-        return setFeedback({ tone: "error", message: "Completá Nombre, Patente y Vehículo en el Alta Express." });
-      }
+    if (!fechaHora) return setFeedback({ tone: "error", message: "Elegí la fecha y la hora del turno." });
+    if (!motivo.trim()) return setFeedback({ tone: "error", message: "Indicá el motivo del ingreso." });
+    if ((modoCliente === "DIRECTORIO" || editId) && (!clienteSeleccionadoId || !vehiculoSeleccionadoId)) {
+      return setFeedback({ tone: "error", message: "Seleccioná el cliente y el vehículo." });
+    }
+    if (modoCliente === "EXPRESS" && !editId && (!expressNombre.trim() || !expressPatente.trim() || !expressMarca.trim())) {
+      return setFeedback({ tone: "error", message: "Completá nombre, patente y vehículo para el alta rápida." });
     }
 
     setIsSaving(true);
-
-    // Construimos el Payload (Lo que espera la API)
-    const isoDate = new Date(fechaHora).toISOString();
     const payload = {
-      fecha_hora: isoDate,
+      fecha_hora: new Date(fechaHora).toISOString(),
       motivo: motivo.trim(),
       notas: notas.trim(),
-      
-      // Dependiendo del modo, mandamos IDs o los datos Express (solo si no estamos editando)
-      cliente_id: (modoCliente === "DIRECTORIO" || editId) ? Number(clienteSeleccionadoId) : undefined,
-      vehiculo_id: (modoCliente === "DIRECTORIO" || editId) ? Number(vehiculoSeleccionadoId) : undefined,
-      cliente_express: (modoCliente === "EXPRESS" && !editId) ? { nombre: expressNombre.trim(), telefono: expressTelefono.trim() } : undefined,
-      vehiculo_express: (modoCliente === "EXPRESS" && !editId) ? { patente: expressPatente.trim().toUpperCase(), marca: expressMarca.trim() } : undefined,
+      cliente_id: modoCliente === "DIRECTORIO" || editId ? Number(clienteSeleccionadoId) : undefined,
+      vehiculo_id: modoCliente === "DIRECTORIO" || editId ? Number(vehiculoSeleccionadoId) : undefined,
+      cliente_express: modoCliente === "EXPRESS" && !editId ? { nombre: expressNombre.trim(), telefono: expressTelefono.trim() } : undefined,
+      vehiculo_express: modoCliente === "EXPRESS" && !editId ? { patente: expressPatente.trim().toUpperCase(), marca: expressMarca.trim() } : undefined,
     };
 
     try {
-      if (editId) {
-        await editarTurno(Number(editId), payload);
-        setFeedback({ tone: "success", message: "¡Turno actualizado correctamente!" });
-      } else {
-        await crearTurno(payload);
-        setFeedback({ tone: "success", message: "¡Turno agendado con éxito!" });
-      }
-      
-      // Redirección fluida a la agenda
-      startRedirect(() => { 
-        router.push("/turnos"); 
-        router.refresh(); 
-      });
-
-    } catch (error: any) {
-      setFeedback({ tone: "error", message: error.message || "Ocurrió un error en el servidor." });
+      if (editId) await editarTurno(Number(editId), payload);
+      else await crearTurno(payload);
+      setFeedback({ tone: "success", message: editId ? "Turno actualizado." : "Turno agendado." });
+      startRedirect(() => router.push("/turnos"));
+    } catch (error) {
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "No pudimos guardar el turno." });
       setIsSaving(false);
     }
   }
 
-  if (isLoading) {
-    return <div className="h-64 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800"></div>;
-  }
+  if (isLoading) return <div className="grid gap-4 lg:grid-cols-2"><div className="h-80 animate-pulse rounded-2xl bg-slate-200 dark:bg-slate-800" /><div className="h-80 animate-pulse rounded-2xl bg-slate-200 dark:bg-slate-800" /></div>;
+
+  const clienteActual = clientes.find((cliente) => cliente.id === Number(clienteSeleccionadoId));
+  const vehiculoActual = vehiculos.find((vehiculo) => vehiculo.id === Number(vehiculoSeleccionadoId));
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-2">
       {feedback.message && (
-        <div className={cn("rounded-xl border p-4 text-sm font-medium", feedback.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-300")}>
+        <div className={cn("rounded-xl px-4 py-3 text-sm font-semibold xl:col-span-2", feedback.tone === "success" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" : "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300")}>
           {feedback.message}
         </div>
       )}
 
-      {/* BLOQUE 1: DATOS DEL CLIENTE Y VEHÍCULO */}
-      <SectionCard title="Vehículo y Titular" description="¿A quién le vamos a reservar el espacio?">
-        
-        {/* Switch Directorio vs Express (Oculto en modo edición por seguridad) */}
-        {!editId && (
-          <div className="mb-6 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800/50 w-full sm:w-fit">
-            <button type="button" onClick={() => setModoCliente("DIRECTORIO")} className={cn("flex-1 sm:px-6 rounded-lg py-2 text-sm font-bold transition-all", modoCliente === "DIRECTORIO" ? "bg-white text-purple-600 shadow-sm dark:bg-slate-700 dark:text-purple-400" : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}>
-              Buscar en Directorio
-            </button>
-            <button type="button" onClick={() => setModoCliente("EXPRESS")} className={cn("flex-1 sm:px-6 rounded-lg py-2 text-sm font-bold transition-all", modoCliente === "EXPRESS" ? "bg-white text-purple-600 shadow-sm dark:bg-slate-700 dark:text-purple-400" : "text-slate-500 hover:text-slate-700 dark:text-slate-400")}>
-              ⚡ Alta Express
-            </button>
+      <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-slate-900 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand-600 dark:text-brand-400">Paso 1</p>
+            <h2 className="mt-1 text-lg font-black text-slate-900 dark:text-white">Cliente y vehículo</h2>
+            <p className="text-xs text-slate-500">Elegí un registro existente o cargá uno al momento.</p>
           </div>
-        )}
-
-        <div className="grid gap-6 md:grid-cols-2">
-          {modoCliente === "DIRECTORIO" || editId ? (
-            <>
-              <label className="space-y-1.5">
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Cliente Titular</span>
-                <select value={clienteSeleccionadoId} onChange={(e) => handleClienteChange(e.target.value)} disabled={!!editId} className={inputBase}>
-                  <option value="">Seleccione un cliente...</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_completo}</option>)}
-                </select>
-              </label>
-
-              <label className="space-y-1.5">
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Vehículo a Ingresar</span>
-                <select disabled={!clienteSeleccionadoId || !!editId} value={vehiculoSeleccionadoId} onChange={(e) => setVehiculoSeleccionadoId(e.target.value)} className={inputBase}>
-                  <option value="">{clienteSeleccionadoId ? "Seleccione un vehículo..." : "Primero elija un cliente"}</option>
-                  {vehiculosFiltrados.map(v => <option key={v.id} value={v.id}>{v.patente} - {v.marca} {v.modelo}</option>)}
-                </select>
-              </label>
-            </>
-          ) : (
-            <>
-              {/* CAMPOS ALTA EXPRESS OPTIMIZADOS */}
-              <div className="space-y-4 rounded-2xl border border-purple-200 bg-purple-50/50 p-5 dark:border-purple-900/30 dark:bg-purple-900/10">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-purple-600 dark:text-purple-400">Datos Personales</h4>
-                <div className="space-y-3">
-                  <input type="text" placeholder="Nombre y Apellido *" value={expressNombre} onChange={e => setExpressNombre(e.target.value)} className={inputBase} />
-                  <input type="text" placeholder="Teléfono de Contacto (Opcional)" value={expressTelefono} onChange={e => setExpressTelefono(e.target.value)} className={inputBase} />
-                </div>
-              </div>
-              
-              <div className="space-y-4 rounded-2xl border border-purple-200 bg-purple-50/50 p-5 dark:border-purple-900/30 dark:bg-purple-900/10">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-purple-600 dark:text-purple-400">Datos del Auto</h4>
-                <div className="space-y-3">
-                  <input type="text" placeholder="Patente (Ej: AB123CD) *" value={expressPatente} onChange={e => setExpressPatente(e.target.value.toUpperCase())} className={cn(inputBase, "font-mono font-bold uppercase")} />
-                  <input type="text" placeholder="Vehículo (Ej: VW Gol Trend) *" value={expressMarca} onChange={e => setExpressMarca(e.target.value)} className={inputBase} />
-                </div>
-              </div>
-            </>
+          {!editId && (
+            <div className="flex shrink-0 rounded-xl bg-slate-100 p-1 dark:bg-slate-950">
+              <ModeButton active={modoCliente === "DIRECTORIO"} onClick={() => setModoCliente("DIRECTORIO")}>Directorio</ModeButton>
+              <ModeButton active={modoCliente === "EXPRESS"} onClick={() => setModoCliente("EXPRESS")}>Alta rápida</ModeButton>
+            </div>
           )}
         </div>
-      </SectionCard>
 
-      {/* BLOQUE 2: DETALLES DEL TURNO */}
-      <SectionCard title="Agenda y Motivo" description="Fecha, hora y razón del ingreso.">
-        <div className="grid gap-6 md:grid-cols-2">
-          
-          <label className="space-y-1.5 md:col-span-2">
-            <span className="text-sm font-bold text-purple-700 dark:text-purple-400">Fecha y Hora de Recepción</span>
-            <input type="datetime-local" required value={fechaHora} onChange={(e) => setFechaHora(e.target.value)} className={cn(inputBase, "border-purple-200 bg-purple-50 text-lg font-black text-purple-900 dark:border-purple-900/50 dark:bg-purple-900/20 dark:text-purple-300")} />
-          </label>
+        {modoCliente === "DIRECTORIO" || editId ? (
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <Field label="Cliente titular">
+              <SearchableSelect
+                value={clienteSeleccionadoId}
+                onChange={handleClienteChange}
+                disabled={!!editId}
+                placeholder="Seleccionar cliente…"
+                searchPlaceholder="Buscar por nombre, teléfono o DNI…"
+                emptyMessage="No encontramos clientes con esa búsqueda."
+                options={clientes.map((cliente) => ({
+                  value: cliente.id.toString(),
+                  label: cliente.nombre_completo,
+                  sublabel: cliente.telefono || cliente.email || undefined,
+                }))}
+              />
+            </Field>
+            <Field label="Vehículo">
+              <SearchableSelect
+                value={vehiculoSeleccionadoId}
+                onChange={setVehiculoSeleccionadoId}
+                disabled={!clienteSeleccionadoId || !!editId}
+                placeholder={clienteSeleccionadoId ? "Seleccionar vehículo…" : "Elegí primero el cliente"}
+                searchPlaceholder="Buscar por patente, marca o modelo…"
+                emptyMessage="No encontramos vehículos con esa búsqueda."
+                options={vehiculosFiltrados.map((vehiculo) => ({
+                  value: vehiculo.id.toString(),
+                  label: `${vehiculo.patente} · ${vehiculo.marca} ${vehiculo.modelo}`,
+                }))}
+              />
+            </Field>
+            <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-950 sm:col-span-2">
+              {clienteActual ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div><p className="text-xs font-black text-slate-800 dark:text-slate-100">{clienteActual.nombre_completo}</p><p className="text-[11px] text-slate-500">{clienteActual.telefono || clienteActual.email || "Sin contacto registrado"}</p></div>
+                  {vehiculoActual ? <div className="text-right"><p className="font-mono text-xs font-black text-slate-800 dark:text-slate-100">{vehiculoActual.patente}</p><p className="text-[11px] text-slate-500">{vehiculoActual.marca} {vehiculoActual.modelo}</p></div> : <span className="text-[11px] text-slate-400">Falta seleccionar el vehículo</span>}
+                </div>
+              ) : <p className="text-xs text-slate-400">La información seleccionada aparecerá acá.</p>}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <Field label="Nombre y apellido"><input value={expressNombre} onChange={(event) => setExpressNombre(event.target.value)} placeholder="Ej. Juan Pérez" className={inputBase} /></Field>
+            <Field label="Teléfono"><input value={expressTelefono} onChange={(event) => setExpressTelefono(event.target.value)} placeholder="Opcional" className={inputBase} /></Field>
+            <Field label="Patente"><input value={expressPatente} onChange={(event) => setExpressPatente(event.target.value.toUpperCase())} placeholder="AB123CD" className={cn(inputBase, "font-mono font-bold uppercase")} /></Field>
+            <Field label="Marca y modelo"><input value={expressMarca} onChange={(event) => setExpressMarca(event.target.value)} placeholder="Ej. Toyota Corolla" className={inputBase} /></Field>
+          </div>
+        )}
+      </section>
 
-          <label className="space-y-1.5 md:col-span-2">
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Motivo Principal (Breve)</span>
-            <input type="text" required placeholder="Ej: Cambio de aceite y filtros / Ruidito en tren delantero..." value={motivo} onChange={(e) => setMotivo(e.target.value)} className={inputBase} />
-          </label>
-
-          <label className="space-y-1.5 md:col-span-2">
-            <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Notas Privadas / Observaciones extras</span>
-            <textarea placeholder="Ej: El cliente dice que lo necesita para el viernes sin falta..." value={notas} onChange={(e) => setNotas(e.target.value)} rows={3} className={cn(inputBase, "resize-none")} />
-          </label>
-
+      <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-slate-900 sm:p-6">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand-600 dark:text-brand-400">Paso 2</p>
+          <h2 className="mt-1 text-lg font-black text-slate-900 dark:text-white">Fecha y trabajo previsto</h2>
+          <p className="text-xs text-slate-500">Definí cuándo llega y qué necesita el vehículo.</p>
         </div>
-      </SectionCard>
+        <div className="mt-6 grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]">
+          <Field label="Fecha y hora">
+            <input type="datetime-local" required value={fechaHora} onChange={(event) => setFechaHora(event.target.value)} className={cn(inputBase, "font-semibold")} />
+          </Field>
+          <Field label="Motivo principal">
+            <input required value={motivo} onChange={(event) => setMotivo(event.target.value)} placeholder="Ej. Cambio de aceite y filtros" className={inputBase} />
+          </Field>
+          <Field label="Notas internas" className="sm:col-span-2">
+            <textarea value={notas} onChange={(event) => setNotas(event.target.value)} placeholder="Indicaciones, disponibilidad del cliente o información adicional…" rows={4} className={cn(inputBase, "h-28 resize-none py-3")} />
+          </Field>
+        </div>
+      </section>
 
-      {/* BOTONERA FINAL */}
-      <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-4 border-t border-slate-200 pt-6 dark:border-slate-800">
-        <Link href="/turnos" className="w-full sm:w-auto text-center rounded-xl px-6 py-3.5 text-sm font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-white transition">
-          Cancelar
-        </Link>
-        <button type="submit" disabled={isSaving || isRedirecting} className="w-full sm:w-auto inline-flex min-w-[160px] items-center justify-center rounded-xl bg-purple-600 px-8 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:bg-purple-700 hover:shadow-lg disabled:opacity-50">
-          {isSaving ? "Guardando..." : isRedirecting ? "Redirigiendo..." : editId ? "Actualizar Turno" : "Confirmar Turno"}
+      <div className="flex flex-col-reverse items-center justify-end gap-2 rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900 sm:flex-row xl:col-span-2">
+        <Link href="/turnos" className="w-full rounded-xl px-5 py-3 text-center text-sm font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white sm:w-auto">Cancelar</Link>
+        <button type="submit" disabled={isSaving || isRedirecting} className="w-full min-w-44 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50 dark:bg-brand-600 dark:hover:bg-brand-500 sm:w-auto">
+          {isSaving ? "Guardando…" : isRedirecting ? "Abriendo agenda…" : editId ? "Guardar cambios" : "Confirmar turno"}
         </button>
       </div>
-
     </form>
   );
 }
 
+function ModeButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
+  return <button type="button" onClick={onClick} className={cn("rounded-lg px-3 py-2 text-xs font-bold transition", active ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500 dark:text-slate-400")}>{children}</button>;
+}
+
+function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return <label className={cn("space-y-1.5", className)}><span className="text-xs font-bold text-slate-700 dark:text-slate-300">{label}</span>{children}</label>;
+}
+
 export default function NuevoTurnoPage() {
   return (
-    <AppShell
-      currentPath="/turnos"
-      badge="Formulario de Agenda"
-      title="Gestión de Cita"
-      description="Completá los datos para reservar un espacio en el taller."
-    >
-      <div className="mx-auto max-w-3xl">
-        <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800"></div>}>
+    <AppShell currentPath="/turnos" badge="Agenda" title="Programar turno" description="Cliente, vehículo y horario en una sola vista.">
+      <div className="mx-auto max-w-7xl">
+        <Suspense fallback={<div className="grid gap-4 lg:grid-cols-2"><div className="h-80 animate-pulse rounded-2xl bg-slate-200 dark:bg-slate-800" /><div className="h-80 animate-pulse rounded-2xl bg-slate-200 dark:bg-slate-800" /></div>}>
           <FormularioTurno />
         </Suspense>
       </div>

@@ -14,6 +14,7 @@ export interface Cliente {
 export interface Vehiculo {
   id: number;
   cliente_id: number;
+  cliente_nombre: string;
   patente: string;
   marca: string;
   modelo: string;
@@ -33,6 +34,8 @@ export interface TrabajoItem {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  completado: boolean;
+  completado_en: string | null;
 }
 
 // Matches TrabajoRecienteOut (list endpoint)
@@ -55,6 +58,9 @@ export interface TrabajoDetalle {
   estado: string;
   fecha_ingreso: string;
   fecha_egreso_estimado: string | null;
+  iniciado_en: string | null;
+  finalizado_en: string | null;
+  responsable_nombre: string;
   kilometraje: number;
   resumen_trabajos: string;
   observaciones_cliente: string;
@@ -146,6 +152,8 @@ export interface Gasto {
   descripcion: string;
   monto: number;
   comprobante: string;
+  metodo_pago: string;
+  registrado_por: string;
 }
 
 // ─── Dashboard stats ───────────────────────────────────────

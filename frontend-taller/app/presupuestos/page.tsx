@@ -1,345 +1,196 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { SectionCard } from "@/components/section-card";
-import { getPresupuestos, eliminarPresupuesto } from "@/lib/api"; 
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { eliminarPresupuesto, getPresupuestos } from "@/lib/api";
+import { formatCurrency } from "@/lib/format";
+import type { Presupuesto } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { HintBubble } from "@/components/hint-bubble";
 
-// Opciones de estado para presupuestos
-const ESTADOS_PRESUPUESTO = [
-  { value: "BORRADOR", label: "Borrador" },
-  { value: "ENVIADO", label: "Enviado al Cliente" },
-  { value: "APROBADO", label: "Aprobado (¡Ganado!)" },
-  { value: "RECHAZADO", label: "Rechazado / Perdido" }
+const ESTADOS = [
+  { value: "TODOS", label: "Todos" },
+  { value: "BORRADOR", label: "Borradores" },
+  { value: "ENVIADO", label: "Enviados" },
+  { value: "APROBADO", label: "Aprobados" },
+  { value: "RECHAZADO", label: "Rechazados" },
 ];
 
-const FILTROS_PRESUPUESTO = [
-  { value: "TODOS",     label: "Todos" },
-  { value: "BORRADOR",  label: "Borrador",  color: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600" },
-  { value: "ENVIADO",   label: "Enviado",   color: "bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-900/40 dark:text-sky-400 dark:border-sky-700/50" },
-  { value: "APROBADO",  label: "Aprobado",  color: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-400 dark:border-emerald-700/50" },
-  { value: "RECHAZADO", label: "Rechazado", color: "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/40 dark:text-red-400 dark:border-red-700/50" },
-];
+const estadoMeta: Record<string, { label: string; className: string }> = {
+  BORRADOR: { label: "Borrador", className: "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300" },
+  ENVIADO: { label: "Esperando respuesta", className: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-300" },
+  APROBADO: { label: "Aprobado", className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300" },
+  RECHAZADO: { label: "Rechazado", className: "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300" },
+};
+
+function metaEstado(estado: string) {
+  return estadoMeta[estado] ?? {
+    label: "Estado anterior",
+    className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300",
+  };
+}
 
 export default function ListadoPresupuestos() {
-  const [presupuestos, setPresupuestos] = useState<any[]>([]);
+  const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [busqueda, setBusqueda] = useState("");
-  const [estadoFiltro, setEstadoFiltro] = useState("TODOS");
-  const [notificacion, setNotificacion] = useState({ msg: "", isError: false });
-  
-  // Estado para el Modal de Borrado
+  const [estado, setEstado] = useState("TODOS");
   const [idABorrar, setIdABorrar] = useState<number | null>(null);
+  const [mensaje, setMensaje] = useState("");
 
-  // 1. CARGA REAL DE DATOS (¡Candado liberado!)
   useEffect(() => {
-    async function cargar() {
+    let active = true;
+    const timer = setTimeout(async () => {
       try {
         setLoading(true);
         const data = await getPresupuestos(busqueda);
-        setPresupuestos(data);
-      } catch (e) {
-        mostrarNotificacion("Error conectando con el servidor", true);
+        if (active) setPresupuestos(data);
+      } catch (caught) {
+        if (active) setError(caught instanceof Error ? caught.message : "No pudimos cargar las cotizaciones.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    }
-    const timer = setTimeout(cargar, 300);
-    return () => clearTimeout(timer);
+    }, 250);
+    return () => { active = false; clearTimeout(timer); };
   }, [busqueda]);
 
-  // 2. ELIMINAR PRESUPUESTO (Soft Delete)
+  const visibles = estado === "TODOS" ? presupuestos : presupuestos.filter((presupuesto) => presupuesto.estado === estado);
+  const resumen = useMemo(() => ({
+    abiertos: presupuestos.filter((p) => ["BORRADOR", "ENVIADO"].includes(p.estado)).length,
+    aprobados: presupuestos.filter((p) => p.estado === "APROBADO").length,
+    montoAbierto: presupuestos.filter((p) => ["BORRADOR", "ENVIADO"].includes(p.estado)).reduce((total, p) => total + Number(p.total), 0),
+  }), [presupuestos]);
+
   async function confirmarBorrado() {
     if (!idABorrar) return;
-    
-    const backup = [...presupuestos];
-    setPresupuestos(presupuestos.filter(p => p.id !== idABorrar));
-    
+    const anterior = presupuestos;
+    setPresupuestos((items) => items.filter((item) => item.id !== idABorrar));
     try {
       await eliminarPresupuesto(idABorrar);
-      mostrarNotificacion(`Cotización P-${idABorrar} enviada a la papelera.`);
-    } catch (e) {
-      setPresupuestos(backup);
-      mostrarNotificacion("Error al eliminar la cotización.", true);
+      setMensaje("Presupuesto enviado a la papelera.");
+      setTimeout(() => setMensaje(""), 2500);
+    } catch (caught) {
+      setPresupuestos(anterior);
+      setError(caught instanceof Error ? caught.message : "No pudimos eliminar el presupuesto.");
     } finally {
-      setIdABorrar(null); 
+      setIdABorrar(null);
     }
   }
-
-  function mostrarNotificacion(msg: string, isError = false) {
-    setNotificacion({ msg, isError });
-    setTimeout(() => setNotificacion({ msg: "", isError: false }), 3000);
-  }
-
-  const presupuestosFiltrados = estadoFiltro === "TODOS"
-    ? presupuestos
-    : presupuestos.filter(p => p.estado === estadoFiltro);
-
-  // Helper de colores
-  const getBadgeColor = (estado: string) => {
-    switch (estado) {
-      case "BORRADOR": return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
-      case "ENVIADO": return "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-800/50";
-      case "APROBADO": return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50";
-      case "RECHAZADO": return "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/50 opacity-70";
-      default: return "bg-slate-100 text-slate-700";
-    }
-  };
 
   return (
     <AppShell
       currentPath="/presupuestos"
       badge="Ventas"
-      title="Presupuestos Rápidos"
-      description="Cotizá arreglos y convertilos en Órdenes de Trabajo con un solo clic al ser aprobados."
-      actions={
-        <Link
-          href="/presupuestos/nuevo"
-          className="inline-flex items-center justify-center rounded-xl bg-sky-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-700 hover:-translate-y-0.5"
-        >
-          + Crear Cotización
-        </Link>
-      }
+      title="Presupuestos"
+      description="Seguimiento comercial desde el borrador hasta la orden de trabajo."
+      actions={<Link href="/presupuestos/nuevo" className="inline-flex rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-700">+ Nuevo presupuesto</Link>}
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
+        {mensaje && <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-2xl dark:bg-sky-600">{mensaje}</div>}
+        {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">{error}</div>}
 
-        {/* HINT — primera visita */}
-        <HintBubble
-          id="hint-presupuestos-v1"
-          variant="banner"
-          emoji="📋"
-          title="Mandá tu primer presupuesto digital"
-          desc="Tocá '+ Crear Cotización'. El cliente lo aprueba desde su celular con un link — y con un click lo convertís en Orden de Trabajo."
-          action={{ label: "Crear presupuesto", href: "/presupuestos/nuevo" }}
-        />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Summary label="En seguimiento" value={String(resumen.abiertos)} helper="Borradores y enviados" />
+          <Summary label="Aprobados" value={String(resumen.aprobados)} helper="Listos para convertir en OT" success />
+          <Summary label="Valor abierto" value={formatCurrency(resumen.montoAbierto)} helper="Oportunidad comercial" />
+        </div>
 
-        {/* NOTIFICACIÓN FLOTANTE */}
-        {notificacion.msg && (
-          <div className={cn("fixed bottom-20 left-4 right-4 z-50 animate-in slide-in-from-bottom-5 fade-in rounded-lg px-5 py-3 text-sm font-bold text-white shadow-2xl sm:bottom-6 sm:left-auto sm:right-6 sm:w-auto", notificacion.isError ? "bg-red-600" : "bg-slate-900 dark:bg-sky-600")}>
-            {notificacion.msg}
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+          <div className="flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800 xl:flex-row xl:items-center">
+            <div className="relative min-w-0 flex-1">
+              <svg className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" /></svg>
+              <input value={busqueda} onChange={(event) => setBusqueda(event.target.value)} placeholder="Buscar cliente, patente o trabajo…" className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+            </div>
+            <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 dark:bg-slate-950">
+              {ESTADOS.map((item) => {
+                const count = item.value === "TODOS" ? presupuestos.length : presupuestos.filter((p) => p.estado === item.value).length;
+                return (
+                  <button key={item.value} type="button" onClick={() => setEstado(item.value)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition", estado === item.value ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200")}>
+                    {item.label} <span className="ml-1 opacity-60">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        )}
 
-        {/* MODAL DE CONFIRMACIÓN DE BORRADO */}
-        {idABorrar && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-md scale-100 rounded-3xl bg-white p-8 shadow-2xl animate-in zoom-in-95 dark:bg-slate-800">
-              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400">
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-              </div>
-              <h3 className="text-xl font-black text-slate-900 dark:text-white">¿Eliminar Presupuesto?</h3>
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                Esta acción enviará el presupuesto P-{idABorrar} a la papelera. Podrás recuperarlo desde la base de datos si lo necesitás.
-              </p>
-              <div className="mt-8 flex gap-3">
-                <button onClick={() => setIdABorrar(null)} className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 hover:dark:bg-slate-700">
-                  Cancelar
-                </button>
-                <button onClick={confirmarBorrado} className="flex-1 rounded-xl bg-red-600 py-3 text-sm font-bold text-white transition hover:bg-red-700 shadow-md hover:shadow-lg">
-                  Sí, eliminar
-                </button>
+          {loading ? (
+            <LoadingRows />
+          ) : visibles.length ? (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {visibles.map((presupuesto) => {
+                const meta = metaEstado(presupuesto.estado);
+                return (
+                  <article key={presupuesto.id} className="grid gap-3 px-4 py-4 transition hover:bg-slate-50/70 dark:hover:bg-slate-950/35 lg:grid-cols-[90px_minmax(220px,1.2fr)_minmax(220px,1fr)_170px_150px_auto] lg:items-center">
+                    <Link href={`/presupuestos/${presupuesto.id}`} className="font-mono text-sm font-black text-sky-600 dark:text-sky-400">P-{String(presupuesto.id).padStart(4, "0")}</Link>
+
+                    <Link href={`/presupuestos/${presupuesto.id}`} className="min-w-0">
+                      <strong className="block truncate text-sm text-slate-900 dark:text-white">{presupuesto.cliente_nombre}</strong>
+                      <span className="block truncate text-xs text-slate-500">{presupuesto.patente} · {presupuesto.vehiculo}</span>
+                    </Link>
+
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-700 dark:text-slate-300">{presupuesto.resumen_corto || "Sin detalle cargado"}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">{new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(presupuesto.fecha_creacion))}</p>
+                    </div>
+
+                    <span className={cn("w-fit rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider", meta.className)}>{meta.label}</span>
+                    <strong className="font-mono text-sm text-slate-900 dark:text-white lg:text-right">{formatCurrency(Number(presupuesto.total))}</strong>
+
+                    <div className="flex items-center gap-2 lg:justify-end">
+                      <Link href={`/presupuestos/${presupuesto.id}`} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600">Abrir</Link>
+                      <details className="relative">
+                        <summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-200 text-lg font-bold text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">⋯</summary>
+                        <div className="absolute right-0 top-10 z-20 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                          {presupuesto.estado !== "RECHAZADO" && <Link href={`/trabajos/nuevo?presupuesto=${presupuesto.id}`} className="block rounded-lg px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/30">Convertir en OT</Link>}
+                          <Link href={`/presupuestos/nuevo?id=${presupuesto.id}`} className="block rounded-lg px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">Editar</Link>
+                          <button type="button" onClick={() => setIdABorrar(presupuesto.id)} className="block w-full rounded-lg px-3 py-2 text-left text-xs font-bold text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30">Enviar a papelera</button>
+                        </div>
+                      </details>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center px-6 py-14 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-xl dark:bg-sky-950/30">₱</div>
+              <h2 className="mt-4 font-bold text-slate-900 dark:text-white">No hay presupuestos en esta vista</h2>
+              <p className="mt-1 text-sm text-slate-500">Cambiá el filtro o prepará una nueva cotización.</p>
+              <Link href="/presupuestos/nuevo" className="mt-4 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white">Crear presupuesto</Link>
+            </div>
+          )}
+        </section>
+
+        {idABorrar !== null && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+              <h2 className="text-lg font-black text-slate-900 dark:text-white">¿Enviar P-{idABorrar} a la papelera?</h2>
+              <p className="mt-2 text-sm text-slate-500">Dejará de aparecer en el historial activo.</p>
+              <div className="mt-6 flex gap-2">
+                <button type="button" onClick={() => setIdABorrar(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300">Cancelar</button>
+                <button type="button" onClick={confirmarBorrado} className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white">Eliminar</button>
               </div>
             </div>
           </div>
         )}
-
-        {/* BARRA DE HERRAMIENTAS */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full max-w-md">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              placeholder="Buscar por cliente, patente o detalle..."
-              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-11 pr-4 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
-              {presupuestosFiltrados.length} {presupuestosFiltrados.length === 1 ? "cotización" : "cotizaciones"}
-            </p>
-          </div>
-        </div>
-
-        {/* MINI STATS + FILTROS POR ESTADO */}
-        <div className="flex flex-wrap items-center gap-2">
-          {FILTROS_PRESUPUESTO.map((f) => {
-            const isActive = estadoFiltro === f.value;
-            if (f.value === "TODOS") {
-              return (
-                <button
-                  key={f.value}
-                  onClick={() => setEstadoFiltro("TODOS")}
-                  className={cn(
-                    "rounded-full border px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all",
-                    isActive
-                      ? "border-sky-500 bg-sky-500 text-white shadow-sm"
-                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
-                  )}
-                >
-                  Todos · {presupuestos.length}
-                </button>
-              );
-            }
-            const count = presupuestos.filter(p => p.estado === f.value).length;
-            return (
-              <button
-                key={f.value}
-                onClick={() => setEstadoFiltro(f.value)}
-                className={cn(
-                  "rounded-full border px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all",
-                  isActive
-                    ? cn(f.color, "shadow-sm ring-2 ring-offset-1 ring-current")
-                    : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
-                )}
-              >
-                {f.label} {count > 0 && <span className="ml-1 opacity-70">· {count}</span>}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* HISTORIAL */}
-        <SectionCard title="Historial de Cotizaciones">
-
-          {/* ── VISTA MOBILE (cards) ── */}
-          <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800/60">
-            {loading ? (
-              [1,2,3].map(i => (
-                <div key={i} className="animate-pulse space-y-3 py-4">
-                  <div className="flex justify-between">
-                    <div className="h-4 w-28 rounded bg-slate-100 dark:bg-slate-800" />
-                    <div className="h-4 w-16 rounded bg-slate-100 dark:bg-slate-800" />
-                  </div>
-                  <div className="h-3 w-40 rounded bg-slate-100 dark:bg-slate-800" />
-                  <div className="h-8 w-full rounded-lg bg-slate-100 dark:bg-slate-800" />
-                </div>
-              ))
-            ) : presupuestosFiltrados.length > 0 ? (
-              presupuestosFiltrados.map((p) => (
-                <div key={p.id} className="py-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-sky-600 dark:text-sky-400">P-{p.id}</span>
-                        <span className={cn("rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider", getBadgeColor(p.estado))}>
-                          {ESTADOS_PRESUPUESTO.find(e => e.value === p.estado)?.label || p.estado}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 font-bold text-slate-900 dark:text-white truncate">{p.cliente_nombre}</p>
-                      <p className="text-[11px] font-semibold uppercase text-slate-500">{p.vehiculo} · <span className="font-mono">{p.patente}</span></p>
-                    </div>
-                    <span className="font-mono text-base font-black text-sky-600 dark:text-sky-400 shrink-0">{formatCurrency(p.total)}</span>
-                  </div>
-                  {p.resumen_corto && <p className="text-xs text-slate-500 line-clamp-2">{p.resumen_corto}</p>}
-                  <div className="flex items-center gap-2 pt-1">
-                    <Link href={`/presupuestos/${p.id}`} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 dark:border-slate-700">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                    </Link>
-                    <Link href={`/presupuestos/nuevo?id=${p.id}`} className="flex h-9 w-9 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 text-sky-600 dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-400">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                    </Link>
-                    {p.estado !== "RECHAZADO" && (
-                      <Link href={`/trabajos/nuevo?presupuesto=${p.id}`} className="flex h-9 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-[10px] font-bold uppercase text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-400">
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                        A OT
-                      </Link>
-                    )}
-                    <button onClick={() => setIdABorrar(p.id)} className="ml-auto flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-400 dark:border-slate-700">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="py-12 text-center">
-                <p className="text-sm text-slate-400">Sin presupuestos para mostrar.</p>
-              </div>
-            )}
-          </div>
-
-          {/* ── VISTA DESKTOP (tabla) ── */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[900px]">
-              <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:border-slate-800">
-                  <th className="py-4 pl-4 w-16 text-center">Nº</th>
-                  <th className="py-4">Cliente / Vehículo</th>
-                  <th className="py-4">Detalle Principal</th>
-                  <th className="py-4">Estado</th>
-                  <th className="py-4 text-right">Total</th>
-                  <th className="py-4 pr-4 text-right">Acciones Rápidas</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
-                {loading ? (
-                  <tr><td colSpan={6} className="py-12 text-center animate-pulse text-slate-400">Cargando cotizaciones...</td></tr>
-                ) : presupuestosFiltrados.length > 0 ? (
-                  presupuestosFiltrados.map((p) => (
-                    <tr key={p.id} className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
-                      <td className="py-4 pl-4 text-center">
-                        <Link href={`/presupuestos/${p.id}`} className="font-mono text-xs font-bold text-sky-600 hover:underline dark:text-sky-400">P-{p.id}</Link>
-                      </td>
-                      <td className="py-4">
-                        <Link href={`/presupuestos/${p.id}`} className="flex flex-col hover:opacity-80 transition-opacity">
-                          <span className="font-bold text-slate-900 dark:text-white">{p.cliente_nombre}</span>
-                          <span className="text-[11px] font-semibold uppercase text-slate-500">{p.vehiculo} - <span className="font-mono">{p.patente}</span></span>
-                        </Link>
-                      </td>
-                      <td className="py-4 text-sm text-slate-600 dark:text-slate-400">
-                        <Link href={`/presupuestos/${p.id}`} className="hover:text-sky-600 dark:hover:text-sky-400 transition-colors">{p.resumen_corto || "Sin detalle."}</Link>
-                      </td>
-                      <td className="py-4">
-                        <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", getBadgeColor(p.estado))}>
-                          {ESTADOS_PRESUPUESTO.find(e => e.value === p.estado)?.label || p.estado}
-                        </span>
-                      </td>
-                      <td className="py-4 text-right font-mono text-sm font-black text-sky-600 dark:text-sky-400">{formatCurrency(p.total)}</td>
-                      <td className="py-4 pr-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5 opacity-80 transition-opacity group-hover:opacity-100">
-                          <Link href={`/presupuestos/${p.id}`} title="Ver" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700">
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                          </Link>
-                          {p.estado !== "RECHAZADO" && (
-                            <Link href={`/trabajos/nuevo?presupuesto=${p.id}`} title="Convertir a OT" className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-emerald-200 bg-emerald-50/50 text-[10px] font-bold uppercase tracking-wider text-emerald-600 transition hover:border-emerald-500 hover:bg-emerald-500 hover:text-white dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-600 dark:hover:text-white">
-                              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>A OT
-                            </Link>
-                          )}
-                          <Link href={`/presupuestos/nuevo?id=${p.id}`} title="Editar" className="flex h-8 w-8 items-center justify-center rounded-lg border border-sky-200 bg-sky-50/50 text-sky-600 transition hover:border-sky-500 hover:bg-sky-500 hover:text-white dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-400 dark:hover:bg-sky-600 dark:hover:text-white">
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                          </Link>
-                          <button onClick={() => setIdABorrar(p.id)} title="Eliminar" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-red-500 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:hover:bg-red-900/20 dark:hover:text-red-400">
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="py-20 text-center">
-                      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-sky-50 dark:bg-slate-800">
-                        <svg className="h-6 w-6 text-sky-500 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                      </div>
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">Sin Presupuestos</h3>
-                      <p className="mt-1 text-sm text-slate-500">Todavía no tenés cotizaciones o ninguna coincide con tu búsqueda.</p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </SectionCard>
       </div>
     </AppShell>
   );
+}
+
+function Summary({ label, value, helper, success = false }: { label: string; value: string; helper: string; success?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <div className="mt-1 flex items-baseline gap-2">
+        <strong className={cn("font-mono text-xl text-slate-900 dark:text-white", success && "text-emerald-600 dark:text-emerald-400")}>{value}</strong>
+        <span className="truncate text-xs text-slate-500">{helper}</span>
+      </div>
+    </div>
+  );
+}
+
+function LoadingRows() {
+  return <div className="space-y-3 p-4">{[1, 2, 3, 4, 5].map((item) => <div key={item} className="h-14 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />)}</div>;
 }

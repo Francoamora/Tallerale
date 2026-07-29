@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.contrib import admin, messages
+from django.utils import timezone
 
 from .models import (
     ApiToken,
@@ -21,9 +24,44 @@ class TenantScopedAdmin(admin.ModelAdmin):
 
 @admin.register(PerfilTaller)
 class PerfilTallerAdmin(TenantScopedAdmin):
-    list_display = ("taller_nombre", "nombre", "user", "taller_ciudad", "taller_tel", "trial_start")
+    list_display = (
+        "taller_nombre", "nombre", "user", "taller_ciudad", "taller_tel",
+        "trial_start", "plan_activo_hasta", "estado_acceso",
+    )
+    list_filter = ("plan_activo_hasta",)
     search_fields = ("taller_nombre", "nombre", "user__email", "user__username", "taller_tel")
     readonly_fields = ("trial_start",)
+    actions = ("otorgar_mes", "extender_mes", "quitar_plan_pago")
+
+    @admin.display(description="Acceso")
+    def estado_acceso(self, obj):
+        if obj.plan_vigente:
+            return "Plan activo"
+        if not obj.trial_vencido:
+            return "Trial vigente"
+        return "Sin acceso"
+
+    @admin.action(description="Otorgar 1 mes desde hoy (acuerdo por WhatsApp)")
+    def otorgar_mes(self, request, queryset):
+        ahora = timezone.now()
+        count = queryset.update(plan_activo_hasta=ahora + timedelta(days=30))
+        self.message_user(request, f"Se otorgó acceso por 30 días a {count} taller(es).", level=messages.SUCCESS)
+
+    @admin.action(description="Extender 30 días desde el vencimiento actual")
+    def extender_mes(self, request, queryset):
+        ahora = timezone.now()
+        count = 0
+        for perfil in queryset:
+            base = perfil.plan_activo_hasta if perfil.plan_activo_hasta and perfil.plan_activo_hasta > ahora else ahora
+            perfil.plan_activo_hasta = base + timedelta(days=30)
+            perfil.save(update_fields=["plan_activo_hasta"])
+            count += 1
+        self.message_user(request, f"Se extendió 30 días el acceso de {count} taller(es).", level=messages.SUCCESS)
+
+    @admin.action(description="Quitar plan pago (vuelve a depender solo del trial)")
+    def quitar_plan_pago(self, request, queryset):
+        count = queryset.update(plan_activo_hasta=None)
+        self.message_user(request, f"Se quitó el plan pago de {count} taller(es).", level=messages.SUCCESS)
 
 
 @admin.register(ApiToken)

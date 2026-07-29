@@ -81,6 +81,7 @@ export interface PublicPresupuesto {
   // Datos del taller — incluidos por Django cuando el backend los expone
   taller_nombre?: string;
   taller_tel?: string;
+  taller_logo_url?: string;
 }
 
 /** Historial de OT de un vehículo */
@@ -110,6 +111,7 @@ export interface PublicVehiculo {
   // Datos del taller — incluidos por Django cuando el backend los expone
   taller_nombre?: string;
   taller_tel?: string;
+  taller_logo_url?: string;
 }
 
 // ─── Errores ───────────────────────────────────────────────────────────────────

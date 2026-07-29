@@ -9,7 +9,7 @@ from django.db.models import Count, Sum, F
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from .models import Cliente, MovimientoCuenta, Trabajo, TrabajoItem, Turno, Vehiculo
+from .models import Cliente, MovimientoCuenta, Presupuesto, Trabajo, TrabajoItem, Turno, Vehiculo
 
 MONTH_LABELS = (
     "Ene", "Feb", "Mar", "Abr", "May", "Jun",
@@ -107,6 +107,7 @@ def crear_trabajo_completo(
     recomendaciones_proximo_service: str = "",
     proximo_control_km: int | None = None,
     descuento: Decimal | float | int | str = Decimal("0.00"),
+    presupuesto_origen_id: Optional[int] = None,
 ) -> Trabajo:
     if not items_data:
         raise ValidationError("Debe informar al menos un ítem (repuesto/mano de obra) para registrar el trabajo.")
@@ -147,6 +148,23 @@ def crear_trabajo_completo(
     else:
         raise ValidationError("Debe especificar un vehículo del directorio o utilizar el Alta Express.")
 
+    presupuesto_origen = None
+    if presupuesto_origen_id:
+        presupuesto_origen = Presupuesto.objects.filter(
+            pk=presupuesto_origen_id,
+            owner=user,
+            activo=True,
+        ).first()
+        if not presupuesto_origen:
+            raise ValidationError("El presupuesto de origen no existe o no pertenece a tu taller.")
+        if presupuesto_origen.estado == "RECHAZADO":
+            raise ValidationError("No se puede crear una orden desde un presupuesto rechazado.")
+        if (
+            presupuesto_origen.cliente_id != cliente.id
+            or presupuesto_origen.vehiculo_id != vehiculo.id
+        ):
+            raise ValidationError("El cliente o vehículo no coincide con el presupuesto de origen.")
+
     # 3. VALIDACIÓN FINANCIERA
     descuento_decimal = Decimal(str(descuento or "0.00"))
     if descuento_decimal < 0:
@@ -157,6 +175,7 @@ def crear_trabajo_completo(
         owner=user or cliente.owner,
         vehiculo=vehiculo,
         cliente=cliente,
+        presupuesto_origen=presupuesto_origen,
         kilometraje=kilometraje,
         estado=estado,
         fecha_ingreso=timezone.now(),
@@ -213,6 +232,11 @@ def crear_trabajo_completo(
     trabajo.total_repuestos = total_repuestos
     trabajo.total = (total_mano_obra + total_repuestos) - descuento_decimal
     trabajo.save(update_fields=["total_mano_obra", "total_repuestos", "total", "descuento"])
+
+    # Convertir una cotización en trabajo implica aprobación interna del taller.
+    if presupuesto_origen and presupuesto_origen.estado in {"BORRADOR", "ENVIADO"}:
+        presupuesto_origen.estado = "APROBADO"
+        presupuesto_origen.save(update_fields=["estado"])
 
     return trabajo
 
@@ -307,6 +331,7 @@ def obtener_dashboard_snapshot(user=None, months: int = 6) -> dict:
             "estado": t.estado,
             "fecha_ingreso": t.fecha_ingreso,
             "total": float(t.total),
+            "cliente_id": t.cliente_id,
             "cliente_nombre": t.cliente.nombre_completo,
             "vehiculo": f"{t.vehiculo.marca} {t.vehiculo.modelo}",
             "patente": t.vehiculo.patente,

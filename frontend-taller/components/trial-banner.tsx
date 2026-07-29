@@ -72,42 +72,37 @@ export function TrialBanner() {
   const [info, setInfo] = useState<TrialInfo | null>(null);
 
   useEffect(() => {
-    setInfo(getTrialInfo());
+    const frame = requestAnimationFrame(() => setInfo(getTrialInfo()));
     const id = setInterval(() => setInfo(getTrialInfo()), 5 * 60 * 1000);
-    return () => clearInterval(id);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearInterval(id);
+    };
   }, []);
 
   if (!info || !info.isLoggedIn) return null;
+  if (info.isPlanActivo) return null;
 
   if (info.isExpired) {
     return <ModalVencida tallerNombre={info.tallerNombre} />;
   }
 
-  // Estilos por urgencia
+  // Estilos por urgencia — un dot + una pill, no toda la barra pintada.
   const themes = {
     safe: {
-      bar:    "bg-gradient-to-r from-emerald-950 via-emerald-900 to-emerald-950 border-b border-emerald-800/60",
-      dot:    "bg-emerald-400",
-      pill:   "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30",
-      label:  "text-emerald-100",
-      sub:    "text-emerald-400/80",
-      btn:    "bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-900/50",
+      dot:     "bg-emerald-500",
+      pill:    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20",
+      message: "text-slate-600 dark:text-slate-300",
     },
     warning: {
-      bar:    "bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 border-b border-amber-800/60",
-      dot:    "bg-amber-400",
-      pill:   "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30",
-      label:  "text-amber-100",
-      sub:    "text-amber-400/80",
-      btn:    "bg-amber-500 hover:bg-amber-400 text-white shadow-amber-900/50",
+      dot:     "bg-amber-500",
+      pill:    "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20",
+      message: "text-slate-700 dark:text-slate-200",
     },
     danger: {
-      bar:    "bg-gradient-to-r from-red-950 via-red-900 to-red-950 border-b border-red-800/60",
-      dot:    "bg-red-400",
-      pill:   "bg-red-500/20 text-red-300 ring-1 ring-red-500/30",
-      label:  "text-red-100",
-      sub:    "text-red-400/80",
-      btn:    "bg-red-500 hover:bg-red-400 text-white shadow-red-900/50",
+      dot:     "bg-red-500",
+      pill:    "bg-red-50 text-red-700 ring-1 ring-red-200 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/20",
+      message: "text-red-600 dark:text-red-400",
     },
   }[info.urgency];
 
@@ -126,10 +121,10 @@ export function TrialBanner() {
       : `Quedan ${info.daysRemaining} días de tu prueba gratuita`;
 
   return (
-    <div className={`flex items-center justify-between gap-3 px-4 py-2 ${themes.bar}`}>
+    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900 sm:px-6">
 
-      {/* Izquierda: dot animado + texto */}
-      <div className="flex items-center gap-3 min-w-0">
+      {/* Izquierda: dot animado + texto + pill */}
+      <div className="flex items-center gap-2.5 min-w-0">
         {/* Dot con pulso */}
         <span className="relative flex h-2 w-2 shrink-0">
           <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${themes.dot}`} />
@@ -137,7 +132,7 @@ export function TrialBanner() {
         </span>
 
         {/* Texto */}
-        <span className={`text-sm font-semibold truncate ${themes.label}`}>
+        <span className={`text-xs font-semibold truncate sm:text-sm ${themes.message}`}>
           {message}
         </span>
 
@@ -147,12 +142,12 @@ export function TrialBanner() {
         </span>
       </div>
 
-      {/* Derecha: botón activar */}
+      {/* Derecha: botón activar — siempre verde WhatsApp, no cambia con la urgencia */}
       <a
         href={buildActivationWALink(info.tallerNombre)}
         target="_blank"
         rel="noopener noreferrer"
-        className={`shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-black shadow-sm transition active:scale-95 ${themes.btn}`}
+        className="shrink-0 flex items-center gap-1.5 rounded-lg bg-[#25D366] px-3 py-1.5 text-[11px] font-black text-white shadow-sm transition hover:bg-[#1ebe5d] active:scale-95"
       >
         <IconWA className="h-3 w-3" />
         <span className="hidden sm:inline">Activar cuenta</span>

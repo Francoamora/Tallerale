@@ -64,7 +64,10 @@ export function HintBubble({
 
   useEffect(() => {
     // Solo mostrar si NO fue descartado antes
-    if (!getDismissed().has(id)) setVisible(true);
+    const frame = requestAnimationFrame(() => {
+      if (!getDismissed().has(id)) setVisible(true);
+    });
+    return () => cancelAnimationFrame(frame);
   }, [id]);
 
   function handleDismiss() {

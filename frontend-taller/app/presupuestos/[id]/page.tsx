@@ -4,11 +4,14 @@ import { Fragment, use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { getPresupuestoById, actualizarEstadoPresupuesto, eliminarPresupuesto } from "@/lib/api";
+import { A4PreviewScaler, suspenderEscalaA4 } from "@/components/a4-preview-scaler";
+import { getPresupuestoById, actualizarEstadoPresupuesto, eliminarPresupuesto, getPerfilTaller } from "@/lib/api";
+import { esperarRecursosDocumento } from "@/lib/document-export";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { PresupuestoDetalle } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/trial";
+import { buildWhatsAppUrl, normalizeWhatsAppPhone } from "@/lib/whatsapp";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -28,7 +31,7 @@ const BADGE: Record<string, string> = {
   RECHAZADO: "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/50",
 };
 
-function buildWATexto(p: PresupuestoDetalle, tallerNombre: string): string {
+function buildWATexto(p: PresupuestoDetalle, tallerNombre: string, portalUrl?: string): string {
   const num = `P-${String(p.id).padStart(4, "0")}`;
   const nombre = p.cliente?.nombre_completo?.split(" ")[0] ?? "cliente";
   const moneda = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
@@ -48,9 +51,9 @@ function buildWATexto(p: PresupuestoDetalle, tallerNombre: string): string {
   lineas.push(
     ``,
     `*Total: ${moneda.format(p.total)}*`,
-    ``,
-    `Valido por 15 dias. Cualquier consulta, escribinos!`,
   );
+  if (portalUrl) lineas.push(``, `Ver y responder presupuesto:`, portalUrl);
+  lineas.push(``, `Valido por 15 dias. Cualquier consulta, escribinos!`);
   return lineas.join("\n");
 }
 
@@ -68,17 +71,32 @@ const PDF_SVG = (
 );
 
 // Botón WA → <a> nativo: el navegador NUNCA lo bloquea como popup
-function BtnWA({ texto, variante }: { texto: string; variante: "claro" | "oscuro" }) {
+function BtnWA({ texto, telefono, variante }: { texto: string; telefono?: string | null; variante: "claro" | "oscuro" }) {
   const base = "flex items-center gap-2 px-4 py-2 text-sm font-bold transition active:scale-95";
   const estilos = variante === "oscuro"
     ? `${base} rounded-lg bg-[#25D366] text-white hover:bg-[#1ebe5d]`
     : `${base} rounded-xl bg-[#25D366] text-white shadow-sm hover:bg-[#1ebe5d]`;
+  const telefonoNormalizado = normalizeWhatsAppPhone(telefono);
+
+  if (!telefonoNormalizado) {
+    return (
+      <span
+        className={`${estilos} cursor-not-allowed opacity-50`}
+        title="Cargá un celular válido en la ficha del cliente"
+        aria-disabled="true"
+      >
+        {WA_SVG}
+        Sin teléfono
+      </span>
+    );
+  }
+
   return (
     <a
-      href={`https://wa.me/?text=${encodeURIComponent(texto)}`}
-      target="_blank"
-      rel="noopener noreferrer"
+      href={buildWhatsAppUrl(texto, telefonoNormalizado)}
       className={estilos}
+      title={`Enviar por WhatsApp a ${telefono}`}
+      aria-label={`Enviar por WhatsApp a ${telefono}`}
     >
       {WA_SVG}
       WhatsApp
@@ -103,35 +121,42 @@ function BtnPDF({ onClick, cargando, variante }: { onClick: () => void; cargando
 }
 
 // ─── Documento A4 ────────────────────────────────────────────────────────────
-function DocumentoA4({ p, tallerNombre, tallerCiudad }: { p: PresupuestoDetalle; tallerNombre: string; tallerCiudad: string }) {
+function DocumentoA4({ p, tallerNombre, tallerCiudad, tallerCuit, tallerLogoUrl }: { p: PresupuestoDetalle; tallerNombre: string; tallerCiudad: string; tallerCuit: string; tallerLogoUrl?: string | null }) {
   const num = `P-${String(p.id).padStart(4, "0")}`;
   const fecha = formatDate(p.fecha_creacion);
-  // Iniciales para el logo del documento
   const iniciales = tallerNombre
     .split(" ")
+    .filter(Boolean)
     .slice(0, 2)
-    .map(w => w[0])
+    .map(w => w[0].toUpperCase())
     .join("")
-    .toUpperCase()
-    .slice(0, 3);
+    .slice(0, 2);
 
-  const manoObra       = p.items.filter(i => i.tipo === "MANO_OBRA");
-  const repuestos      = p.items.filter(i => i.tipo === "REPUESTO");
-  const insumos        = p.items.filter(i => i.tipo === "INSUMO");
-  const otros          = p.items.filter(i => i.tipo === "OTRO");
+  const manoObra  = p.items.filter(i => i.tipo === "MANO_OBRA");
+  const repuestos = p.items.filter(i => i.tipo === "REPUESTO");
+  const insumos   = p.items.filter(i => i.tipo === "INSUMO");
+  const otros     = p.items.filter(i => i.tipo === "OTRO");
 
   const grupos = [
-    { label: "Mano de Obra",       items: manoObra },
-    { label: "Repuestos",          items: repuestos },
-    { label: "Insumos",            items: insumos },
-    { label: "Otros",              items: otros },
+    { label: "Mano de obra", items: manoObra },
+    { label: "Repuestos", items: repuestos },
+    { label: "Insumos", items: insumos },
+    { label: "Otros", items: otros },
   ].filter(g => g.items.length > 0);
 
   const estadoLabel = ESTADOS.find(e => e.value === p.estado)?.label ?? p.estado;
+  const cargaVisual = p.items.length + Math.ceil((p.resumen_corto?.length ?? 0) / 180);
+  const documentoCompacto = cargaVisual <= 7;
+  const labelStyle = {
+    fontSize: "8px",
+    fontWeight: 800,
+    textTransform: "uppercase" as const,
+    letterSpacing: "1.35px",
+    color: "#94a3b8",
+  };
 
   return (
     <>
-      {/* Print styles — inyectados inline para no tocar globals */}
       <style>{`
         @media print {
           @page { size: A4; margin: 0; }
@@ -151,177 +176,147 @@ function DocumentoA4({ p, tallerNombre, tallerCiudad }: { p: PresupuestoDetalle;
 
       <div
         id="doc-a4"
+        data-compact={documentoCompacto ? "true" : "false"}
         className="mx-auto bg-white text-slate-900"
-        style={{ width: "210mm", minHeight: "297mm", fontFamily: "'Inter', system-ui, sans-serif" }}
+        style={{
+          width: "210mm",
+          minHeight: documentoCompacto ? "0" : "297mm",
+          display: "flex",
+          flexDirection: "column",
+          fontFamily: "'Inter', system-ui, sans-serif",
+        }}
       >
-        {/* ── Franja naranja superior ── */}
-        <div style={{ height: "6px", background: "linear-gradient(90deg, #f97316 0%, #fb923c 100%)" }} />
+        <div style={{ height: "4px", flexShrink: 0, background: "#efd38f" }} />
 
-        {/* ── CABECERA ── */}
-        <div style={{ padding: "20mm 18mm 12mm" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-
-            {/* Logo + datos empresa */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+        <header style={{ padding: "11mm 16mm 7mm" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "24px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+              {tallerLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- html-to-image captura el DOM directo, no funciona con next/image
+                <img
+                  src={tallerLogoUrl}
+                  alt={tallerNombre || "Logo del taller"}
+                  crossOrigin="anonymous"
+                  style={{
+                    width: "42px", height: "42px", borderRadius: "9px",
+                    border: "1px solid #dbe2ea", background: "#fff",
+                    objectFit: "contain", flexShrink: 0,
+                  }}
+                />
+              ) : (
                 <div style={{
-                  width: "42px", height: "42px", borderRadius: "10px",
-                  background: "#f97316", display: "flex", alignItems: "center",
-                  justifyContent: "center", color: "#fff", fontWeight: 900, fontSize: "14px",
+                  width: "42px", height: "42px", borderRadius: "9px",
+                  border: "1px solid #dbe2ea", background: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#92400e", fontWeight: 900, fontSize: "14px",
                   letterSpacing: "1px", flexShrink: 0,
-                }}>{iniciales}</div>
-                <div>
-                  <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: 1.2 }}>
-                    {tallerNombre}
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 500, marginTop: "1px" }}>
-                    {tallerCiudad || "Taller Mecánico"}
-                  </div>
+                }}>
+                  {iniciales || "T"}
+                </div>
+              )}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: "18px", fontWeight: 900, color: "#0f172a", lineHeight: 1.15 }}>
+                  {tallerNombre || "Mi Taller"}
+                </div>
+                <div style={{ marginTop: "4px", fontSize: "10px", color: "#64748b" }}>
+                  {tallerCiudad || "Servicio automotor"}
+                  {tallerCuit && ` · CUIT ${tallerCuit}`}
                 </div>
               </div>
             </div>
-
-            {/* Título + número */}
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "26px", fontWeight: 900, color: "#0f172a", letterSpacing: "-0.5px", lineHeight: 1 }}>
+              <div style={{ ...labelStyle, color: "#a16207" }}>Cotización de servicio</div>
+              <div style={{ marginTop: "3px", fontSize: "24px", fontWeight: 900, color: "#0f172a", letterSpacing: "-0.7px", lineHeight: 1 }}>
                 PRESUPUESTO
               </div>
-              <div style={{ fontSize: "18px", fontWeight: 700, color: "#f97316", marginTop: "4px", fontFamily: "monospace" }}>
+              <div style={{ marginTop: "4px", fontSize: "17px", fontWeight: 800, color: "#92400e", fontFamily: "monospace" }}>
                 {num}
               </div>
-              <div style={{ display: "flex", gap: "16px", marginTop: "8px", justifyContent: "flex-end" }}>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: "9px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "#94a3b8" }}>Fecha</div>
-                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>{fecha}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: "9px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "#94a3b8" }}>Estado</div>
-                  <div style={{
-                    fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px",
-                    color: p.estado === "APROBADO" ? "#059669" : p.estado === "RECHAZADO" ? "#dc2626" : p.estado === "ENVIADO" ? "#0284c7" : "#64748b",
-                  }}>{estadoLabel}</div>
-                </div>
+              <div style={{ marginTop: "6px", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px" }}>
+                <span style={{ fontSize: "10px", color: "#64748b" }}>{fecha}</span>
+                <span style={{
+                  borderRadius: "999px", padding: "3px 7px",
+                  border: "1px solid #cbd5e1", color: "#475569",
+                  fontSize: "8px", fontWeight: 900, letterSpacing: "1px",
+                  textTransform: "uppercase",
+                }}>
+                  {estadoLabel}
+                </span>
               </div>
             </div>
           </div>
+        </header>
 
-          {/* Línea divisora con degradé */}
-          <div style={{ height: "2px", background: "linear-gradient(90deg, #f97316 0%, #e2e8f0 60%)", marginTop: "16px", borderRadius: "2px" }} />
-        </div>
-
-        {/* ── CLIENTE + VEHÍCULO ── */}
-        <div style={{ padding: "0 18mm 14mm", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-
-          {/* Cliente */}
-          <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "14px 16px", borderLeft: "3px solid #f97316" }}>
-            <div style={{ fontSize: "9px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1.5px", color: "#94a3b8", marginBottom: "10px" }}>
-              Cliente / Destinatario
+        <main style={{ flex: 1, padding: "0 16mm" }}>
+          <section style={{
+            display: "grid", gridTemplateColumns: "1.15fr 1fr .72fr",
+            borderTop: "1px solid #d5b968", borderBottom: "1px solid #d5b968",
+          }}>
+            <div style={{ padding: "10px 12px 10px 0" }}>
+              <div style={labelStyle}>Cliente</div>
+              <div style={{ marginTop: "6px", fontSize: "13px", fontWeight: 850, color: "#0f172a" }}>
+                {p.cliente?.nombre_completo || "Sin cliente registrado"}
+              </div>
+              <div style={{ marginTop: "4px", fontSize: "9.5px", lineHeight: 1.5, color: "#64748b" }}>
+                {p.cliente
+                  ? [p.cliente.dni && `DNI/CUIT ${p.cliente.dni}`, p.cliente.telefono, p.cliente.email].filter(Boolean).join(" · ") || "Sin datos de contacto"
+                  : "Sin datos de contacto"}
+              </div>
             </div>
-            {p.cliente ? (
-              <>
-                <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: 1.2, marginBottom: "6px" }}>
-                  {p.cliente.nombre_completo}
-                </div>
-                {p.cliente.dni && (
-                  <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "3px" }}>
-                    <span style={{ fontWeight: 600 }}>DNI/CUIT:</span> {p.cliente.dni}
-                  </div>
-                )}
-                {p.cliente.telefono && (
-                  <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "3px" }}>
-                    <span style={{ fontWeight: 600 }}>Tel:</span> {p.cliente.telefono}
-                  </div>
-                )}
-                {p.cliente.email && (
-                  <div style={{ fontSize: "11px", color: "#64748b" }}>{p.cliente.email}</div>
-                )}
-              </>
-            ) : (
-              <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>Sin cliente registrado</div>
-            )}
-          </div>
-
-          {/* Vehículo */}
-          <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "14px 16px", borderLeft: "3px solid #e2e8f0" }}>
-            <div style={{ fontSize: "9px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1.5px", color: "#94a3b8", marginBottom: "10px" }}>
-              Vehículo a Reparar
+            <div style={{ padding: "10px 12px", borderLeft: "1px solid #e2e8f0" }}>
+              <div style={labelStyle}>Vehículo</div>
+              <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: 800, color: "#1e293b" }}>
+                {p.vehiculo ? `${p.vehiculo.patente} · ${p.vehiculo.marca} ${p.vehiculo.modelo}` : "Sin vehículo registrado"}
+              </div>
+              <div style={{ marginTop: "4px", fontSize: "9.5px", color: "#64748b" }}>
+                {p.vehiculo ? [p.vehiculo.anio, p.vehiculo.color].filter(Boolean).join(" · ") || "Datos básicos del vehículo" : "Sin datos adicionales"}
+              </div>
             </div>
-            {p.vehiculo ? (
-              <>
-                <div style={{
-                  display: "inline-block", background: "#0f172a", color: "#fff",
-                  fontFamily: "monospace", fontWeight: 800, fontSize: "14px",
-                  letterSpacing: "3px", padding: "3px 10px", borderRadius: "6px", marginBottom: "8px",
-                }}>
-                  {p.vehiculo.patente}
-                </div>
-                <div style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>
-                  {p.vehiculo.marca} {p.vehiculo.modelo}
-                  {p.vehiculo.anio && <span style={{ fontWeight: 400, color: "#94a3b8", fontSize: "12px" }}> · {p.vehiculo.anio}</span>}
-                </div>
-                {p.vehiculo.color && (
-                  <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "3px" }}>
-                    <span style={{ fontWeight: 600 }}>Color:</span> {p.vehiculo.color}
-                  </div>
-                )}
-                <div style={{ fontSize: "11px", color: "#64748b" }}>
-                  <span style={{ fontWeight: 600 }}>Km actual:</span>{" "}
-                  <span style={{ fontFamily: "monospace" }}>{p.vehiculo.kilometraje_actual.toLocaleString("es-AR")}</span>
-                </div>
-              </>
-            ) : (
-              <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>Sin vehículo registrado</div>
-            )}
-          </div>
-        </div>
-
-        {/* ── DESCRIPCIÓN DEL TRABAJO ── */}
-        {p.resumen_corto && (
-          <div style={{ padding: "0 18mm 12mm" }}>
-            <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 14px" }}>
-              <span style={{ fontSize: "9px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px", color: "#92400e" }}>Trabajo a realizar: </span>
-              <span style={{ fontSize: "12px", color: "#78350f", fontWeight: 500 }}>{p.resumen_corto}</span>
+            <div style={{ padding: "10px 0 10px 12px", borderLeft: "1px solid #e2e8f0" }}>
+              <div style={labelStyle}>Kilometraje</div>
+              <div style={{ marginTop: "6px", fontFamily: "monospace", fontSize: "13px", fontWeight: 900, color: "#0f172a" }}>
+                {p.vehiculo ? `${p.vehiculo.kilometraje_actual.toLocaleString("es-AR")} km` : "—"}
+              </div>
+              <div style={{ marginTop: "4px", fontSize: "9.5px", color: "#64748b" }}>Validez: 15 días</div>
             </div>
-          </div>
-        )}
+          </section>
 
-        {/* ── TABLA DE ITEMS ── */}
-        <div style={{ padding: "0 18mm 8mm" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+          {p.resumen_corto && (
+            <section style={{ marginTop: "9mm", display: "grid", gridTemplateColumns: "128px 1fr", gap: "14px" }}>
+              <div>
+                <div style={{ ...labelStyle, color: "#a16207" }}>Trabajo cotizado</div>
+                <div style={{ marginTop: "5px", width: "32px", height: "2px", background: "#d5b968" }} />
+              </div>
+              <div style={{ fontSize: "12px", fontWeight: 650, lineHeight: 1.5, color: "#334155" }}>{p.resumen_corto}</div>
+            </section>
+          )}
+
+          <section style={{ marginTop: "6mm" }}>
+          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: "11px" }}>
             <thead>
-              <tr style={{ background: "#0f172a" }}>
-                <th style={{ padding: "9px 12px", textAlign: "left", color: "#fff", fontWeight: 700, fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", borderRadius: "0", width: "36px" }}>#</th>
-                <th style={{ padding: "9px 12px", textAlign: "left", color: "#fff", fontWeight: 700, fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px" }}>Descripción</th>
-                <th style={{ padding: "9px 12px", textAlign: "center", color: "#f97316", fontWeight: 700, fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", width: "70px" }}>Cant.</th>
-                <th style={{ padding: "9px 12px", textAlign: "right", color: "#94a3b8", fontWeight: 700, fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", width: "100px" }}>P. Unit.</th>
-                <th style={{ padding: "9px 12px", textAlign: "right", color: "#fff", fontWeight: 700, fontSize: "10px", textTransform: "uppercase", letterSpacing: "1px", width: "100px" }}>Subtotal</th>
+              <tr style={{ background: "#faf8f1" }}>
+                <th style={{ width: "38px", padding: "7px 10px", textAlign: "center", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#94a3b8", fontSize: "8px" }}>#</th>
+                <th style={{ padding: "7px 10px", textAlign: "left", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#475569", fontSize: "8px", textTransform: "uppercase", letterSpacing: "1.2px" }}>Concepto</th>
+                <th style={{ width: "58px", padding: "7px 10px", textAlign: "center", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#475569", fontSize: "8px", textTransform: "uppercase" }}>Cant.</th>
+                <th style={{ width: "92px", padding: "7px 10px", textAlign: "right", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#475569", fontSize: "8px", textTransform: "uppercase" }}>P. unit.</th>
+                <th style={{ width: "96px", padding: "7px 10px", textAlign: "right", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#475569", fontSize: "8px", textTransform: "uppercase" }}>Subtotal</th>
               </tr>
             </thead>
             <tbody>
-              {grupos.map((grupo, gi) => (
-                <Fragment key={`grupo-${gi}`}>
+              {grupos.map((grupo, groupIndex) => (
+                <Fragment key={grupo.label}>
                   <tr>
-                    <td colSpan={5} style={{ padding: "8px 12px 4px", fontSize: "9px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1.5px", color: "#f97316", background: "#fff7ed", borderTop: gi > 0 ? "1px solid #e2e8f0" : "none" }}>
+                    <td colSpan={5} style={{ padding: "6px 10px 3px", borderTop: groupIndex ? "1px solid #e2e8f0" : "none", color: "#64748b", fontSize: "8px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "1.3px" }}>
                       {grupo.label}
                     </td>
                   </tr>
-                  {grupo.items.map((item, ii) => (
-                    <tr key={item.id ?? `${gi}-${ii}`} style={{ background: ii % 2 === 0 ? "#f8fafc" : "#fff" }}>
-                      <td style={{ padding: "8px 12px", color: "#94a3b8", fontFamily: "monospace", fontSize: "11px", textAlign: "center" }}>
-                        {String(ii + 1).padStart(2, "0")}
-                      </td>
-                      <td style={{ padding: "8px 12px", color: "#1e293b", fontWeight: 500 }}>
-                        {item.descripcion}
-                      </td>
-                      <td style={{ padding: "8px 12px", textAlign: "center", color: "#334155", fontFamily: "monospace", fontWeight: 600 }}>
-                        {Number(item.cantidad) % 1 === 0 ? Number(item.cantidad) : item.cantidad}
-                      </td>
-                      <td style={{ padding: "8px 12px", textAlign: "right", color: "#64748b", fontFamily: "monospace", fontSize: "11px" }}>
-                        {formatCurrency(item.precio_unitario)}
-                      </td>
-                      <td style={{ padding: "8px 12px", textAlign: "right", color: "#0f172a", fontFamily: "monospace", fontWeight: 700 }}>
-                        {formatCurrency(item.subtotal)}
-                      </td>
+                  {grupo.items.map((item, itemIndex) => (
+                    <tr key={item.id ?? `${groupIndex}-${itemIndex}`}>
+                      <td style={{ padding: "7px 10px", textAlign: "center", fontFamily: "monospace", fontSize: "9px", color: "#94a3b8" }}>{String(itemIndex + 1).padStart(2, "0")}</td>
+                      <td style={{ padding: "7px 10px", borderBottom: "1px solid #f1f5f9", fontWeight: 650, color: "#1e293b" }}>{item.descripcion}</td>
+                      <td style={{ padding: "7px 10px", textAlign: "center", fontFamily: "monospace", color: "#475569" }}>{Number(item.cantidad) % 1 === 0 ? Number(item.cantidad) : item.cantidad}</td>
+                      <td style={{ padding: "7px 10px", textAlign: "right", fontFamily: "monospace", fontSize: "10px", color: "#64748b" }}>{formatCurrency(item.precio_unitario)}</td>
+                      <td style={{ padding: "7px 10px", textAlign: "right", fontFamily: "monospace", fontWeight: 800, color: "#0f172a" }}>{formatCurrency(item.subtotal)}</td>
                     </tr>
                   ))}
                 </Fragment>
@@ -329,101 +324,59 @@ function DocumentoA4({ p, tallerNombre, tallerCiudad }: { p: PresupuestoDetalle;
               {p.items.length === 0 && (
                 <tr>
                   <td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#94a3b8", fontStyle: "italic" }}>
-                    Sin ítems cargados en este presupuesto.
+                    Sin conceptos cargados en este presupuesto.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div>
+          </section>
 
-        {/* ── TOTALES ── */}
-        <div style={{ padding: "0 18mm 10mm", display: "flex", justifyContent: "flex-end" }}>
-          <div style={{ width: "240px" }}>
-            {/* Línea separadora */}
-            <div style={{ height: "1px", background: "#e2e8f0", marginBottom: "12px" }} />
+          <section style={{ marginTop: "8mm", display: "grid", gridTemplateColumns: "1fr 232px", gap: "18px", alignItems: "start" }}>
+            <div style={{ borderTop: "1px solid #d8dee7", paddingTop: "8px", fontSize: "9.5px", lineHeight: 1.55, color: "#64748b" }}>
+              Válido por 15 días desde la fecha de emisión. Los precios pueden variar según disponibilidad de repuestos.
+            </div>
+            <div style={{ borderTop: "1px solid #94a3b8" }}>
+              <div style={{ padding: "9px 0" }}>
+                {p.total_mano_obra > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", fontSize: "9.5px", color: "#64748b" }}>
+                    <span>Mano de obra</span><strong style={{ fontFamily: "monospace", color: "#334155" }}>{formatCurrency(p.total_mano_obra)}</strong>
+                  </div>
+                )}
+                {p.total_repuestos > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", fontSize: "9.5px", color: "#64748b" }}>
+                    <span>Repuestos e insumos</span><strong style={{ fontFamily: "monospace", color: "#334155" }}>{formatCurrency(p.total_repuestos)}</strong>
+                  </div>
+                )}
+                {p.descuento > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "9.5px", color: "#475569" }}>
+                    <span>Descuento</span><strong style={{ fontFamily: "monospace" }}>− {formatCurrency(p.descuento)}</strong>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "2px solid #475569", paddingTop: "10px" }}>
+                <span style={{ color: "#64748b", fontSize: "8px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "1.2px" }}>Total</span>
+                <strong style={{ color: "#0f172a", fontFamily: "monospace", fontSize: "19px", letterSpacing: "-.7px" }}>{formatCurrency(p.total)}</strong>
+              </div>
+            </div>
+          </section>
+        </main>
 
-            {p.total_mano_obra > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                <span style={{ fontSize: "11px", color: "#64748b" }}>Mano de Obra</span>
-                <span style={{ fontSize: "11px", fontFamily: "monospace", fontWeight: 600, color: "#334155" }}>{formatCurrency(p.total_mano_obra)}</span>
-              </div>
-            )}
-            {p.total_repuestos > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                <span style={{ fontSize: "11px", color: "#64748b" }}>Repuestos e Insumos</span>
-                <span style={{ fontSize: "11px", fontFamily: "monospace", fontWeight: 600, color: "#334155" }}>{formatCurrency(p.total_repuestos)}</span>
-              </div>
-            )}
-            {p.descuento > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                <span style={{ fontSize: "11px", color: "#059669" }}>Descuento</span>
-                <span style={{ fontSize: "11px", fontFamily: "monospace", fontWeight: 600, color: "#059669" }}>− {formatCurrency(p.descuento)}</span>
-              </div>
-            )}
-
-            {/* Total final */}
-            <div style={{
-              marginTop: "10px", background: "#0f172a", borderRadius: "10px",
-              padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center",
-            }}>
-              <span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px", color: "#94a3b8" }}>Total</span>
-              <span style={{ fontSize: "22px", fontWeight: 900, fontFamily: "monospace", color: "#f97316", letterSpacing: "-0.5px" }}>
-                {formatCurrency(p.total)}
-              </span>
+        <footer style={{ marginTop: documentoCompacto ? "10mm" : "auto", padding: "0 16mm 9mm" }}>
+          <div style={{ height: "1px", background: "#d5b968" }} />
+          <div style={{ marginTop: "10px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "24px" }}>
+            <div style={{ maxWidth: "390px", fontSize: "8px", lineHeight: 1.55, color: "#94a3b8" }}>
+              Presupuesto {num} · Emitido el {fecha}.<br />
+              Documento de servicio sin valor fiscal.
+            </div>
+            <div style={{ textAlign: "right", fontSize: "8px", color: "#94a3b8" }}>
+              <strong style={{ color: "#475569" }}>TallerOS</strong> · Desarrollado por <strong style={{ color: "#92400e" }}>FAM Desarrollos</strong>
             </div>
           </div>
-        </div>
-
-        {/* ── PIE ── */}
-        <div style={{ padding: "0 18mm 14mm", marginTop: "auto" }}>
-          {/* Separador con degradé */}
-          <div style={{ height: "2px", background: "linear-gradient(90deg, #f97316 0%, #e2e8f0 60%)", marginBottom: "14px", borderRadius: "2px" }} />
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontSize: "9px", color: "#94a3b8", lineHeight: 1.7, maxWidth: "260px" }}>
-              Presupuesto {num} · Válido por 15 días desde la fecha de emisión.<br />
-              Los precios pueden variar según disponibilidad de repuestos.<br />
-              Este documento no tiene valor fiscal.
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "13px", fontWeight: 900, color: "#f97316", letterSpacing: "-0.3px" }}>{tallerNombre}</div>
-              <div style={{ fontSize: "9px", color: "#94a3b8", marginTop: "2px" }}>{tallerCiudad || "Taller Mecánico"}</div>
-            </div>
-          </div>
-        </div>
+        </footer>
       </div>
     </>
   );
-}
-
-// ─── Compartir link del portal ────────────────────────────────────────────────
-async function compartirPortal(p: PresupuestoDetalle, tallerNombre: string, mostrarNotif: (m: string, e?: boolean) => void) {
-  if (!p.token) {
-    mostrarNotif("Este presupuesto todavía no tiene link público disponible.", true);
-    return;
-  }
-  const slug  = p.token;
-  const url   = `${window.location.origin}/p/presupuesto/${slug}`;
-  const num   = `P-${String(p.id).padStart(4, "0")}`;
-  const nombre = p.cliente?.nombre_completo?.split(" ")[0] ?? "";
-  const texto  = `Hola ${nombre}! Te mando el presupuesto ${num} en tu portal personal 👇\n\n${url}\n\nAhí podés verlo completo y aprobarlo o rechazarlo. Cualquier duda, escribinos! 🔧`;
-
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: `Presupuesto ${num} · ${tallerNombre}`, text: texto, url });
-      return;
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === "AbortError") return;
-    }
-  }
-  // Fallback desktop: copiar al portapapeles
-  try {
-    await navigator.clipboard.writeText(url);
-    mostrarNotif("🔗 Link del portal copiado al portapapeles!");
-  } catch {
-    mostrarNotif("No se pudo copiar. Link: " + url, true);
-  }
 }
 
 const LINK_SVG = (
@@ -448,17 +401,32 @@ export default function DetallePresupuesto({ params }: PageProps) {
   const [generandoPDF, setGenerandoPDF] = useState(false);
   const [tallerNombre, setTallerNombre] = useState("");
   const [tallerCiudad, setTallerCiudad] = useState("");
+  const [tallerCuit, setTallerCuit] = useState("");
+  const [tallerLogoUrl, setTallerLogoUrl] = useState<string | null>(null);
+  const [appOrigin, setAppOrigin] = useState("");
 
   useEffect(() => {
+    setAppOrigin(window.location.origin);
     const session = getSession();
     if (session?.taller_nombre) setTallerNombre(session.taller_nombre);
     if (session?.taller_ciudad) setTallerCiudad(session.taller_ciudad);
+    if (session?.taller_cuit) setTallerCuit(session.taller_cuit);
+    if (session?.taller_logo_url) setTallerLogoUrl(session.taller_logo_url);
 
     async function cargar() {
       try {
         setLoading(true);
-        const data = await getPresupuestoById(presupuestoId);
+        const [data, perfil] = await Promise.all([
+          getPresupuestoById(presupuestoId),
+          getPerfilTaller().catch(() => null),
+        ]);
         setPresupuesto(data);
+        if (perfil) {
+          setTallerNombre(perfil.taller_nombre);
+          setTallerCiudad(perfil.taller_ciudad);
+          setTallerCuit(perfil.taller_cuit);
+          setTallerLogoUrl(perfil.logo_url ?? null);
+        }
       } catch {
         setError("No se encontró el presupuesto solicitado.");
       } finally {
@@ -503,16 +471,27 @@ export default function DetallePresupuesto({ params }: PageProps) {
     if (!presupuesto) return;
     setGenerandoPDF(true);
     const fileName = `P-${String(presupuesto.id).padStart(4, "0")}.pdf`;
+    // En mobile, A4PreviewScaler achica el documento para que entre en
+    // pantalla — pero el PDF tiene que salir siempre a resolución completa,
+    // igual que en desktop. Lo neutralizamos acá y lo restauramos al final.
+    const restaurarEscala = suspenderEscalaA4();
     try {
       const [{ toJpeg }, { jsPDF }] = await Promise.all([
         import("html-to-image"),
         import("jspdf"),
       ]);
 
-      const el = document.getElementById("doc-a4");
+      let el = document.getElementById("doc-a4");
+      if (!el) {
+        setModoPreview(true);
+        await new Promise<void>(resolve =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        );
+        el = document.getElementById("doc-a4");
+      }
       if (!el) throw new Error("Elemento del documento no encontrado");
 
-      await new Promise(r => setTimeout(r, 150));
+      await esperarRecursosDocumento(el);
 
       const opts = {
         quality: 0.93,
@@ -537,14 +516,21 @@ export default function DetallePresupuesto({ params }: PageProps) {
 
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const imgH = (img.naturalHeight * 210) / img.naturalWidth;
-      pdf.addImage(dataUrl, "JPEG", 0, 0, 210, imgH);
+      let offsetY = 0;
+      pdf.addImage(dataUrl, "JPEG", 0, offsetY, 210, imgH);
+      while (imgH - Math.abs(offsetY) > 297) {
+        offsetY -= 297;
+        pdf.addPage();
+        pdf.addImage(dataUrl, "JPEG", 0, offsetY, 210, imgH);
+      }
       const blob = pdf.output("blob");
       const file = new File([blob], fileName, { type: "application/pdf" });
 
       // Móvil con Web Share API: abre el selector nativo (WA, Mail, Drive…)
       if (navigator.canShare?.({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], text: buildWATexto(presupuesto, tallerNombre), title: fileName });
+          const portalUrl = presupuesto.token ? `${window.location.origin}/p/presupuesto/${encodeURIComponent(presupuesto.token)}` : undefined;
+          await navigator.share({ files: [file], text: buildWATexto(presupuesto, tallerNombre, portalUrl), title: fileName });
           return;
         } catch (e: unknown) {
           if (e instanceof Error && e.name === "AbortError") return;
@@ -565,9 +551,14 @@ export default function DetallePresupuesto({ params }: PageProps) {
       console.error("[PDF]", e);
       mostrarNotificacion("No se pudo generar el PDF. Usá el botón WhatsApp para enviar el resumen.", true);
     } finally {
+      restaurarEscala();
       setGenerandoPDF(false);
     }
   }
+
+  const portalUrl = presupuesto?.token && appOrigin
+    ? `${appOrigin}/p/presupuesto/${encodeURIComponent(presupuesto.token)}`
+    : undefined;
 
   // ── Loading ──
   if (loading) {
@@ -599,28 +590,36 @@ export default function DetallePresupuesto({ params }: PageProps) {
     return (
       <div className="min-h-screen bg-slate-400 dark:bg-slate-700">
         {/* Barra de preview */}
-        <div className="sticky top-0 z-50 flex items-center gap-3 bg-slate-800 px-6 py-3 shadow-xl print:hidden">
-          <button
-            onClick={() => setModoPreview(false)}
-            className="flex items-center gap-2 rounded-lg border border-slate-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-            Salir del preview
-          </button>
-          <span className="text-sm font-bold text-slate-300">
+        <div className="sticky top-0 z-50 flex flex-col gap-3 bg-slate-800 px-4 py-3 shadow-xl print:hidden sm:flex-row sm:items-center sm:gap-3 sm:px-6">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => setModoPreview(false)}
+              className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 sm:px-4"
+            >
+              <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+              <span className="hidden sm:inline">Salir del preview</span>
+              <span className="sm:hidden">Salir</span>
+            </button>
+            <span className="truncate text-sm font-bold text-slate-300 sm:hidden">
+              P-{String(presupuesto.id).padStart(4, "0")}
+            </span>
+          </div>
+          <span className="hidden text-sm font-bold text-slate-300 sm:inline">
             Vista previa A4 · P-{String(presupuesto.id).padStart(4, "0")}
           </span>
-          <div className="ml-auto flex items-center gap-2">
-            <BtnWA texto={buildWATexto(presupuesto, tallerNombre)} variante="oscuro" />
+          <div className="flex items-center gap-2 sm:ml-auto">
+            <BtnWA texto={buildWATexto(presupuesto, tallerNombre, portalUrl)} telefono={presupuesto.cliente?.telefono} variante="oscuro" />
             <BtnPDF onClick={descargarPDF} cargando={generandoPDF} variante="oscuro" />
           </div>
         </div>
 
         {/* Documento centrado con sombra tipo papel */}
-        <div className="flex justify-center py-10 print:py-0 print:block">
-          <div className="shadow-2xl ring-1 ring-slate-900/10 print:shadow-none print:ring-0">
-            <DocumentoA4 p={presupuesto} tallerNombre={tallerNombre} tallerCiudad={tallerCiudad} />
-          </div>
+        <div className="flex justify-center px-3 py-6 print:p-0 sm:py-10 print:block">
+          <A4PreviewScaler>
+            <div className="shadow-2xl ring-1 ring-slate-900/10 print:shadow-none print:ring-0">
+              <DocumentoA4 p={presupuesto} tallerNombre={tallerNombre} tallerCiudad={tallerCiudad} tallerCuit={tallerCuit} tallerLogoUrl={tallerLogoUrl} />
+            </div>
+          </A4PreviewScaler>
         </div>
       </div>
     );
@@ -681,7 +680,7 @@ export default function DetallePresupuesto({ params }: PageProps) {
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
 
-            <BtnWA texto={buildWATexto(presupuesto, tallerNombre)} variante="claro" />
+            <BtnWA texto={buildWATexto(presupuesto, tallerNombre, portalUrl)} telefono={presupuesto.cliente?.telefono} variante="claro" />
             <BtnPDF onClick={descargarPDF} cargando={generandoPDF} variante="claro" />
 
             {/* 👁 PREVIEW A4 */}
@@ -697,15 +696,29 @@ export default function DetallePresupuesto({ params }: PageProps) {
               <span className="hidden sm:inline">Ver A4</span>
             </button>
 
-            {/* 🔗 Portal del Cliente — siempre visible */}
-            <button
-              onClick={() => compartirPortal(presupuesto!, tallerNombre, mostrarNotificacion)}
-              title="Compartir link del portal al cliente"
-              className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700 transition hover:bg-violet-100 dark:border-violet-800/50 dark:bg-violet-900/20 dark:text-violet-400"
-            >
-              {LINK_SVG}
-              <span className="hidden sm:inline">Portal</span>
-            </button>
+            {/* Portal: abre únicamente la URL pública, sin mezclarla con el mensaje */}
+            {presupuesto.token ? (
+              <Link
+                href={`/p/presupuesto/${encodeURIComponent(presupuesto.token)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Abrir portal del cliente"
+                className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700 transition hover:bg-violet-100 dark:border-violet-800/50 dark:bg-violet-900/20 dark:text-violet-400"
+              >
+                {LINK_SVG}
+                <span className="hidden sm:inline">Portal</span>
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                title="Este presupuesto todavía no tiene portal público"
+                className="flex cursor-not-allowed items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-400 opacity-70 dark:border-slate-700 dark:bg-slate-800"
+              >
+                {LINK_SVG}
+                <span className="hidden sm:inline">Sin portal</span>
+              </button>
+            )}
 
             {/* Editar */}
             <Link
@@ -737,29 +750,76 @@ export default function DetallePresupuesto({ params }: PageProps) {
           </div>
         </div>
 
-        {/* ── PREVIEW INLINE DEL DOCUMENTO ── */}
-        <div>
-          <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:hidden">
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            Deslizá para ver el documento completo
-          </p>
-          <div className="overflow-auto rounded-2xl border border-slate-200 bg-slate-100 p-3 sm:p-6 dark:border-slate-700 dark:bg-slate-900/50">
-            <div className="mx-auto shadow-xl ring-1 ring-slate-900/10 dark:ring-slate-700">
-              <DocumentoA4 p={presupuesto} tallerNombre={tallerNombre} tallerCiudad={tallerCiudad} />
-            </div>
-          </div>
-        </div>
+        {/* ── RESUMEN OPERATIVO ── */}
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
+          <div className="space-y-4">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/50">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Cliente</p>
+                  <p className="mt-2 font-bold text-slate-900 dark:text-white">{presupuesto.cliente?.nombre_completo || "Sin cliente"}</p>
+                  <p className="mt-1 text-xs text-slate-500">{presupuesto.cliente?.telefono || presupuesto.cliente?.email || "Sin datos de contacto"}</p>
+                  {presupuesto.cliente && <Link href={`/clientes/${presupuesto.cliente.id}`} className="mt-3 inline-flex text-xs font-bold text-sky-600 hover:underline dark:text-sky-400">Abrir ficha →</Link>}
+                </div>
+                <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/50">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Vehículo</p>
+                  <p className="mt-2 font-bold text-slate-900 dark:text-white">{presupuesto.vehiculo ? `${presupuesto.vehiculo.marca} ${presupuesto.vehiculo.modelo}` : "Sin vehículo"}</p>
+                  <p className="mt-1 font-mono text-xs font-bold text-slate-500">{presupuesto.vehiculo?.patente || "Sin patente"}{presupuesto.vehiculo ? ` · ${presupuesto.vehiculo.kilometraje_actual.toLocaleString("es-AR")} km` : ""}</p>
+                </div>
+              </div>
+              <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Trabajo cotizado</p>
+                <p className="mt-2 text-base font-bold text-slate-900 dark:text-white">{presupuesto.resumen_corto || "Sin descripción general"}</p>
+              </div>
+            </section>
 
-        {/* ── ACCIONES SECUNDARIAS ── */}
-        <div className="flex flex-wrap justify-center gap-3">
-          {presupuesto.cliente && (
-            <Link href={`/clientes/${presupuesto.cliente.id}`} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
-              Ver perfil de {presupuesto.cliente.nombre_completo}
-            </Link>
-          )}
-          <Link href="/presupuestos/nuevo" className="rounded-xl border border-sky-200 bg-sky-50 px-5 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 dark:border-sky-800/50 dark:bg-sky-900/20 dark:text-sky-400">
-            + Nuevo Presupuesto
-          </Link>
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+                <div>
+                  <h2 className="font-black text-slate-900 dark:text-white">Detalle de la cotización</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">{presupuesto.items.length} {presupuesto.items.length === 1 ? "concepto" : "conceptos"}</p>
+                </div>
+                <button onClick={() => setModoPreview(true)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Ver documento A4</button>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {presupuesto.items.map((item, index) => (
+                  <div key={item.id || index} className="grid gap-2 px-5 py-3 sm:grid-cols-[100px_minmax(0,1fr)_90px_130px] sm:items-center">
+                    <span className="w-fit rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-300">{item.tipo.replace("_", " ")}</span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">{item.descripcion}</p>
+                      <p className="text-[11px] text-slate-400">{Number(item.cantidad)} × {Number(item.precio_unitario).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <span className="text-xs text-slate-500 sm:text-right">Cant. {Number(item.cantidad)}</span>
+                    <strong className="font-mono text-sm text-slate-900 dark:text-white sm:text-right">{Number(item.subtotal).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <aside className="h-fit space-y-4 xl:sticky xl:top-4">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Resumen económico</p>
+              <div className="mt-4 space-y-2 border-b border-slate-100 pb-4 text-sm dark:border-slate-800">
+                <div className="flex justify-between gap-4 text-slate-500"><span>Mano de obra</span><strong className="font-mono text-slate-800 dark:text-slate-200">{Number(presupuesto.total_mano_obra).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong></div>
+                <div className="flex justify-between gap-4 text-slate-500"><span>Repuestos e insumos</span><strong className="font-mono text-slate-800 dark:text-slate-200">{Number(presupuesto.total_repuestos).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong></div>
+                {Number(presupuesto.descuento) > 0 && <div className="flex justify-between gap-4 text-emerald-600"><span>Descuento</span><strong className="font-mono">− {Number(presupuesto.descuento).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong></div>}
+              </div>
+              <div className="mt-4 flex items-end justify-between gap-4">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-400">Total</span>
+                <strong className="font-mono text-2xl text-slate-900 dark:text-white">{Number(presupuesto.total).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Próxima acción</p>
+              {presupuesto.estado === "BORRADOR" && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Revisalo y compartilo con el cliente.</p>}
+              {presupuesto.estado === "ENVIADO" && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Esperando respuesta del cliente.</p>}
+              {presupuesto.estado === "APROBADO" && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Ya podés convertirlo en una orden de trabajo.</p>}
+              {presupuesto.estado === "RECHAZADO" && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Quedó cerrado como rechazado.</p>}
+              {presupuesto.estado !== "RECHAZADO" && <Link href={`/trabajos/nuevo?presupuesto=${presupuesto.id}`} className="mt-4 inline-flex w-full justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">Convertir en OT →</Link>}
+            </section>
+          </aside>
         </div>
       </div>
     </AppShell>

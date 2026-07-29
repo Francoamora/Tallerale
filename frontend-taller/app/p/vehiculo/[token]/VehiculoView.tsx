@@ -8,9 +8,12 @@
  *  · Barra de progreso de service (km actual vs próximo service)
  *  · Timeline de OTs (historial de trabajos)
  *  · Recomendaciones del último service
+ *  · Desktop: layout de dos columnas (historial + panel lateral fijo)
  */
 
 import type { PublicVehiculo, PublicOTResumen } from "@/lib/api-public";
+import { CarIcon } from "@/components/icons";
+import { PublicTallerBrand } from "@/components/public-taller-brand";
 
 // ─── Formateo ─────────────────────────────────────────────────────────────────
 const ARS = new Intl.NumberFormat("es-AR", {
@@ -127,9 +130,9 @@ function OTItem({ ot, isLast }: { ot: PublicOTResumen; isLast: boolean }) {
         )}
 
         {ot.recomendaciones_proximo_service && (
-          <div className="mt-2 rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-200">
+          <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
             <p className="text-[11px] font-semibold text-amber-700">
-              💡 {ot.recomendaciones_proximo_service}
+              {ot.recomendaciones_proximo_service}
             </p>
           </div>
         )}
@@ -155,122 +158,130 @@ export function VehiculoView({ vehiculo }: Props) {
   const ultimoService  = historialOrdenado.find(ot => ot.estado === "FINALIZADO" || ot.estado === "ENTREGADO");
 
   return (
-    <div className="space-y-4">
+    <div className="lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
+      {/* ── COLUMNA PRINCIPAL ── */}
+      <div className="space-y-4 lg:col-span-2">
 
-      {/* ── FICHA DEL VEHÍCULO ── */}
-      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80">
-        <div className="flex items-start gap-4">
-          {/* Ícono */}
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-3xl">
-            🚗
-          </div>
-          <div className="flex-1 min-w-0">
-            {/* Patente */}
-            <div className="inline-block rounded-lg bg-slate-900 px-3 py-1 font-mono text-lg font-black tracking-[0.2em] text-white">
-              {vehiculo.patente}
-            </div>
-            <p className="mt-1.5 text-base font-bold text-slate-900">
-              {vehiculo.marca} {vehiculo.modelo}
-              {vehiculo.anio && (
-                <span className="ml-1.5 text-sm font-medium text-slate-400">{vehiculo.anio}</span>
-              )}
-            </p>
-            {vehiculo.color && (
-              <p className="text-xs text-slate-400">{vehiculo.color}</p>
-            )}
-            <p className="mt-1 text-xs font-medium text-slate-500">
-              Titular: {vehiculo.cliente_nombre}
-            </p>
-          </div>
-        </div>
-
-        {/* Stats rápidas */}
-        <div className="mt-5 grid grid-cols-3 gap-2">
-          <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center">
-            <p className="font-mono text-lg font-black text-slate-900">
-              {vehiculo.kilometraje_actual.toLocaleString("es-AR")}
-            </p>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">km actuales</p>
-          </div>
-          <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center">
-            <p className="font-mono text-lg font-black text-slate-900">{totalServicios}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">servicios</p>
-          </div>
-          <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center">
-            <p className="font-mono text-sm font-black text-slate-900 truncate">
-              {new Intl.NumberFormat("es-AR", { notation: "compact", style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(totalInvertido)}
-            </p>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">invertido</p>
-          </div>
-        </div>
-      </div>
-
-      {/* ── BARRA DE SERVICE ── */}
-      {vehiculo.proximo_service_km && vehiculo.proximo_service_km > 0 && (
-        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80">
-          <ServiceBar
-            kmActual={vehiculo.kilometraje_actual}
-            kmProximo={vehiculo.proximo_service_km}
+        {/* ── FICHA DEL VEHÍCULO ── */}
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
+          <PublicTallerBrand
+            nombre={vehiculo.taller_nombre}
+            logoUrl={vehiculo.taller_logo_url}
           />
-        </div>
-      )}
-
-      {/* ── ÚLTIMO SERVICE ── */}
-      {ultimoService && ultimoService.recomendaciones_proximo_service && (
-        <div className="rounded-3xl bg-amber-50 p-5 ring-1 ring-amber-200">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-amber-500">
-            Recomendación del taller
-          </p>
-          <p className="text-sm font-semibold leading-relaxed text-amber-800">
-            💡 {ultimoService.recomendaciones_proximo_service}
-          </p>
-        </div>
-      )}
-
-      {/* ── HISTORIAL DE SERVICIOS (Timeline) ── */}
-      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80">
-        <p className="mb-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
-          Historial de servicios
-        </p>
-
-        {historialOrdenado.length === 0 ? (
-          <div className="py-8 text-center">
-            <span className="text-3xl">🔧</span>
-            <p className="mt-2 text-sm text-slate-400">
-              Aún no hay servicios registrados para este vehículo.
-            </p>
+          <div className="flex items-start gap-4">
+            {/* Ícono */}
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-500">
+              <CarIcon className="h-7 w-7" />
+            </div>
+            <div className="flex-1 min-w-0">
+              {/* Patente */}
+              <div className="inline-block rounded-lg bg-slate-900 px-3 py-1 font-mono text-lg font-black tracking-[0.2em] text-white">
+                {vehiculo.patente}
+              </div>
+              <p className="mt-1.5 text-base font-bold text-slate-900">
+                {vehiculo.marca} {vehiculo.modelo}
+                {vehiculo.anio && (
+                  <span className="ml-1.5 text-sm font-medium text-slate-400">{vehiculo.anio}</span>
+                )}
+              </p>
+              {vehiculo.color && (
+                <p className="text-xs text-slate-400">{vehiculo.color}</p>
+              )}
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                Titular: {vehiculo.cliente_nombre}
+              </p>
+            </div>
           </div>
-        ) : (
-          <div>
-            {historialOrdenado.map((ot, i) => (
-              <OTItem
-                key={ot.id}
-                ot={ot}
-                isLast={i === historialOrdenado.length - 1}
-              />
-            ))}
+
+          {/* Stats rápidas */}
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
+              <p className="font-mono text-lg font-black text-slate-900">
+                {vehiculo.kilometraje_actual.toLocaleString("es-AR")}
+              </p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">km actuales</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
+              <p className="font-mono text-lg font-black text-slate-900">{totalServicios}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">servicios</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
+              <p className="font-mono text-sm font-black text-slate-900 truncate">
+                {new Intl.NumberFormat("es-AR", { notation: "compact", style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(totalInvertido)}
+              </p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">invertido</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── BARRA DE SERVICE ── */}
+        {vehiculo.proximo_service_km && vehiculo.proximo_service_km > 0 && (
+          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <ServiceBar
+              kmActual={vehiculo.kilometraje_actual}
+              kmProximo={vehiculo.proximo_service_km}
+            />
           </div>
         )}
+
+        {/* ── HISTORIAL DE SERVICIOS (Timeline) ── */}
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
+          <p className="mb-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Historial de servicios
+          </p>
+
+          {historialOrdenado.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-sm text-slate-400">
+                Aún no hay servicios registrados para este vehículo.
+              </p>
+            </div>
+          ) : (
+            <div>
+              {historialOrdenado.map((ot, i) => (
+                <OTItem
+                  key={ot.id}
+                  ot={ot}
+                  isLast={i === historialOrdenado.length - 1}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ── RECORDATORIO ── */}
-      <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80">
-        <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
-          ¿Necesitás turno?
-        </p>
-        <a
-          href={vehiculo.taller_tel
-            ? `https://wa.me/${vehiculo.taller_tel.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola! Quiero sacar un turno para mi ${vehiculo.marca} ${vehiculo.modelo} (${vehiculo.patente}).`)}`
-            : "#"}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white shadow-sm transition active:scale-95 ${vehiculo.taller_tel ? "bg-[#25D366] hover:bg-[#1ebe5d]" : "pointer-events-none bg-slate-300"}`}
-        >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-          </svg>
-          Sacar turno por WhatsApp
-        </a>
+      {/* ── SIDEBAR ── */}
+      <div className="mt-4 space-y-4 lg:sticky lg:top-6 lg:col-span-1 lg:mt-0">
+
+        {/* ── ÚLTIMO SERVICE ── */}
+        {ultimoService && ultimoService.recomendaciones_proximo_service && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+            <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-amber-700">
+              Recomendación del taller
+            </p>
+            <p className="text-sm font-semibold leading-relaxed text-amber-800">
+              {ultimoService.recomendaciones_proximo_service}
+            </p>
+          </div>
+        )}
+
+        {/* ── RECORDATORIO ── */}
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
+            ¿Necesitás turno?
+          </p>
+          <a
+            href={vehiculo.taller_tel
+              ? `https://wa.me/${vehiculo.taller_tel.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola! Quiero sacar un turno para mi ${vehiculo.marca} ${vehiculo.modelo} (${vehiculo.patente}).`)}`
+              : "#"}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white shadow-sm transition active:scale-95 ${vehiculo.taller_tel ? "bg-[#25D366] hover:bg-[#1ebe5d]" : "pointer-events-none bg-slate-300"}`}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+            </svg>
+            Sacar turno por WhatsApp
+          </a>
+        </div>
       </div>
     </div>
   );

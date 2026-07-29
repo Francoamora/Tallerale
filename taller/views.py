@@ -16,7 +16,7 @@ from django.views.generic import TemplateView, ListView, CreateView, UpdateView,
 
 from .models import (
     Cliente, Vehiculo, Trabajo, Turno, MovimientoCuenta,
-    Presupuesto
+    Presupuesto, PerfilTaller
 )
 from .forms import (
     ClienteForm, VehiculoForm,
@@ -32,6 +32,13 @@ from .forms import (
 
 def _get_q(request, key="q"):
     return (request.GET.get(key, "") or "").strip()
+
+
+def _perfil_documento(owner):
+    try:
+        return owner.perfil
+    except PerfilTaller.DoesNotExist:
+        return None
 
 
 def _get_show(request, default="activos"):
@@ -597,6 +604,7 @@ class TrabajoComprobanteView(LoginRequiredMixin, DetailView):
         tel = (trabajo.cliente.telefono if trabajo.cliente else "") or ""
         ctx["wsp_phone"] = _normalize_phone_for_whatsapp(tel)
         ctx["wsp_text"] = _wsp_text_trabajo(trabajo)
+        ctx["perfil_taller"] = _perfil_documento(trabajo.owner)
         return ctx
 
 
@@ -617,6 +625,7 @@ class TrabajoComprobantePDFView(LoginRequiredMixin, DetailView):
         tel = (trabajo.cliente.telefono if trabajo.cliente else "") or ""
         ctx["wsp_phone"] = _normalize_phone_for_whatsapp(tel)
         ctx["wsp_text"] = _wsp_text_trabajo(trabajo)
+        ctx["perfil_taller"] = _perfil_documento(trabajo.owner)
         return ctx
 
 
@@ -958,6 +967,7 @@ class PresupuestoComprobanteView(LoginRequiredMixin, DetailView):
         tel = (presupuesto.cliente.telefono if presupuesto.cliente else "") or ""
         ctx["wsp_phone"] = _normalize_phone_for_whatsapp(tel)
         ctx["wsp_text"] = _wsp_text_presupuesto(presupuesto)
+        ctx["perfil_taller"] = _perfil_documento(presupuesto.owner)
         return ctx
 
 

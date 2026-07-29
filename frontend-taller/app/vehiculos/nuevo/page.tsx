@@ -4,8 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { SectionCard } from "@/components/section-card";
-import { getClientes, getClienteById, crearVehiculo } from "@/lib/api";
+import { getClientes, crearVehiculo } from "@/lib/api";
 import type { Cliente } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +42,7 @@ function FormularioVehiculo() {
           const c = clientesData.find(c => c.id === Number(clientePreId));
           if (c) setClienteNombre(c.nombre_completo);
         }
-      } catch (e) {
+      } catch {
         setError("Error cargando datos. Recargá la página.");
       } finally {
         setIsLoading(false);
@@ -75,10 +74,10 @@ function FormularioVehiculo() {
 
       setSuccess("¡Vehículo registrado correctamente!");
       setTimeout(() => {
-        router.push(clientePreId ? `/clientes/${clientePreId}` : "/vehiculos");
+        router.push(clientePreId ? `/clientes/${clientePreId}` : "/clientes");
       }, 1000);
-    } catch (e: any) {
-      setError(e.message || "Error al registrar el vehículo.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Error al registrar el vehículo.");
       setIsSaving(false);
     }
   }
@@ -86,41 +85,42 @@ function FormularioVehiculo() {
   if (isLoading) return <div className="h-64 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />;
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-2xl space-y-6">
+    <form onSubmit={handleSubmit} className="mx-auto max-w-6xl">
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
           {error}
         </div>
       )}
       {success && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
+        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
           {success}
         </div>
       )}
 
-      <SectionCard title="Titular del Vehículo">
-        <div className="space-y-1.5">
-          <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Cliente Propietario *</span>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand-600 dark:text-brand-400">Titular</p>
+            <h2 className="mt-1 text-lg font-black text-slate-900 dark:text-white">{clienteNombre || "Seleccioná un cliente"}</h2>
+          </div>
           {clientePreId && clienteNombre ? (
-            <div className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 dark:border-brand-900/30 dark:bg-brand-900/10">
-              <span className="font-bold text-brand-700 dark:text-brand-400">{clienteNombre}</span>
-              <Link href={`/vehiculos/nuevo`} className="ml-auto text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 underline">
-                Cambiar
-              </Link>
-            </div>
+            <Link href="/vehiculos/nuevo" className="text-xs font-bold text-slate-500 hover:text-brand-600">Cambiar titular</Link>
           ) : (
-            <select required value={clienteId} onChange={(e) => setClienteId(e.target.value)} className={inputBase}>
-              <option value="">Seleccionar cliente del directorio...</option>
+            <select required value={clienteId} onChange={(e) => setClienteId(e.target.value)} className={cn(inputBase, "sm:max-w-md")}>
+              <option value="">Seleccionar cliente del directorio…</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_completo}</option>)}
             </select>
           )}
         </div>
-      </SectionCard>
 
-      <SectionCard title="Datos del Vehículo">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="p-5 sm:p-6">
+          <div className="mb-5">
+            <h2 className="text-lg font-black text-slate-900 dark:text-white">Datos del vehículo</h2>
+            <p className="text-xs text-slate-500">Identificación, kilometraje y próximo mantenimiento en una sola vista.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1.5">
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Patente *</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Patente *</span>
             <input
               required
               type="text"
@@ -132,38 +132,34 @@ function FormularioVehiculo() {
             />
           </div>
           <div className="space-y-1.5">
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Marca *</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Marca *</span>
             <input required type="text" placeholder="Ej: Toyota" value={marca} onChange={(e) => setMarca(e.target.value)} className={inputBase} />
           </div>
           <div className="space-y-1.5">
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Modelo</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Modelo</span>
             <input type="text" placeholder="Ej: Corolla" value={modelo} onChange={(e) => setModelo(e.target.value)} className={inputBase} />
           </div>
           <div className="space-y-1.5">
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Año</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Año</span>
             <input type="number" placeholder="Ej: 2018" value={anio} onChange={(e) => setAnio(e.target.value)} min={1950} max={2030} className={inputBase} />
           </div>
           <div className="space-y-1.5">
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Color</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Color</span>
             <input type="text" placeholder="Ej: Blanco" value={color} onChange={(e) => setColor(e.target.value)} className={inputBase} />
           </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Kilometraje y Service">
-        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Kilometraje Actual</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Kilometraje actual</span>
             <input type="number" placeholder="Ej: 85000" value={kilometraje} onChange={(e) => setKilometraje(e.target.value)} min={0} className={inputBase} />
           </div>
           <div className="space-y-1.5">
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Próximo Service (km)</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Próximo service (km)</span>
             <input type="number" placeholder="Ej: 90000" value={proximoServiceKm} onChange={(e) => setProximoServiceKm(e.target.value)} min={0} className={inputBase} />
           </div>
+          </div>
         </div>
-      </SectionCard>
+      </section>
 
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+      <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Link href={clientePreId ? `/clientes/${clientePreId}` : "/vehiculos"} className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
           Cancelar
         </Link>
@@ -180,8 +176,8 @@ export default function NuevoVehiculoPage() {
     <AppShell
       currentPath="/vehiculos"
       badge="Alta de Vehículo"
-      title="Registrar Vehículo"
-      description="Agregá un nuevo auto al sistema asociado a un cliente titular."
+      title="Agregar vehículo"
+      description="Para un cliente existente, sin formularios apilados ni pasos intermedios."
     >
       <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />}>
         <FormularioVehiculo />
