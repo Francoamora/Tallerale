@@ -88,6 +88,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "taller_ale_gavilan.middleware.HealthcheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",  # Debe procesar la petición antes que CommonMiddleware
@@ -210,6 +211,10 @@ for dynamic_origin in (
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = True
+    # El healthcheck de Railway le pega al contenedor por HTTP directo (sin pasar
+    # por el proxy que agrega X-Forwarded-Proto), así que el redirect a HTTPS lo
+    # tumbaba en cada intento. Exento solo esta ruta, nunca sirve datos.
+    SECURE_REDIRECT_EXEMPT = [r"^healthz/$"]
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

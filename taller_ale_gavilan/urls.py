@@ -3,22 +3,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.db import connection
-from django.http import JsonResponse
 from django.urls import path, include, re_path
 from django.views.static import serve
 
 # Importación de la instancia de la API (creada en el paso anterior)
-from taller.api import api 
-
-
-def healthcheck(request):
-    """Railway solo habilita el deploy cuando Django y PostgreSQL responden."""
-    try:
-        connection.ensure_connection()
-    except Exception:
-        return JsonResponse({"status": "unavailable"}, status=503)
-    return JsonResponse({"status": "ok"})
+from taller.api import api
 
 
 def public_taller_logo(request, path):
@@ -31,7 +20,7 @@ def public_taller_logo(request, path):
 
 
 urlpatterns = [
-    path("healthz/", healthcheck, name="healthcheck"),
+    # /healthz/ lo resuelve HealthcheckMiddleware, antes de llegar acá.
 
     # =========================
     # 1. API ROUTES (Punto de entrada para el futuro frontend en Next.js)
