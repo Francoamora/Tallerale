@@ -89,22 +89,8 @@ const I = {
 };
 
 // ─── Logo Tallerista ────────────────────────────────────────────────────────────
-function LogoOS({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const dims = size === "sm" ? "h-7 w-7 text-[10px]" : size === "lg" ? "h-14 w-14 text-lg" : "h-9 w-9 text-xs";
-  return (
-    <div className={`flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-sm shadow-orange-500/30 font-black text-white ${dims}`}>
-      OS
-    </div>
-  );
-}
-
 function BrandName({ className = "" }: { className?: string }) {
-  return (
-    <span className={className}>
-      <span className="text-slate-900">Taller</span>
-      <span className="text-orange-500">ista</span>
-    </span>
-  );
+  return <span className={`text-slate-900 ${className}`}>Tallerista</span>;
 }
 
 // ─── Feature card ─────────────────────────────────────────────────────────────
@@ -461,7 +447,6 @@ export default function LandingPage() {
                     {/* Header portal */}
                     <div className="border-b border-slate-100 px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500 text-[8px] font-black text-white">TA</div>
                         <div>
                           <p className="text-[9px] font-black text-slate-900">Tallerista</p>
                           <p className="text-[7px] font-bold uppercase tracking-wider text-slate-400">Portal del Cliente</p>
@@ -645,10 +630,6 @@ export default function LandingPage() {
 
           {/* Oferta principal */}
           <div className="text-center lg:text-left">
-            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-2xl shadow-orange-500/40 lg:mx-0">
-              <span className="text-lg font-black text-white">TA</span>
-            </div>
-
             <h2 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
               ¿Listo para modernizar tu taller?
             </h2>
@@ -709,7 +690,6 @@ export default function LandingPage() {
             {/* Marca */}
             <div className="max-w-xs">
               <div className="flex items-center gap-3">
-                <LogoOS size="sm" />
                 <div>
                   <BrandName className="text-base font-black" />
                   <p className="text-[10px] font-medium text-slate-400 leading-tight">
@@ -765,10 +745,7 @@ export default function LandingPage() {
           <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 sm:flex-row lg:px-4">
             <p className="text-xs text-slate-400">
               © {new Date().getFullYear()}{" "}
-              <span className="font-semibold">
-                <span className="text-slate-600">Taller</span>
-                <span className="text-orange-500">ista</span>
-              </span>
+              <span className="font-semibold text-slate-600">Tallerista</span>
               {" "}· Todos los derechos reservados
             </p>
 

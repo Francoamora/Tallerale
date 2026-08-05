@@ -24,10 +24,6 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       {/* El nombre del taller se muestra en cada page desde el response del API */}
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-4 lg:max-w-5xl lg:px-8">
-          {/* Logo Tallerista */}
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900">
-            <span className="text-xs font-black tracking-tight text-white">TA</span>
-          </div>
           <div>
             <p className="text-sm font-black leading-tight text-slate-900">Tallerista</p>
             <p className="text-[10px] font-medium uppercase tracking-widest text-slate-400">Portal del Cliente</p>

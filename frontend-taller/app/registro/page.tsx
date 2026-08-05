@@ -179,11 +179,8 @@ export default function RegistroPage() {
         {/* ── Marca ── */}
         <div className="mb-8 text-center">
           <Link href="/landing" className="inline-flex items-center gap-2.5 transition hover:opacity-80">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/30">
-              <span className="text-sm font-black text-white">TA</span>
-            </div>
             <span className="text-lg font-black text-white">
-              Taller<span className="text-orange-400">ista</span>
+              Tallerista
             </span>
           </Link>
           <p className="mt-2 text-sm text-slate-500">Creá tu cuenta gratis · 7 días de prueba</p>

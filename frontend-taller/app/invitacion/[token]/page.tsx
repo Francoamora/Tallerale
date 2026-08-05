@@ -56,8 +56,7 @@ export default function AceptarInvitacionPage() {
       <div className="relative mx-auto grid min-h-[calc(100vh-5rem)] max-w-5xl items-center gap-12 lg:grid-cols-[1fr_440px]">
         <section className="hidden lg:block">
           <Link href="/landing" className="inline-flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-sm font-black shadow-lg shadow-orange-500/25">TA</span>
-            <span className="text-xl font-black">Taller<span className="text-orange-500">ista</span></span>
+            <span className="text-xl font-black">Tallerista</span>
           </Link>
           <p className="mt-14 text-xs font-black uppercase tracking-[0.25em] text-orange-400">Invitación privada</p>
           <h1 className="mt-4 max-w-xl text-5xl font-black leading-[1.05] tracking-tight">
@@ -82,8 +81,7 @@ export default function AceptarInvitacionPage() {
 
         <section className="rounded-[2rem] border border-white/10 bg-slate-900/85 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-9">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-xs font-black">TA</span>
-            <span className="font-black">Taller<span className="text-orange-500">ista</span></span>
+            <span className="font-black">Tallerista</span>
           </div>
 
           <span className="inline-flex rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-orange-400">Acceso seguro</span>

@@ -129,8 +129,7 @@ export default function OnboardingPage() {
         {/* Marca */}
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500 text-[10px] font-black text-white">TA</div>
-            <span className="text-sm font-black text-white">Taller<span className="text-orange-400">ista</span></span>
+            <span className="text-sm font-black text-white">Tallerista</span>
           </div>
         </div>
 

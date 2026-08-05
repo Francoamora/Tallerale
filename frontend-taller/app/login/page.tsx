@@ -130,11 +130,8 @@ function HeroPanel() {
 
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/30">
-            <span className="text-sm font-black text-white">TA</span>
-          </div>
           <div>
-            <span className="text-xl font-black tracking-tight text-white">Taller<span className="text-orange-400">ista</span></span>
+            <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
           </div>
         </div>
 
@@ -253,11 +250,8 @@ function LoginForm() {
 
           {/* Logo — solo visible en mobile (el panel izquierdo lo muestra en desktop) */}
           <div className="mb-10 flex items-center gap-3 lg:hidden">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/30">
-              <span className="text-sm font-black text-white">TA</span>
-            </div>
             <span className="text-xl font-black tracking-tight text-white">
-              Taller<span className="text-orange-400">ista</span>
+              Tallerista
             </span>
           </div>
 
@@ -467,9 +461,6 @@ export default function LoginPage() {
     <Suspense fallback={
       <div className="flex min-h-screen items-center justify-center bg-[#070d1a]">
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-xl shadow-orange-500/30">
-            <span className="text-base font-black text-white">TA</span>
-          </div>
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
         </div>
       </div>

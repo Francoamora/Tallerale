@@ -17,14 +17,6 @@ const NAV_LINKS = [
   { href: "#contacto",  label: "Contacto" },
 ];
 
-function LogoOS() {
-  return (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-sm shadow-orange-500/30 text-xs font-black text-white">
-      OS
-    </div>
-  );
-}
-
 export function LandingNav() {
   const [open, setOpen] = useState(false);
 
@@ -45,13 +37,9 @@ export function LandingNav() {
           {/* ── Logo + firma de la casa ── */}
           {/* El link a FAM va afuera del <Link> del logo: anidar anchors es HTML inválido. */}
           <div className="flex min-w-0 items-center gap-2.5">
-            <Link href="/landing" onClick={close} className="shrink-0 transition active:scale-95">
-              <LogoOS />
-            </Link>
             <div className="flex min-w-0 flex-col leading-none">
-              <Link href="/landing" onClick={close} className="text-[15px] font-black tracking-tight transition active:scale-95">
-                <span className="text-slate-900">Taller</span>
-                <span className="text-orange-500">ista</span>
+              <Link href="/landing" onClick={close} className="text-[15px] font-black tracking-tight text-slate-900 transition active:scale-95">
+                Tallerista
               </Link>
               <a
                 href="https://famdesarrollos.com.ar"
