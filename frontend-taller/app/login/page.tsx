@@ -152,12 +152,8 @@ function HeroPanel() {
         {/* Marca */}
         <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
 
-        {/* Título y bajada */}
-        <div className="mt-14">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-1.5 ring-1 ring-white/[0.08]">
-            <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-            <span className="text-xs font-bold text-slate-300">Sistema multi-taller</span>
-          </div>
+        {/* Título y bajada — alineado con "Bienvenido" de la card de la derecha */}
+        <div className="mt-[122px]">
           <h2 className="text-4xl font-black leading-tight tracking-tight text-white">
             Todo tu taller,<br />
             <span className="text-orange-400">bajo control.</span>
