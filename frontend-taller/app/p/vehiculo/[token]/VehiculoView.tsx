@@ -113,14 +113,11 @@ function OTItem({ ot, isLast }: { ot: PublicOTResumen; isLast: boolean }) {
               {" · "}
               <span className="font-mono">{ot.kilometraje.toLocaleString("es-AR")} km</span>
             </p>
-            <p className="text-[11px] text-slate-400">{formatDate(ot.fecha_ingreso)}</p>
+            <p className="text-[11px] text-slate-400">Realizado el {formatDate(ot.fecha_realizado)}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span className={`text-[10px] font-bold uppercase tracking-wider ${cfg.text}`}>
               {cfg.label}
-            </span>
-            <span className="font-mono text-xs font-black text-slate-700">
-              {formatCurrency(ot.total)}
             </span>
           </div>
         </div>
@@ -136,6 +133,16 @@ function OTItem({ ot, isLast }: { ot: PublicOTResumen; isLast: boolean }) {
             </p>
           </div>
         )}
+
+        {ot.items.length > 0 && (
+          <ul className="mt-3 space-y-1 border-l-2 border-slate-100 pl-3 text-xs text-slate-500">
+            {ot.items.map((item, index) => (
+              <li key={`${item.descripcion}-${index}`}>
+                {item.descripcion}{item.cantidad > 1 ? ` · ${item.cantidad}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -149,12 +156,11 @@ interface Props {
 export function VehiculoView({ vehiculo }: Props) {
   // Ordenar historial: más reciente primero
   const historialOrdenado = [...vehiculo.historial].sort(
-    (a, b) => new Date(b.fecha_ingreso).getTime() - new Date(a.fecha_ingreso).getTime(),
+    (a, b) => new Date(b.fecha_realizado).getTime() - new Date(a.fecha_realizado).getTime(),
   );
 
   // Stats rápidas del historial
   const totalServicios = historialOrdenado.length;
-  const totalInvertido = historialOrdenado.reduce((acc, ot) => acc + Number(ot.total), 0);
   const ultimoService  = historialOrdenado.find(ot => ot.estado === "FINALIZADO" || ot.estado === "ENTREGADO");
 
   return (
@@ -206,21 +212,26 @@ export function VehiculoView({ vehiculo }: Props) {
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">servicios</p>
             </div>
             <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
-              <p className="font-mono text-sm font-black text-slate-900 truncate">
-                {new Intl.NumberFormat("es-AR", { notation: "compact", style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(totalInvertido)}
+              <p className={`font-mono text-sm font-black truncate ${vehiculo.saldo_pendiente > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                {formatCurrency(Math.max(0, vehiculo.saldo_pendiente))}
               </p>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">invertido</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">saldo pendiente</p>
             </div>
           </div>
         </div>
 
         {/* ── BARRA DE SERVICE ── */}
-        {vehiculo.proximo_service_km && vehiculo.proximo_service_km > 0 && (
+        {(vehiculo.proximo_service_km || vehiculo.proximo_service_fecha) && (
           <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <ServiceBar
-              kmActual={vehiculo.kilometraje_actual}
-              kmProximo={vehiculo.proximo_service_km}
-            />
+            {vehiculo.proximo_service_km && vehiculo.proximo_service_km > 0 && (
+              <ServiceBar
+                kmActual={vehiculo.kilometraje_actual}
+                kmProximo={vehiculo.proximo_service_km}
+              />
+            )}
+            {vehiculo.proximo_service_fecha && (
+              <p className="mt-3 text-xs font-semibold text-slate-600">Fecha sugerida: {formatDate(vehiculo.proximo_service_fecha)}</p>
+            )}
           </div>
         )}
 
@@ -252,6 +263,33 @@ export function VehiculoView({ vehiculo }: Props) {
 
       {/* ── SIDEBAR ── */}
       <div className="mt-4 space-y-4 lg:sticky lg:top-6 lg:col-span-1 lg:mt-0">
+
+        {/* ── ESTADO DE CUENTA ── */}
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Estado de cuenta</p>
+          <p className={`mt-2 font-mono text-2xl font-black ${vehiculo.saldo_pendiente > 0 ? "text-red-600" : "text-emerald-600"}`}>
+            {formatCurrency(Math.max(0, vehiculo.saldo_pendiente))}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            {vehiculo.saldo_pendiente > 0 ? "Saldo pendiente con el taller." : "No registrás saldo pendiente."}
+          </p>
+
+          {vehiculo.movimientos_cuenta.length > 0 && (
+            <div className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+              {vehiculo.movimientos_cuenta.map((movimiento, index) => (
+                <div key={`${movimiento.fecha}-${index}`} className="flex items-start justify-between gap-3 text-xs">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-slate-700">{movimiento.descripcion || (movimiento.tipo === "PAGO" ? "Pago registrado" : "Cargo registrado")}</p>
+                    <p className="mt-0.5 text-[10px] text-slate-400">{formatDate(movimiento.fecha)}{movimiento.fecha_promesa ? ` · Vence ${formatDate(movimiento.fecha_promesa)}` : ""}</p>
+                  </div>
+                  <span className={`shrink-0 font-mono font-black ${movimiento.tipo === "PAGO" ? "text-emerald-600" : "text-red-600"}`}>
+                    {movimiento.tipo === "PAGO" ? "−" : "+"}{formatCurrency(movimiento.monto)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ── ÚLTIMO SERVICE ── */}
         {ultimoService && ultimoService.recomendaciones_proximo_service && (

@@ -25,6 +25,8 @@ export interface SessionData {
   /** ID del usuario en Django. */
   user_id?: number;
   rol?: "ADMIN" | "RECEPCION" | "MECANICO" | "CONTADOR";
+  /** Sólo lo entrega Django para el dueño de la plataforma. */
+  es_superusuario?: boolean;
 }
 
 const KEY = "ag_session_data";

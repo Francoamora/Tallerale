@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const AUTH_PATHS = ["/login", "/registro", "/landing", "/invitacion"];
+const AUTH_PATHS = ["/login", "/registro", "/landing", "/invitacion", "/recuperar"];
 const ALWAYS_PUBLIC = ["/p/", "/api/", "/_next/", "/images/", "/videos/", "/favicon", "/icons/", "/file.svg", "/globe.svg", "/next.svg", "/vercel.svg", "/window.svg"];
 
 function isAlwaysPublic(pathname: string): boolean {

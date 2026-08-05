@@ -298,7 +298,6 @@ class PortalPublicoTests(TestCase):
             self.http.get(f"/api/public/presupuestos/{self.presupuesto.token}/").status_code,
             404,
         )
-
         self.presupuesto.portal_expires_at = timezone.now() + timedelta(days=1)
         self.presupuesto.portal_activo = False
         self.presupuesto.save(update_fields=["portal_expires_at", "portal_activo"])
@@ -306,6 +305,63 @@ class PortalPublicoTests(TestCase):
             self.http.get(f"/api/public/presupuestos/{self.presupuesto.token}/").status_code,
             404,
         )
+
+    def test_legajo_publico_muestra_solo_trabajos_realizados_y_estado_de_cuenta(self):
+        terminado = Trabajo.objects.create(
+            owner=self.owner,
+            cliente=self.cliente,
+            vehiculo=self.vehiculo,
+            kilometraje=86_000,
+            estado=Trabajo.ESTADO_ENTREGADO,
+            resumen_trabajos="Cambio de aceite y filtros",
+            observaciones_internas="No exponer nunca",
+            finalizado_en=timezone.now(),
+        )
+        TrabajoItem.objects.create(
+            trabajo=terminado,
+            tipo="MANO_OBRA",
+            descripcion="Cambio de aceite",
+            cantidad=Decimal("1"),
+            precio_unitario=Decimal("1000"),
+            completado=True,
+        )
+        TrabajoItem.objects.create(
+            trabajo=terminado,
+            tipo="REPUESTO",
+            descripcion="Filtro pendiente",
+            cantidad=Decimal("1"),
+            precio_unitario=Decimal("1000"),
+            completado=False,
+        )
+        Trabajo.objects.create(
+            owner=self.owner,
+            cliente=self.cliente,
+            vehiculo=self.vehiculo,
+            kilometraje=87_000,
+            estado=Trabajo.ESTADO_EN_PROCESO,
+            resumen_trabajos="Trabajo que sigue abierto",
+        )
+        MovimientoCuenta.objects.create(
+            owner=self.owner,
+            cliente=self.cliente,
+            tipo=MovimientoCuenta.TIPO_DEUDA,
+            monto=Decimal("25000"),
+            descripcion="Service pendiente de pago",
+        )
+        self.cliente.saldo_balance = Decimal("25000")
+        self.cliente.save(update_fields=["saldo_balance"])
+
+        response = self.http.get(f"/api/public/vehiculos/{self.vehiculo.token}/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["saldo_pendiente"], 25000.0)
+        self.assertEqual(len(payload["historial"]), 1)
+        self.assertEqual(payload["historial"][0]["resumen_trabajos"], "Cambio de aceite y filtros")
+        self.assertEqual(payload["historial"][0]["items"], [{"descripcion": "Cambio de aceite", "cantidad": 1.0}])
+        self.assertNotIn("total", payload["historial"][0])
+        self.assertNotIn("observaciones_internas", payload["historial"][0])
+        self.assertEqual(payload["movimientos_cuenta"][0]["descripcion"], "Service pendiente de pago")
 
     def test_owner_puede_revocar_y_regenerar_link_publico(self):
         api_token = ApiToken.objects.create(user=self.owner)
@@ -1121,6 +1177,7 @@ class SecurityBoundaryAttackTests(TestCase):
             vehiculo=self.vehiculo_1,
             kilometraje=25_000,
             resumen_trabajos="Service guiado",
+            proximo_control_km=30_000,
         )
         item = TrabajoItem.objects.create(
             trabajo=trabajo,
@@ -1185,6 +1242,9 @@ class SecurityBoundaryAttackTests(TestCase):
         self.assertIsNotNone(item.completado_en)
         trabajo.refresh_from_db()
         self.assertEqual(trabajo.estado, Trabajo.ESTADO_FINALIZADO)
+        self.vehiculo_1.refresh_from_db()
+        self.assertEqual(self.vehiculo_1.kilometraje_actual, 25_000)
+        self.assertEqual(self.vehiculo_1.proximo_service_km, 30_000)
 
 
 class FinanzasConfiablesTests(TestCase):
@@ -1362,6 +1422,7 @@ class AccesoVigenteTests(TestCase):
         response = self.http.get("/api/clientes", **self.auth)
         self.assertEqual(response.status_code, 200)
 
+
     def test_trial_vencido_sin_plan_bloquea_con_402(self):
         perfil = PerfilTaller.objects.get(user=self.owner)
         perfil.trial_start = timezone.now() - timedelta(days=8)
@@ -1410,3 +1471,137 @@ class AccesoVigenteTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+
+
+class CentroCeoTests(TestCase):
+    """El control comercial global nunca puede quedar expuesto a un taller."""
+
+    def setUp(self):
+        self.http = Client()
+        self.owner = User.objects.create_user(
+            username="dueno-ceo@example.com",
+            email="dueno-ceo@example.com",
+            password="clave-segura",
+        )
+        self.perfil = PerfilTaller.objects.create(
+            user=self.owner,
+            nombre="Dueño CEO",
+            taller_nombre="Taller para Control",
+            taller_ciudad="Córdoba",
+            taller_tel="3510000000",
+        )
+        Taller.objects.create(owner=self.owner, nombre=self.perfil.taller_nombre)
+        self.owner_token = ApiToken.objects.create(user=self.owner)
+
+        self.ceo = User.objects.create_superuser(
+            username="soporte-ceo@example.com",
+            email="soporte-ceo@example.com",
+            password="clave-super-segura",
+        )
+        self.ceo_token = ApiToken.objects.create(user=self.ceo)
+        self.ceo_auth = {"HTTP_AUTHORIZATION": f"Token {self.ceo_token.key}"}
+
+    def test_taller_normal_no_puede_ver_resumen_global(self):
+        response = self.http.get(
+            "/api/ceo/resumen/",
+            HTTP_AUTHORIZATION=f"Token {self.owner_token.key}",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_sesion_devuelve_estado_comercial_sin_exponer_token(self):
+        response = self.http.get(
+            "/api/auth/sesion/",
+            HTTP_AUTHORIZATION=f"Token {self.owner_token.key}",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["taller_nombre"], self.perfil.taller_nombre)
+        self.assertFalse(payload["es_superusuario"])
+        self.assertNotIn("token", payload)
+
+    def test_superusuario_ve_talleres_y_activa_plan(self):
+        response = self.http.get("/api/ceo/resumen/", **self.ceo_auth)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total_talleres"], 2)
+        taller_cliente = next(t for t in payload["talleres"] if t["id"] == self.perfil.id)
+        self.assertEqual(taller_cliente["estado_acceso"], "PRUEBA_VIGENTE")
+        self.assertTrue(any(t["es_superusuario"] for t in payload["talleres"]))
+
+        activar = self.http.patch(
+            f"/api/ceo/talleres/{self.perfil.id}/plan/",
+            data=json.dumps({"accion": "ACTIVAR_30_DIAS"}),
+            content_type="application/json",
+            **self.ceo_auth,
+        )
+        self.assertEqual(activar.status_code, 200)
+        self.perfil.refresh_from_db()
+        self.assertIsNotNone(self.perfil.plan_activo_hasta)
+        self.assertTrue(self.perfil.plan_vigente)
+        self.assertEqual(activar.json()["estado_acceso"], "PLAN_ACTIVO")
+
+    def test_ceo_genera_enlace_de_un_solo_uso_y_revoca_sesiones(self):
+        response = self.http.post(
+            f"/api/ceo/talleres/{self.perfil.id}/enlace-recuperacion/",
+            **self.ceo_auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        path = response.json()["path"]
+        _, _, recuperacion_id, token = path.split("/")
+
+        restablecer = self.http.post(
+            f"/api/public/recuperacion/{recuperacion_id}/{token}/",
+            data=json.dumps({"password": "ClaveNueva2026"}),
+            content_type="application/json",
+        )
+        self.assertEqual(restablecer.status_code, 200)
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.check_password("ClaveNueva2026"))
+        self.assertFalse(ApiToken.objects.filter(user=self.owner).exists())
+
+        reutilizar = self.http.post(
+            f"/api/public/recuperacion/{recuperacion_id}/{token}/",
+            data=json.dumps({"password": "OtraClave2026"}),
+            content_type="application/json",
+        )
+        self.assertEqual(reutilizar.status_code, 400)
+
+
+class HistorialVehiculoTests(TestCase):
+    def setUp(self):
+        self.http = Client()
+        self.owner = User.objects.create_user(username="historial@example.com", password="clave-segura")
+        PerfilTaller.objects.create(user=self.owner, nombre="Historial", taller_nombre="Taller Historial")
+        self.token = ApiToken.objects.create(user=self.owner)
+        self.cliente = Cliente.objects.create(owner=self.owner, nombre="Cliente Historial")
+        self.vehiculo = Vehiculo.objects.create(
+            owner=self.owner,
+            cliente=self.cliente,
+            patente="HIS123",
+            marca="Ford",
+            modelo="Fiesta",
+            kilometraje_actual=68000,
+        )
+        self.trabajo = Trabajo.objects.create(
+            owner=self.owner,
+            cliente=self.cliente,
+            vehiculo=self.vehiculo,
+            kilometraje=67500,
+            resumen_trabajos="Cambio de aceite y filtros",
+        )
+        self.auth = {"HTTP_AUTHORIZATION": f"Token {self.token.key}"}
+
+    def test_historial_lista_solo_las_operaciones_del_vehiculo_propio(self):
+        response = self.http.get(f"/api/vehiculos/{self.vehiculo.id}/historial/", **self.auth)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["vehiculo"]["id"], self.vehiculo.id)
+        self.assertEqual(payload["trabajos"][0]["id"], self.trabajo.id)
+        self.assertEqual(payload["trabajos"][0]["resumen"], "Cambio de aceite y filtros")
+
+    def test_historial_no_expone_vehiculo_de_otro_taller(self):
+        other = User.objects.create_user(username="otro-historial@example.com", password="clave-segura")
+        other_cliente = Cliente.objects.create(owner=other, nombre="Otro Cliente")
+        other_vehiculo = Vehiculo.objects.create(owner=other, cliente=other_cliente, patente="OTH123", marca="Fiat", modelo="Uno")
+        response = self.http.get(f"/api/vehiculos/{other_vehiculo.id}/historial/", **self.auth)
+        self.assertEqual(response.status_code, 404)

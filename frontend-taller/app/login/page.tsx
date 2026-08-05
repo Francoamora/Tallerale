@@ -225,6 +225,7 @@ function LoginForm() {
         taller_id:       auth.taller_id,
         user_id:         auth.user_id,
         rol:             auth.rol ?? "ADMIN",
+        es_superusuario: auth.es_superusuario ?? false,
       });
       router.push("/");
     } catch (err) {

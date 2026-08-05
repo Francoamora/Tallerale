@@ -2,6 +2,7 @@
 from datetime import date, datetime, timedelta
 import hashlib
 import logging
+import secrets
 import warnings
 from typing import List, Optional, Tuple
 from decimal import Decimal
@@ -10,6 +11,7 @@ import uuid
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -24,7 +26,7 @@ from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from PIL import Image, UnidentifiedImageError
 
-from .models import ApiToken, AuditoriaTaller, Cliente, Gasto, InvitacionTaller, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, Producto, Taller, Trabajo, TrabajoItem, Turno, Vehiculo
+from .models import ApiToken, AuditoriaTaller, Cliente, Gasto, InvitacionTaller, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, Producto, RecuperacionContrasena, Taller, Trabajo, TrabajoItem, Turno, Vehiculo
 from .services import (
     crear_trabajo_completo,
     obtener_dashboard_snapshot,
@@ -52,6 +54,19 @@ def require_capability(request, capability: str) -> None:
         return
     if capability not in ROLE_CAPABILITIES.get(membership.rol, set()):
         raise HttpError(403, "Tu rol no tiene permiso para realizar esta operación.")
+
+
+def require_platform_admin(request) -> User:
+    """Autoriza el centro de control global de Tallerista.
+
+    ``request.user`` puede ser el dueño de un taller cuando quien se autentica
+    es un miembro. Para este límite de plataforma importa el actor que presentó
+    el token, no el tenant al que pertenece.
+    """
+    actor = getattr(request, "actor", request.user)
+    if not actor.is_superuser:
+        raise HttpError(403, "Este panel es exclusivo para soporte de Tallerista.")
+    return actor
 
 
 def _internal_error(context: str, error: Exception):
@@ -199,6 +214,29 @@ class TrabajoRecienteOut(Schema):
     patente: str
     resumen: str
 
+
+class VehiculoHistorialTrabajoOut(Schema):
+    id: int
+    fecha_ingreso: datetime
+    estado: str
+    resumen: str
+    kilometraje: int
+    total: float
+
+
+class VehiculoHistorialPresupuestoOut(Schema):
+    id: int
+    fecha_creacion: datetime
+    estado: str
+    resumen: str
+    total: float
+
+
+class VehiculoHistorialOut(Schema):
+    vehiculo: VehiculoSchema
+    trabajos: List[VehiculoHistorialTrabajoOut]
+    presupuestos: List[VehiculoHistorialPresupuestoOut]
+
 class TrabajoDetalleOut(Schema):
     id: int
     estado: str
@@ -324,6 +362,7 @@ class AvisoOut(Schema):
     detalle: str
     mensaje: str
     href: str
+    telefono: Optional[str] = None
 
 
 class PublicClienteOut(Schema):
@@ -360,15 +399,28 @@ class PublicPresupuestoOut(Schema):
     taller_logo_url: Optional[str] = None
 
 
+class PublicTrabajoItemOut(Schema):
+    """Parte visible para el cliente: sin precios ni notas internas."""
+    descripcion: str
+    cantidad: float
+
+
 class PublicTrabajoResumenOut(Schema):
     id: int
-    fecha_ingreso: datetime
-    fecha_egreso_estimado: Optional[datetime] = None
+    fecha_realizado: datetime
     estado: str
     resumen_trabajos: str
-    total: float
     kilometraje: int
     recomendaciones_proximo_service: Optional[str] = None
+    items: List[PublicTrabajoItemOut]
+
+
+class PublicMovimientoCuentaOut(Schema):
+    fecha: datetime
+    tipo: str
+    monto: float
+    descripcion: str
+    fecha_promesa: Optional[date] = None
 
 
 class PublicVehiculoOut(Schema):
@@ -380,8 +432,11 @@ class PublicVehiculoOut(Schema):
     color: Optional[str] = None
     kilometraje_actual: int
     proximo_service_km: Optional[int] = None
+    proximo_service_fecha: Optional[date] = None
     cliente_nombre: str
     historial: List[PublicTrabajoResumenOut]
+    saldo_pendiente: float
+    movimientos_cuenta: List[PublicMovimientoCuentaOut]
     taller_nombre: Optional[str] = None
     taller_tel: Optional[str] = None
     taller_logo_url: Optional[str] = None
@@ -626,15 +681,38 @@ def _serializar_vehiculo_publico(request, vehiculo: Vehiculo) -> PublicVehiculoO
     historial = [
         PublicTrabajoResumenOut(
             id=trabajo.id,
-            fecha_ingreso=trabajo.fecha_ingreso,
-            fecha_egreso_estimado=trabajo.fecha_egreso_estimado,
+            fecha_realizado=(trabajo.fecha_egreso_real or trabajo.finalizado_en or trabajo.fecha_ingreso),
             estado=trabajo.estado,
             resumen_trabajos=trabajo.resumen_trabajos,
-            total=float(trabajo.total),
             kilometraje=trabajo.kilometraje,
             recomendaciones_proximo_service=trabajo.recomendaciones_proximo_service or None,
+            items=[
+                PublicTrabajoItemOut(
+                    descripcion=item.descripcion,
+                    cantidad=float(item.cantidad),
+                )
+                for item in trabajo.items.all()
+                if item.completado
+            ],
         )
-        for trabajo in vehiculo.trabajos.filter(activo=True).order_by("-fecha_ingreso")
+        for trabajo in (
+            vehiculo.trabajos.filter(
+                activo=True,
+                estado__in=[Trabajo.ESTADO_FINALIZADO, Trabajo.ESTADO_ENTREGADO],
+            )
+            .prefetch_related("items")
+            .order_by("-finalizado_en", "-fecha_ingreso")
+        )
+    ]
+    movimientos_cuenta = [
+        PublicMovimientoCuentaOut(
+            fecha=movimiento.fecha,
+            tipo=movimiento.tipo,
+            monto=float(movimiento.monto),
+            descripcion=movimiento.descripcion,
+            fecha_promesa=movimiento.fecha_promesa,
+        )
+        for movimiento in vehiculo.cliente.movimientos_cuenta.all().order_by("-fecha")[:20]
     ]
 
     return PublicVehiculoOut(
@@ -646,8 +724,11 @@ def _serializar_vehiculo_publico(request, vehiculo: Vehiculo) -> PublicVehiculoO
         color=vehiculo.color or None,
         kilometraje_actual=vehiculo.kilometraje_actual,
         proximo_service_km=vehiculo.proximo_service_km,
+        proximo_service_fecha=vehiculo.proximo_service_fecha,
         cliente_nombre=vehiculo.cliente.nombre_completo,
         historial=historial,
+        saldo_pendiente=float(vehiculo.cliente.saldo_balance),
+        movimientos_cuenta=movimientos_cuenta,
         taller_nombre=taller_nombre,
         taller_tel=taller_tel,
         taller_logo_url=taller_logo_url,
@@ -693,6 +774,13 @@ class TurnoProximoOut(Schema):
     vehiculo: str
     motivo: str
 
+
+class ClienteSinActividadOut(Schema):
+    id: int
+    nombre: str
+    ultimo_trabajo: Optional[datetime] = None
+    telefono: str
+
 class EstadisticasDashboardOut(Schema):
     total_clientes: int
     total_vehiculos: int
@@ -705,6 +793,8 @@ class EstadisticasDashboardOut(Schema):
     trabajos_recientes: List[TrabajoRecienteOut]
     alertas_service: List[AlertaServiceOut]
     turnos_proximos: List[TurnoProximoOut]
+    clientes_sin_actividad_total: int
+    clientes_sin_actividad: List[ClienteSinActividadOut]
 
 
 # ==========================================
@@ -735,26 +825,77 @@ def api_dashboard_stats(request):
         snapshot["trabajos_recientes"] = []
         snapshot["alertas_service"] = []
         snapshot["turnos_proximos"] = []
+        snapshot["clientes_sin_actividad_total"] = 0
+        snapshot["clientes_sin_actividad"] = []
 
     return snapshot
 
 @api.get("/avisos", response=List[AvisoOut], tags=["Avisos"])
 def listar_avisos(request):
+    require_capability(request, "operar")
     hoy = timezone.localdate()
     manana = hoy + timedelta(days=1)
     avisos = []
+    membership = getattr(request, "membership", None)
+    rol = membership.rol if membership else MembresiaTaller.ROL_ADMIN
+    puede_gestionar_presupuestos = rol in {MembresiaTaller.ROL_ADMIN, MembresiaTaller.ROL_RECEPCION}
+    puede_ver_saldos = rol == MembresiaTaller.ROL_ADMIN
     for turno in Turno.objects.select_related("cliente", "vehiculo").filter(owner=request.user, fecha_hora__date=manana, estado__in=["PENDIENTE", "CONFIRMADO"]):
         nombre = turno.cliente.nombre_completo if turno.cliente else "cliente"
         vehiculo = turno.vehiculo.patente if turno.vehiculo else "vehículo"
         hora = timezone.localtime(turno.fecha_hora).strftime("%H:%M")
-        avisos.append({"tipo":"TURNO","prioridad":"ALTA","titulo":f"Turno mañana · {hora}","detalle":f"{nombre} · {vehiculo}","mensaje":f"Hola {nombre}, te recordamos tu turno mañana a las {hora}.","href":"/turnos"})
-    for presupuesto in Presupuesto.objects.select_related("cliente", "vehiculo").filter(owner=request.user, activo=True, estado="ENVIADO")[:20]:
-        nombre = presupuesto.cliente.nombre_completo if presupuesto.cliente else "cliente"
-        avisos.append({"tipo":"PRESUPUESTO","prioridad":"MEDIA","titulo":"Presupuesto pendiente","detalle":f"P-{presupuesto.id} · {nombre}","mensaje":f"Hola {nombre}, quedamos atentos a tu respuesta sobre el presupuesto enviado.","href":f"/presupuestos/{presupuesto.id}"})
+        avisos.append({"tipo":"TURNO","prioridad":"ALTA","titulo":f"Turno mañana · {hora}","detalle":f"{nombre} · {vehiculo}","mensaje":f"Hola {nombre}, te recordamos tu turno mañana a las {hora}.","href":"/turnos", "telefono": turno.cliente.telefono if turno.cliente else None})
+    if puede_gestionar_presupuestos:
+        for presupuesto in Presupuesto.objects.select_related("cliente", "vehiculo").filter(owner=request.user, activo=True, estado="ENVIADO")[:20]:
+            nombre = presupuesto.cliente.nombre_completo if presupuesto.cliente else "cliente"
+            avisos.append({"tipo":"PRESUPUESTO","prioridad":"MEDIA","titulo":"Presupuesto pendiente","detalle":f"P-{presupuesto.id} · {nombre}","mensaje":f"Hola {nombre}, quedamos atentos a tu respuesta sobre el presupuesto enviado.","href":f"/presupuestos/{presupuesto.id}", "telefono": presupuesto.cliente.telefono if presupuesto.cliente else None})
     for trabajo in Trabajo.objects.select_related("cliente", "vehiculo").filter(owner=request.user, activo=True, estado="FINALIZADO")[:20]:
         nombre = trabajo.cliente.nombre_completo
-        avisos.append({"tipo":"RETIRO","prioridad":"MEDIA","titulo":"Vehículo listo para retirar","detalle":f"{trabajo.vehiculo.patente} · {nombre}","mensaje":f"Hola {nombre}, tu {trabajo.vehiculo.patente} ya está listo para retirar.","href":f"/trabajos/{trabajo.id}"})
-    return avisos
+        avisos.append({"tipo":"RETIRO","prioridad":"MEDIA","titulo":"Vehículo listo para retirar","detalle":f"{trabajo.vehiculo.patente} · {nombre}","mensaje":f"Hola {nombre}, tu {trabajo.vehiculo.patente} ya está listo para retirar.","href":f"/trabajos/{trabajo.id}", "telefono": trabajo.cliente.telefono})
+
+    limite_fecha_service = hoy + timedelta(days=14)
+    vehiculos = Vehiculo.objects.select_related("cliente").filter(owner=request.user).order_by("patente")
+    for vehiculo in vehiculos:
+        faltan_km = (
+            vehiculo.proximo_service_km - vehiculo.kilometraje_actual
+            if vehiculo.proximo_service_km is not None else None
+        )
+        service_por_km = faltan_km is not None and faltan_km <= 2500
+        service_por_fecha = bool(
+            vehiculo.proximo_service_fecha
+            and vehiculo.proximo_service_fecha <= limite_fecha_service
+        )
+        if not service_por_km and not service_por_fecha:
+            continue
+
+        motivos = []
+        if service_por_km:
+            motivos.append("service vencido" if faltan_km <= 0 else f"service en {faltan_km:,} km".replace(",", "."))
+        if service_por_fecha:
+            motivos.append(f"fecha {vehiculo.proximo_service_fecha.strftime('%d/%m/%Y')}")
+        nombre = vehiculo.cliente.nombre_completo
+        avisos.append({
+            "tipo": "SERVICE",
+            "prioridad": "ALTA" if (service_por_km and faltan_km <= 0) or (vehiculo.proximo_service_fecha and vehiculo.proximo_service_fecha <= hoy) else "MEDIA",
+            "titulo": "Recordatorio de service",
+            "detalle": f"{vehiculo.patente} · {nombre} · {' · '.join(motivos)}",
+            "mensaje": f"Hola {nombre.split()[0]}! Te recordamos que tu {vehiculo.marca} {vehiculo.modelo} ({vehiculo.patente}) tiene {motivos[0]}. Cuando quieras coordinamos el próximo service.",
+            "href": f"/vehiculos/{vehiculo.id}/historial",
+            "telefono": vehiculo.cliente.telefono,
+        })
+
+    if puede_ver_saldos:
+        for cliente in Cliente.objects.filter(owner=request.user, saldo_balance__gt=0).order_by("-saldo_balance")[:20]:
+            avisos.append({
+                "tipo": "DEUDA",
+                "prioridad": "ALTA" if cliente.saldo_balance >= Decimal("100000") else "MEDIA",
+                "titulo": "Saldo pendiente",
+                "detalle": f"{cliente.nombre_completo} · ${cliente.saldo_balance:,.0f}".replace(",", "."),
+                "mensaje": f"Hola {cliente.nombre_completo.split()[0]}! Te compartimos que tenés un saldo pendiente de ${cliente.saldo_balance:,.0f} con el taller. Si necesitás el detalle, escribinos.".replace(",", "."),
+                "href": "/clientes",
+                "telefono": cliente.telefono,
+            })
+    return avisos[:40]
 
 @api.get("/clientes", response=List[ClienteSchema], tags=["Directorio"])
 def listar_clientes(request, q: Optional[str] = None):
@@ -917,6 +1058,40 @@ def crear_vehiculo(request, payload: VehiculoIn):
 def obtener_vehiculo(request, vehiculo_id: int):
     require_capability(request, "operar")
     return get_object_or_404(Vehiculo.objects.select_related('cliente'), id=vehiculo_id, owner=request.user)
+
+
+@api.get("/vehiculos/{vehiculo_id}/historial/", response=VehiculoHistorialOut, tags=["Directorio"])
+def obtener_historial_vehiculo(request, vehiculo_id: int):
+    """Historial operativo y comercial del vehículo dentro de su propio taller."""
+    require_capability(request, "operar")
+    vehiculo = get_object_or_404(Vehiculo.objects.select_related("cliente"), id=vehiculo_id, owner=request.user)
+    include_amounts = _puede_ver_importes_operativos(request)
+    trabajos = Trabajo.objects.filter(owner=request.user, vehiculo=vehiculo, activo=True).order_by("-fecha_ingreso")
+    presupuestos = Presupuesto.objects.filter(owner=request.user, vehiculo=vehiculo, activo=True).order_by("-fecha_creacion")
+    return {
+        "vehiculo": vehiculo,
+        "trabajos": [
+            {
+                "id": trabajo.id,
+                "fecha_ingreso": trabajo.fecha_ingreso,
+                "estado": trabajo.estado,
+                "resumen": trabajo.resumen_trabajos,
+                "kilometraje": trabajo.kilometraje,
+                "total": float(trabajo.total) if include_amounts else 0,
+            }
+            for trabajo in trabajos
+        ],
+        "presupuestos": [
+            {
+                "id": presupuesto.id,
+                "fecha_creacion": presupuesto.fecha_creacion,
+                "estado": presupuesto.estado,
+                "resumen": presupuesto.resumen_corto,
+                "total": float(presupuesto.total) if include_amounts else 0,
+            }
+            for presupuesto in presupuestos
+        ],
+    }
 
 
 # ==========================================
@@ -1185,6 +1360,15 @@ def api_actualizar_estado_trabajo(request, trabajo_id: int, payload: EstadoRapid
     if payload.estado == Trabajo.ESTADO_FINALIZADO:
         trabajo.finalizado_en = timezone.now()
         update_fields.append("finalizado_en")
+        # Al cerrar técnicamente una OT, su lectura pasa a ser la referencia
+        # vigente del legajo: odómetro actual y próximo control recomendado.
+        vehiculo = trabajo.vehiculo
+        vehiculo.kilometraje_actual = max(vehiculo.kilometraje_actual or 0, trabajo.kilometraje or 0)
+        campos_vehiculo = ["kilometraje_actual"]
+        if trabajo.proximo_control_km:
+            vehiculo.proximo_service_km = trabajo.proximo_control_km
+            campos_vehiculo.append("proximo_service_km")
+        vehiculo.save(update_fields=campos_vehiculo)
     elif estado_anterior == Trabajo.ESTADO_FINALIZADO:
         trabajo.finalizado_en = None
         update_fields.append("finalizado_en")
@@ -1847,6 +2031,66 @@ class AuthOut(Schema):
     trial_start: Optional[str] = None
     plan_activo_hasta: Optional[str] = None
     rol: str = MembresiaTaller.ROL_ADMIN
+    es_superusuario: bool = False
+
+
+class SesionOut(Schema):
+    """Identidad y estado comercial actual, sin exponer el token."""
+    user_id: int
+    email: str
+    nombre: str
+    taller_nombre: str
+    taller_ciudad: str = ""
+    taller_tel: str = ""
+    taller_cuit: str = ""
+    taller_logo_url: Optional[str] = None
+    taller_id: Optional[int] = None
+    trial_start: Optional[str] = None
+    plan_activo_hasta: Optional[str] = None
+    rol: str = MembresiaTaller.ROL_ADMIN
+    es_superusuario: bool = False
+
+
+class CeoTallerOut(Schema):
+    id: int
+    taller_nombre: str
+    owner_nombre: str
+    email: str
+    ciudad: str = ""
+    telefono: str = ""
+    trial_start: str
+    trial_hasta: str
+    plan_activo_hasta: Optional[str] = None
+    estado_acceso: str
+    acceso_vigente: bool
+    dias_restantes: int
+    clientes: int
+    trabajos: int
+    es_superusuario: bool = False
+
+
+class CeoResumenOut(Schema):
+    total_talleres: int
+    pruebas_vigentes: int
+    planes_activos: int
+    vencidos: int
+    por_vencer: int
+    talleres: List[CeoTallerOut]
+
+
+class CeoPlanIn(Schema):
+    accion: str
+    hasta: Optional[datetime] = None
+
+
+class CeoEnlaceRecuperacionOut(Schema):
+    path: str
+    expires_at: str
+    email: str
+
+
+class RecuperarContrasenaIn(Schema):
+    password: str = Field(..., min_length=8, max_length=128)
 
 
 class PerfilOut(Schema):
@@ -2062,6 +2306,7 @@ def login_api(request, payload: LoginIn):
         plan_activo_hasta=perfil.plan_activo_hasta.isoformat() if perfil and perfil.plan_activo_hasta else None,
         taller_id=taller.id if taller else None,
         rol=membresia.rol if membresia else MembresiaTaller.ROL_ADMIN,
+        es_superusuario=user.is_superuser,
     )
 
 
@@ -2104,7 +2349,218 @@ def rotate_token_api(request):
         plan_activo_hasta=perfil.plan_activo_hasta.isoformat() if perfil and perfil.plan_activo_hasta else None,
         taller_id=membresia.taller_id if membresia else None,
         rol=membresia.rol if membresia else MembresiaTaller.ROL_ADMIN,
+        es_superusuario=actor.is_superuser,
     )
+
+
+def _ceo_taller_out(perfil: PerfilTaller, now, clientes: int, trabajos: int) -> CeoTallerOut:
+    """Serializa el estado comercial desde la fuente de verdad del backend."""
+    trial_hasta = perfil.trial_start + timedelta(days=7)
+    if perfil.plan_vigente:
+        estado = "PLAN_ACTIVO"
+        vencimiento = perfil.plan_activo_hasta
+    elif not perfil.trial_vencido:
+        estado = "PRUEBA_VIGENTE"
+        vencimiento = trial_hasta
+    else:
+        estado = "VENCIDO"
+        vencimiento = perfil.plan_activo_hasta or trial_hasta
+
+    segundos_restantes = (vencimiento - now).total_seconds()
+    dias_restantes = max(0, int((segundos_restantes + 86399) // 86400))
+    user = perfil.user
+    return CeoTallerOut(
+        id=perfil.id,
+        taller_nombre=perfil.taller_nombre,
+        owner_nombre=perfil.nombre or user.get_full_name() or user.username,
+        email=user.email or user.username,
+        ciudad=perfil.taller_ciudad,
+        telefono=perfil.taller_tel,
+        trial_start=perfil.trial_start.isoformat(),
+        trial_hasta=trial_hasta.isoformat(),
+        plan_activo_hasta=perfil.plan_activo_hasta.isoformat() if perfil.plan_activo_hasta else None,
+        estado_acceso=estado,
+        acceso_vigente=perfil.acceso_vigente,
+        dias_restantes=dias_restantes,
+        clientes=clientes,
+        trabajos=trabajos,
+        es_superusuario=user.is_superuser,
+    )
+
+
+@api.get("/auth/sesion/", response=SesionOut, tags=["Auth"])
+def sesion_api(request):
+    """Refresca el estado de la cuenta desde Django sin rotar la credencial."""
+    actor = getattr(request, "actor", request.user)
+    membresia = getattr(request, "membership", None)
+    try:
+        perfil = request.user.perfil
+    except PerfilTaller.DoesNotExist:
+        perfil = None
+    return SesionOut(
+        user_id=actor.id,
+        email=actor.email or actor.username,
+        nombre=actor.get_full_name() or actor.first_name or actor.username,
+        taller_nombre=perfil.taller_nombre if perfil else (request.user.last_name or "Mi Taller"),
+        taller_ciudad=perfil.taller_ciudad if perfil else "",
+        taller_tel=perfil.taller_tel if perfil else "",
+        taller_cuit=perfil.taller_cuit if perfil else "",
+        taller_logo_url=_logo_url(request, perfil) if perfil else None,
+        taller_id=membresia.taller_id if membresia else None,
+        trial_start=perfil.trial_start.isoformat() if perfil else None,
+        plan_activo_hasta=perfil.plan_activo_hasta.isoformat() if perfil and perfil.plan_activo_hasta else None,
+        rol=membresia.rol if membresia else MembresiaTaller.ROL_ADMIN,
+        es_superusuario=actor.is_superuser,
+    )
+
+
+@api.get("/ceo/resumen/", response=CeoResumenOut, tags=["CEO"])
+def ceo_resumen(request):
+    """Vista comercial global. Sólo un superusuario puede leerla."""
+    require_platform_admin(request)
+    now = timezone.now()
+    perfiles = list(
+        PerfilTaller.objects.select_related("user")
+        .annotate(
+            clientes_count=Count("user__clientes", distinct=True),
+            trabajos_count=Count("user__trabajos", distinct=True),
+        )
+        .order_by("taller_nombre", "id")
+    )
+    talleres = [
+        _ceo_taller_out(perfil, now, perfil.clientes_count, perfil.trabajos_count)
+        for perfil in perfiles
+    ]
+    return CeoResumenOut(
+        total_talleres=len(talleres),
+        pruebas_vigentes=sum(t.estado_acceso == "PRUEBA_VIGENTE" for t in talleres),
+        planes_activos=sum(t.estado_acceso == "PLAN_ACTIVO" for t in talleres),
+        vencidos=sum(t.estado_acceso == "VENCIDO" for t in talleres),
+        por_vencer=sum(t.acceso_vigente and t.dias_restantes <= 3 for t in talleres),
+        talleres=talleres,
+    )
+
+
+@api.patch("/ceo/talleres/{perfil_id}/plan/", response=CeoTallerOut, tags=["CEO"])
+def actualizar_plan_ceo(request, perfil_id: int, payload: CeoPlanIn):
+    """Gestiona altas y renovaciones sin confiar en fechas del cliente web."""
+    actor = require_platform_admin(request)
+    perfil = get_object_or_404(PerfilTaller.objects.select_related("user"), id=perfil_id)
+    now = timezone.now()
+    accion = payload.accion.strip().upper()
+
+    if accion == "ACTIVAR_30_DIAS":
+        perfil.plan_activo_hasta = now + timedelta(days=30)
+        detalle = "Se otorgaron 30 días de acceso desde hoy."
+    elif accion == "EXTENDER_30_DIAS":
+        base = perfil.plan_activo_hasta if perfil.plan_activo_hasta and perfil.plan_activo_hasta > now else now
+        perfil.plan_activo_hasta = base + timedelta(days=30)
+        detalle = "Se extendió el acceso por 30 días."
+    elif accion == "FIJAR_FECHA":
+        if payload.hasta is None:
+            raise HttpError(400, "Indicá una fecha de vigencia para el plan.")
+        hasta = payload.hasta
+        if timezone.is_naive(hasta):
+            hasta = timezone.make_aware(hasta, timezone.get_current_timezone())
+        if hasta <= now:
+            raise HttpError(400, "La fecha de vigencia debe estar en el futuro.")
+        perfil.plan_activo_hasta = hasta
+        detalle = f"Se fijó el acceso hasta {hasta.date().isoformat()}."
+    elif accion == "QUITAR_PLAN":
+        perfil.plan_activo_hasta = None
+        detalle = "Se quitó el plan pago; el acceso vuelve a depender de la prueba."
+    else:
+        raise HttpError(400, "Acción de plan inválida.")
+
+    perfil.save(update_fields=["plan_activo_hasta"])
+    taller = Taller.objects.filter(owner=perfil.user).first()
+    if taller:
+        AuditoriaTaller.objects.create(
+            taller=taller,
+            actor=actor,
+            accion=f"CEO_{accion}",
+            detalle=detalle,
+        )
+    return _ceo_taller_out(
+        perfil,
+        now,
+        Cliente.objects.filter(owner=perfil.user).count(),
+        Trabajo.objects.filter(owner=perfil.user).count(),
+    )
+
+
+@api.post("/ceo/talleres/{perfil_id}/enlace-recuperacion/", response=CeoEnlaceRecuperacionOut, tags=["CEO"])
+def generar_enlace_recuperacion_ceo(request, perfil_id: int):
+    """Emite un enlace temporal para que el dueño recupere su propia clave."""
+    actor = require_platform_admin(request)
+    perfil = get_object_or_404(PerfilTaller.objects.select_related("user"), id=perfil_id, user__is_superuser=False)
+    if not perfil.user.is_active:
+        raise HttpError(400, "No se puede recuperar una cuenta desactivada.")
+
+    now = timezone.now()
+    # Un único enlace útil por cuenta: emitir uno nuevo vence cualquiera previo.
+    RecuperacionContrasena.objects.filter(
+        user=perfil.user,
+        usada_en__isnull=True,
+        expires_at__gt=now,
+    ).update(expires_at=now)
+    token = secrets.token_urlsafe(32)
+    recuperacion = RecuperacionContrasena.objects.create(
+        user=perfil.user,
+        token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        expires_at=now + timedelta(hours=1),
+        creada_por=actor,
+    )
+    taller = Taller.objects.filter(owner=perfil.user).first()
+    if taller:
+        AuditoriaTaller.objects.create(
+            taller=taller,
+            actor=actor,
+            accion="CEO_RECUPERACION_GENERADA",
+            detalle="Se generó un enlace de recuperación de contraseña válido por una hora.",
+        )
+    return CeoEnlaceRecuperacionOut(
+        path=f"/recuperar/{recuperacion.id}/{token}",
+        expires_at=recuperacion.expires_at.isoformat(),
+        email=perfil.user.email or perfil.user.username,
+    )
+
+
+@api.post("/public/recuperacion/{recuperacion_id}/{token}/", auth=None, response=MessageOut, tags=["Auth"])
+def recuperar_contrasena_publica(request, recuperacion_id: int, token: str, payload: RecuperarContrasenaIn):
+    """Consume un enlace temporal y revoca las sesiones anteriores del usuario."""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    now = timezone.now()
+    with transaction.atomic():
+        recuperacion = RecuperacionContrasena.objects.select_for_update().select_related("user").filter(
+            id=recuperacion_id,
+            token_hash=token_hash,
+            usada_en__isnull=True,
+            expires_at__gt=now,
+        ).first()
+        if recuperacion is None:
+            raise HttpError(400, "Este enlace es inválido, ya fue utilizado o venció.")
+        try:
+            validate_password(payload.password, recuperacion.user)
+        except DjangoValidationError as error:
+            raise HttpError(400, " ".join(error.messages))
+
+        user = recuperacion.user
+        user.set_password(payload.password)
+        user.save(update_fields=["password"])
+        ApiToken.objects.filter(user=user).delete()
+        recuperacion.usada_en = now
+        recuperacion.save(update_fields=["usada_en"])
+
+    taller = Taller.objects.filter(owner=user).first()
+    if taller:
+        AuditoriaTaller.objects.create(
+            taller=taller,
+            actor=user,
+            accion="CONTRASENA_RESTABLECIDA",
+            detalle="La contraseña fue restablecida mediante un enlace de recuperación.",
+        )
+    return {"message": "Contraseña actualizada. Ya podés iniciar sesión."}
 
 
 def _logo_url(request, perfil: PerfilTaller) -> Optional[str]:

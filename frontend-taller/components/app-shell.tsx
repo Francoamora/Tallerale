@@ -153,8 +153,8 @@ export function AppShell({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [ownerNombre, setOwnerNombre] = useState("Mi Taller");
   const [tallerNombre, setTallerNombre] = useState("");
-  const [initials, setInitials] = useState("MT");
   const [role, setRole] = useState<"ADMIN" | "RECEPCION" | "MECANICO" | "CONTADOR" | null>(null);
+  const [esSuperusuario, setEsSuperusuario] = useState(false);
   const router = useRouter();
   const navItemsVisibles = role === "ADMIN" || role === "RECEPCION"
     ? navItems
@@ -166,16 +166,12 @@ export function AppShell({
 
   useEffect(() => {
     function aplicarSesion(info: ReturnType<typeof getTrialInfo>) {
-      setRole(getSession()?.rol ?? null);
+      const session = getSession();
+      setRole(session?.rol ?? null);
+      setEsSuperusuario(Boolean(session?.es_superusuario));
       const nombre = info.ownerNombre || "Mi Taller";
       setOwnerNombre(nombre);
       setTallerNombre(info.tallerNombre || "");
-      const parts = nombre.trim().split(" ");
-      setInitials(
-        parts.length >= 2
-          ? (parts[0][0] + parts[1][0]).toUpperCase()
-          : nombre.slice(0, 2).toUpperCase()
-      );
     }
 
     const info = getTrialInfo();
@@ -223,12 +219,9 @@ export function AppShell({
   const sidebarContent = (
     <>
       <div className="flex h-20 shrink-0 items-center justify-between border-b border-slate-100 px-5 dark:border-slate-800">
-        <Link href="/" onClick={() => setMobileOpen(false)} className="flex min-w-0 items-center gap-3 rounded-xl p-1.5 -m-1.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/60 active:scale-95">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-sm font-black text-white shadow-sm">
-            {initials}
-          </div>
+        <Link href="/" onClick={() => setMobileOpen(false)} className="flex min-w-0 items-center rounded-xl p-1.5 -m-1.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/60 active:scale-95">
           <div className="flex flex-col min-w-0">
-            <span className="truncate text-sm font-bold tracking-tight text-slate-900 dark:text-white">
+            <span className="truncate text-base font-bold tracking-tight text-slate-900 dark:text-white">
               {tallerNombre || ownerNombre}
             </span>
             <span className="text-[10px] font-bold uppercase tracking-widest text-brand-600 dark:text-brand-500">Tallerista</span>
@@ -265,19 +258,27 @@ export function AppShell({
           <p className="mb-2 px-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Administración</p>
           {administracionItems.map((item) => <NavLink key={item.href} {...item} currentPath={currentPath} onNavigate={() => setMobileOpen(false)} />)}
         </>}
+
+        {esSuperusuario && <>
+          <div className="my-4 border-t border-slate-100 dark:border-slate-800" />
+          <p className="mb-2 px-2 text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Plataforma</p>
+          <NavLink
+            href="/ceo"
+            label="Centro CEO"
+            currentPath={currentPath}
+            onNavigate={() => setMobileOpen(false)}
+            icon={<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6M9 10h.01M15 10h.01" /></svg>}
+          />
+        </>}
       </nav>
 
       {/* ── SECCIÓN DE USUARIO + LOGOUT ── */}
       <div className="shrink-0 border-t border-slate-100 p-3 dark:border-slate-800">
-        <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-          {/* Avatar */}
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-[11px] font-black text-white">
-            {initials}
-          </div>
+        <div className="flex items-center rounded-xl px-2 py-2">
           <div className="flex-1 min-w-0">
             <p className="truncate text-sm font-bold text-slate-800 dark:text-white">{ownerNombre}</p>
             <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
-              {role ? { ADMIN: "Administrador", RECEPCION: "Recepción", MECANICO: "Mecánico", CONTADOR: "Contador" }[role] : "Cargando acceso…"}
+              {esSuperusuario ? "CEO / Superusuario" : role ? { ADMIN: "Administrador", RECEPCION: "Recepción", MECANICO: "Mecánico", CONTADOR: "Contador" }[role] : "Cargando acceso…"}
             </p>
           </div>
           {/* Logout button */}

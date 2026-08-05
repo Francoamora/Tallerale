@@ -1,11 +1,11 @@
 # taller/services.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Sum, F
+from django.db.models import Count, F, Max, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -381,6 +381,30 @@ def obtener_dashboard_snapshot(user=None, months: int = 6) -> dict:
         for t in turnos_qs.select_related("cliente", "vehiculo").order_by("fecha_hora")[:5]
     ]
 
+    # Señal comercial: clientes sin una orden cerrada en los últimos seis
+    # meses. No implica deuda ni problema técnico; sirve para recontactarlos.
+    limite_inactividad = ahora - timedelta(days=180)
+    clientes_inactivos_qs = (
+        clientes_qs
+        .annotate(
+            ultimo_trabajo=Max(
+                "trabajos__fecha_ingreso",
+                filter=Q(trabajos__activo=True, trabajos__estado__in=["FINALIZADO", "ENTREGADO"]),
+            )
+        )
+        .filter(Q(ultimo_trabajo__lt=limite_inactividad) | Q(ultimo_trabajo__isnull=True))
+        .order_by("ultimo_trabajo", "nombre", "apellido")
+    )
+    clientes_sin_actividad = [
+        {
+            "id": cliente.id,
+            "nombre": cliente.nombre_completo,
+            "ultimo_trabajo": cliente.ultimo_trabajo,
+            "telefono": cliente.telefono,
+        }
+        for cliente in clientes_inactivos_qs[:5]
+    ]
+
     return {
         "total_clientes": clientes_qs.count(),
         "total_vehiculos": vehiculos_qs.count(),
@@ -393,6 +417,8 @@ def obtener_dashboard_snapshot(user=None, months: int = 6) -> dict:
         "trabajos_recientes": trabajos_recientes,
         "alertas_service": alertas_service,
         "turnos_proximos": turnos_proximos,
+        "clientes_sin_actividad_total": clientes_inactivos_qs.count(),
+        "clientes_sin_actividad": clientes_sin_actividad,
     }
 
 

@@ -9,7 +9,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { getTrialInfo, buildActivationWALink, type TrialInfo } from "@/lib/trial";
+import { getTrialInfo, getSession, saveSession, buildActivationWALink, type TrialInfo } from "@/lib/trial";
+import { getSesionDjango } from "@/lib/api";
 
 // ─── Ícono WhatsApp ───────────────────────────────────────────────────────────
 function IconWA({ className }: { className?: string }) {
@@ -21,7 +22,7 @@ function IconWA({ className }: { className?: string }) {
 }
 
 // ─── Modal de prueba vencida ──────────────────────────────────────────────────
-function ModalVencida({ tallerNombre }: { tallerNombre: string }) {
+function ModalVencida({ tallerNombre, actualizando, error, onActualizar }: { tallerNombre: string; actualizando: boolean; error: string; onActualizar: () => void }) {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md">
       <div className="w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-900">
@@ -58,6 +59,17 @@ function ModalVencida({ tallerNombre }: { tallerNombre: string }) {
             Activar mi cuenta ahora
           </a>
 
+          <button
+            type="button"
+            onClick={onActualizar}
+            disabled={actualizando}
+            className="mt-3 w-full rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            {actualizando ? "Actualizando estado…" : "Ya activé mi cuenta · Actualizar estado"}
+          </button>
+
+          {error && <p className="mt-3 text-xs font-semibold text-rose-500">{error}</p>}
+
           <p className="mt-4 text-[11px] text-slate-400">
             Tus datos están guardados y seguros.
           </p>
@@ -70,10 +82,37 @@ function ModalVencida({ tallerNombre }: { tallerNombre: string }) {
 // ─── Banner premium de cuenta regresiva ──────────────────────────────────────
 export function TrialBanner() {
   const [info, setInfo] = useState<TrialInfo | null>(null);
+  const [actualizando, setActualizando] = useState(false);
+  const [errorActualizacion, setErrorActualizacion] = useState("");
+
+  async function sincronizarEstado() {
+    const session = getSession();
+    if (!session) return;
+    setActualizando(true);
+    setErrorActualizacion("");
+    try {
+      const estado = await getSesionDjango();
+      // Django es la fuente de verdad. Conservamos únicamente la preferencia
+      // local del onboarding, que no pertenece al estado comercial.
+      saveSession({
+        ...session,
+        ...estado,
+        onboarding_done: session.onboarding_done,
+      });
+      setInfo(getTrialInfo());
+    } catch {
+      setErrorActualizacion("Todavía no vemos una activación vigente. Si ya la gestionaste, probá de nuevo en unos segundos.");
+    } finally {
+      setActualizando(false);
+    }
+  }
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setInfo(getTrialInfo()));
-    const id = setInterval(() => setInfo(getTrialInfo()), 5 * 60 * 1000);
+    // Consulta el backend al abrir y periódicamente: así una activación hecha
+    // desde el Centro CEO se refleja sin obligar al taller a cerrar sesión.
+    void sincronizarEstado();
+    const id = setInterval(() => { void sincronizarEstado(); }, 5 * 60 * 1000);
     return () => {
       cancelAnimationFrame(frame);
       clearInterval(id);
@@ -84,7 +123,7 @@ export function TrialBanner() {
   if (info.isPlanActivo) return null;
 
   if (info.isExpired) {
-    return <ModalVencida tallerNombre={info.tallerNombre} />;
+    return <ModalVencida tallerNombre={info.tallerNombre} actualizando={actualizando} error={errorActualizacion} onActualizar={() => { void sincronizarEstado(); }} />;
   }
 
   // Estilos por urgencia — un dot + una pill, no toda la barra pintada.

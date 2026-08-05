@@ -87,13 +87,20 @@ export interface PublicPresupuesto {
 /** Historial de OT de un vehículo */
 export interface PublicOTResumen {
   id: number;
-  fecha_ingreso: string;
-  fecha_egreso_estimado?: string | null;
+  fecha_realizado: string;
   estado: string;
   resumen_trabajos: string;
-  total: number;
   kilometraje: number;
   recomendaciones_proximo_service?: string;
+  items: Array<{ descripcion: string; cantidad: number }>;
+}
+
+export interface PublicMovimientoCuenta {
+  fecha: string;
+  tipo: "DEUDA" | "PAGO";
+  monto: number;
+  descripcion: string;
+  fecha_promesa?: string | null;
 }
 
 /** Ficha completa del vehículo */
@@ -106,8 +113,11 @@ export interface PublicVehiculo {
   color?: string;
   kilometraje_actual: number;
   proximo_service_km: number | null;
+  proximo_service_fecha?: string | null;
   cliente_nombre: string;
   historial: PublicOTResumen[];
+  saldo_pendiente: number;
+  movimientos_cuenta: PublicMovimientoCuenta[];
   // Datos del taller — incluidos por Django cuando el backend los expone
   taller_nombre?: string;
   taller_tel?: string;

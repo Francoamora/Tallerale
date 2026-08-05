@@ -211,10 +211,42 @@ function VehiculoRow({ vehiculo }: { vehiculo: Vehiculo }) {
       <p className="mt-1 text-[11px] text-slate-500">{vehiculo.proximo_service_km ? `Próximo: ${formatNumber(vehiculo.proximo_service_km)} km` : "Service sin programar"}</p>
     </div>
     <div className="flex gap-2 md:justify-end">
+      <CompartirHistorialButton vehiculo={vehiculo} />
+      <Link href={`/vehiculos/${vehiculo.id}/historial`} className="rounded-lg border border-violet-200 px-3 py-2 text-xs font-bold text-violet-700 transition hover:bg-violet-50 dark:border-violet-900/60 dark:text-violet-300 dark:hover:bg-violet-950/30">Historial</Link>
       <Link href={`/presupuestos/nuevo?vehiculo=${vehiculo.id}`} className="rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50 dark:border-sky-900/60 dark:text-sky-300 dark:hover:bg-sky-950/30">Presupuestar</Link>
       <Link href={`/trabajos/nuevo?vehiculo=${vehiculo.id}`} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-500">Nueva OT →</Link>
     </div>
   </div>;
+}
+
+function CompartirHistorialButton({ vehiculo }: { vehiculo: Vehiculo }) {
+  const [estado, setEstado] = useState<"idle" | "copiado" | "error">("idle");
+
+  async function compartir() {
+    if (!vehiculo.token) {
+      setEstado("error");
+      return;
+    }
+    const url = `${window.location.origin}/p/vehiculo/${vehiculo.token}`;
+    const texto = `Hola! Te compartimos el historial y seguimiento de tu ${vehiculo.marca} ${vehiculo.modelo} (${vehiculo.patente}) 🚗\n\n${url}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Historial · ${vehiculo.patente}`, text: texto, url });
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setEstado("copiado");
+      window.setTimeout(() => setEstado("idle"), 2500);
+    } catch {
+      setEstado("error");
+    }
+  }
+
+  return <button type="button" onClick={() => void compartir()} className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${estado === "error" ? "border-rose-200 text-rose-600 dark:border-rose-900/60 dark:text-rose-300" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30"}`}>{estado === "copiado" ? "Link copiado" : estado === "error" ? "Sin portal" : "Compartir"}</button>;
 }
 
 function EmptyState() {

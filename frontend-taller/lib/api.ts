@@ -1,5 +1,5 @@
 // src/lib/api.ts
-import type { Cliente, DashboardStats, Gasto, MovimientoCuenta, Presupuesto, PresupuestoDetalle, Trabajo, TrabajoDetalle, Turno, Vehiculo } from "@/lib/types";
+import type { Cliente, DashboardStats, Gasto, MovimientoCuenta, Presupuesto, PresupuestoDetalle, Trabajo, TrabajoDetalle, Turno, Vehiculo, VehiculoHistorial } from "@/lib/types";
 import { clearSession } from "@/lib/trial";
 
 const FALLBACK_API_ROOT = "http://127.0.0.1:8000/api";
@@ -147,6 +147,16 @@ export type TableroData = {
   };
 };
 
+export type Aviso = {
+  tipo: "TURNO" | "PRESUPUESTO" | "RETIRO" | "SERVICE" | "DEUDA";
+  prioridad: "ALTA" | "MEDIA";
+  titulo: string;
+  detalle: string;
+  mensaje: string;
+  href: string;
+  telefono?: string | null;
+};
+
 
 // ==========================================
 // AUTH — Login / Registro
@@ -166,6 +176,51 @@ export interface AuthResponse {
   trial_start?: string;   // ISO — solo en register
   plan_activo_hasta?: string | null; // ISO — presente si hay un plan pago acordado
   rol?: "ADMIN" | "RECEPCION" | "MECANICO" | "CONTADOR";
+  es_superusuario?: boolean;
+}
+
+/** Estado fresco de Django; deliberadamente no incluye la credencial. */
+export type SesionResponse = Omit<AuthResponse, "token">;
+
+export type CeoTaller = {
+  id: number;
+  taller_nombre: string;
+  owner_nombre: string;
+  email: string;
+  ciudad: string;
+  telefono: string;
+  trial_start: string;
+  trial_hasta: string;
+  plan_activo_hasta: string | null;
+  estado_acceso: "PLAN_ACTIVO" | "PRUEBA_VIGENTE" | "VENCIDO";
+  acceso_vigente: boolean;
+  dias_restantes: number;
+  clientes: number;
+  trabajos: number;
+  es_superusuario: boolean;
+};
+
+export type CeoResumen = {
+  total_talleres: number;
+  pruebas_vigentes: number;
+  planes_activos: number;
+  vencidos: number;
+  por_vencer: number;
+  talleres: CeoTaller[];
+};
+
+export type CeoEnlaceRecuperacion = {
+  path: string;
+  expires_at: string;
+  email: string;
+};
+
+export function getCeoResumen() { return apiRequest<CeoResumen>("/ceo/resumen/"); }
+export function actualizarPlanCeo(id: number, payload: { accion: "ACTIVAR_30_DIAS" | "EXTENDER_30_DIAS" | "FIJAR_FECHA" | "QUITAR_PLAN"; hasta?: string }) {
+  return apiRequest<CeoTaller>(`/ceo/talleres/${id}/plan/`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function generarEnlaceRecuperacionCeo(id: number) {
+  return apiRequest<CeoEnlaceRecuperacion>(`/ceo/talleres/${id}/enlace-recuperacion/`, { method: "POST" });
 }
 
 export type MiembroEquipo = { id: number; user_id: number; nombre: string; email: string; rol: string; activo: boolean };
@@ -197,6 +252,14 @@ export async function loginDjango(email: string, password: string): Promise<Auth
     throw new Error(msg);
   }
   return response.json() as Promise<AuthResponse>;
+}
+
+export function getSesionDjango() {
+  return apiRequest<SesionResponse>("/auth/sesion/");
+}
+
+export function getAvisos() {
+  return apiRequest<Aviso[]>("/avisos");
 }
 
 /**
@@ -331,6 +394,9 @@ export function getVehiculosPorCliente(clienteId: number) {
 }
 export function getVehiculoById(id: number) {
   return apiRequest<Vehiculo>(`/vehiculos/${id}`);
+}
+export function getHistorialVehiculo(id: number) {
+  return apiRequest<VehiculoHistorial>(`/vehiculos/${id}/historial/`);
 }
 export function crearVehiculo(payload: unknown) {
   return apiRequest<Vehiculo>("/vehiculos/", { method: "POST", body: JSON.stringify(payload) });

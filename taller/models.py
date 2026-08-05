@@ -559,3 +559,26 @@ class ApiToken(models.Model):
     @property
     def is_expired(self):
         return self.expires_at <= timezone.now()
+
+
+class RecuperacionContrasena(models.Model):
+    """Enlace de recuperación de un solo uso, creado por soporte.
+
+    Nunca se guarda el secreto que viaja en el enlace: sólo su hash. Al emitir
+    uno nuevo, los anteriores se vencen y al usarlo queda inutilizable.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recuperaciones_contrasena")
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    usada_en = models.DateTimeField(null=True, blank=True)
+    creada_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="recuperaciones_creadas")
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Recuperación de contraseña"
+        verbose_name_plural = "Recuperaciones de contraseña"
+        ordering = ["-creada_en"]
+
+    @property
+    def vigente(self):
+        return self.usada_en is None and self.expires_at > timezone.now()

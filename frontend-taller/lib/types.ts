@@ -25,6 +25,29 @@ export interface Vehiculo {
   token?: string;
 }
 
+export interface VehiculoHistorialTrabajo {
+  id: number;
+  fecha_ingreso: string;
+  estado: string;
+  resumen: string;
+  kilometraje: number;
+  total: number;
+}
+
+export interface VehiculoHistorialPresupuesto {
+  id: number;
+  fecha_creacion: string;
+  estado: string;
+  resumen: string;
+  total: number;
+}
+
+export interface VehiculoHistorial {
+  vehiculo: Vehiculo;
+  trabajos: VehiculoHistorialTrabajo[];
+  presupuestos: VehiculoHistorialPresupuesto[];
+}
+
 // ─── Trabajos ──────────────────────────────────────────────
 
 export interface TrabajoItem {
@@ -201,6 +224,13 @@ export interface TurnoProximo {
   motivo: string;
 }
 
+export interface ClienteSinActividad {
+  id: number;
+  nombre: string;
+  ultimo_trabajo: string | null;
+  telefono: string;
+}
+
 export interface DashboardStats {
   total_clientes: number;
   total_vehiculos: number;
@@ -213,4 +243,6 @@ export interface DashboardStats {
   trabajos_recientes: TrabajoReciente[];
   alertas_service: AlertaService[];
   turnos_proximos: TurnoProximo[];
+  clientes_sin_actividad_total: number;
+  clientes_sin_actividad: ClienteSinActividad[];
 }

@@ -5,9 +5,10 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { SectionCard } from "@/components/section-card";
 import { StatusBadge } from "@/components/status-badge";
-import { getDashboardData } from "@/lib/api";
-import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
+import { getAvisos, getDashboardData } from "@/lib/api";
+import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import type { DashboardStats } from "@/lib/types";
+import type { Aviso } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { HintBubble } from "@/components/hint-bubble";
 import { getSession, getTrialInfo, type SessionData } from "@/lib/trial";
@@ -16,6 +17,7 @@ type UserRole = NonNullable<SessionData["rol"]>;
 
 export default function Home() {
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
+  const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [chartMounted, setChartMounted] = useState(false);
@@ -50,6 +52,10 @@ export default function Home() {
       })
       .finally(() => setLoading(false));
 
+    getAvisos().then(setAvisos).catch(() => {
+      // Los avisos mejoran la operación, pero no deben impedir abrir el panel.
+    });
+
     return () => cancelAnimationFrame(frame);
   }, []);
 
@@ -80,6 +86,7 @@ export default function Home() {
   const turnosOrdenados = [...(dashboard?.turnos_proximos ?? [])].sort(
     (a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime(),
   );
+  const clientesSinActividad = dashboard?.clientes_sin_actividad ?? [];
   const moveRail = (rail: HTMLDivElement | null, direction: -1 | 1) => {
     rail?.scrollBy({ left: direction * Math.max(280, rail.clientWidth * 0.8), behavior: "smooth" });
   };
@@ -230,6 +237,24 @@ export default function Home() {
               </>
             )}
           </div>
+
+          {!loading && !isAccountant && clientesSinActividad.length > 0 && (
+            <SectionCard
+              compact
+              title="Clientes para recuperar"
+              description={`${dashboard?.clientes_sin_actividad_total ?? clientesSinActividad.length} sin una orden cerrada en los últimos 6 meses.`}
+              action={<Link href="/clientes" className="text-xs font-bold text-brand-600 hover:text-brand-700 dark:text-brand-300">Abrir directorio →</Link>}
+            >
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {clientesSinActividad.map((cliente) => (
+                  <Link key={cliente.id} href={`/clientes/${cliente.id}`} className="rounded-xl border border-slate-200 p-3 transition hover:border-brand-300 hover:bg-brand-50/40 dark:border-slate-700 dark:hover:border-brand-700 dark:hover:bg-brand-950/20">
+                    <p className="truncate text-xs font-black text-slate-900 dark:text-white">{cliente.nombre}</p>
+                    <p className="mt-1 text-[10px] text-slate-500">{cliente.ultimo_trabajo ? `Última OT: ${formatDate(cliente.ultimo_trabajo)}` : "Sin servicios cerrados"}</p>
+                  </Link>
+                ))}
+              </div>
+            </SectionCard>
+          )}
 
           {/* 3. ZONA DE GRÁFICOS Y LISTAS */}
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
@@ -395,6 +420,37 @@ export default function Home() {
 
             {/* 4. AGENDA Y ALERTAS (Columna Lateral) */}
             <div className="order-2 flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-1">
+
+              {!loading && !isAccountant && avisos.length > 0 && (
+                <SectionCard
+                  compact
+                  title="Recordatorios para enviar"
+                  description="Elegí uno y abrí WhatsApp con el mensaje listo."
+                  action={<span className="rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-black text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">{avisos.length}</span>}
+                >
+                  <div className="space-y-2">
+                    {avisos.slice(0, 5).map((aviso, index) => {
+                      const telefono = aviso.telefono?.replace(/\D/g, "");
+                      const waHref = telefono ? `https://wa.me/${telefono}?text=${encodeURIComponent(aviso.mensaje)}` : null;
+                      return (
+                        <div key={`${aviso.tipo}-${aviso.href}-${index}`} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-black text-slate-900 dark:text-white">{aviso.titulo}</p>
+                              <p className="mt-0.5 truncate text-[11px] text-slate-500">{aviso.detalle}</p>
+                            </div>
+                            <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase", aviso.prioridad === "ALTA" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300" : "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300")}>{aviso.prioridad}</span>
+                          </div>
+                          <div className="mt-2 flex gap-3 text-[11px] font-bold">
+                            <Link href={aviso.href} className="text-brand-600 hover:text-brand-700 dark:text-brand-300">Ver ficha</Link>
+                            {waHref && <a href={waHref} target="_blank" rel="noreferrer" className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-300">WhatsApp →</a>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </SectionCard>
+              )}
               
               {/* Alertas de Service */}
               {!loading && alertasOrdenadas.length > 0 && (
