@@ -1,5 +1,5 @@
 /**
- * proxy.ts — Protección de rutas de TallerOS
+ * proxy.ts — Protección de rutas de Tallerista
  *
  * La cookie de sesión permite decidir la ruta antes de descargar y montar la
  * interfaz. La API sigue validando el token real en cada operación.

@@ -45,7 +45,7 @@ function ModalVencida({ tallerNombre }: { tallerNombre: string }) {
         <div className="px-6 py-7 text-center">
           <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
             Tu prueba gratuita de <strong className="text-slate-800 dark:text-white">7 días</strong> ha terminado.
-            Para seguir usando TallerOS sin perder ningún dato, activá tu cuenta ahora.
+            Para seguir usando Tallerista sin perder ningún dato, activá tu cuenta ahora.
           </p>
 
           <a

@@ -51,7 +51,7 @@ export function LandingNav() {
             <div className="flex min-w-0 flex-col leading-none">
               <Link href="/landing" onClick={close} className="text-[15px] font-black tracking-tight transition active:scale-95">
                 <span className="text-slate-900">Taller</span>
-                <span className="text-orange-500">OS</span>
+                <span className="text-orange-500">ista</span>
               </Link>
               <a
                 href="https://famdesarrollos.com.ar"
@@ -149,7 +149,7 @@ export function LandingNav() {
 
               {/* WA mobile */}
               <a
-                href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero info sobre TallerOS")}`}
+                href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero info sobre Tallerista")}`}
                 onClick={close}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#25D366]/30 bg-[#25D366]/5 py-3 text-sm font-semibold text-[#1a9e4f] transition hover:bg-[#25D366]/10"
               >

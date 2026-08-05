@@ -56,10 +56,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title: `Presupuesto ${num}`,
       description: `${p.resumen_corto || "Presupuesto de reparación"} · ${vehiculo} · Total: ${total}`,
       openGraph: {
-        title: `Presupuesto ${num} · TallerOS`,
+        title: `Presupuesto ${num} · Tallerista`,
         description: `${p.resumen_corto || "Presupuesto de reparación"} — ${vehiculo}\nTotal: ${total}`,
-        siteName: "TallerOS",
-        images: imageUrl ? [{ url: imageUrl, width: 1104, height: 720, alt: "TallerOS" }] : undefined,
+        siteName: "Tallerista",
+        images: imageUrl ? [{ url: imageUrl, width: 1104, height: 720, alt: "Tallerista" }] : undefined,
       },
     };
   } catch {

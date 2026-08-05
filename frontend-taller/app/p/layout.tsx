@@ -11,7 +11,7 @@ import type { ReactNode } from "react";
 
 export const metadata = {
   title: {
-    default: "Portal del Cliente · TallerOS",
+    default: "Portal del Cliente · Tallerista",
     template: "%s · Portal del Cliente",
   },
   description: "Tu portal personal de seguimiento de vehículo y presupuestos.",
@@ -24,12 +24,12 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       {/* El nombre del taller se muestra en cada page desde el response del API */}
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-4 lg:max-w-5xl lg:px-8">
-          {/* Logo TallerOS */}
+          {/* Logo Tallerista */}
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900">
-            <span className="text-xs font-black tracking-tight text-white">OS</span>
+            <span className="text-xs font-black tracking-tight text-white">TA</span>
           </div>
           <div>
-            <p className="text-sm font-black leading-tight text-slate-900">TallerOS</p>
+            <p className="text-sm font-black leading-tight text-slate-900">Tallerista</p>
             <p className="text-[10px] font-medium uppercase tracking-widest text-slate-400">Portal del Cliente</p>
           </div>
 
@@ -53,7 +53,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       {/* ── Footer mínimo ── */}
       <footer className="border-t border-slate-200 bg-white py-6 text-center">
         <p className="text-[11px] text-slate-400">
-          © {new Date().getFullYear()} TallerOS · Desarrollado por FAM Desarrollos
+          © {new Date().getFullYear()} Tallerista · Desarrollado por FAM Desarrollos
         </p>
         <p className="mt-1 text-[10px] text-slate-300">
           La herramienta amiga de los talleres

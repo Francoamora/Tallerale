@@ -1,6 +1,6 @@
-# TallerOS Frontend
+# Tallerista Frontend
 
-Frontend desacoplado de `TallerOS`, construido con `Next.js 16`, `TypeScript` y `Tailwind CSS`.
+Frontend desacoplado de `Tallerista`, construido con `Next.js 16`, `TypeScript` y `Tailwind CSS`.
 
 ## Desarrollo local
 

@@ -7,7 +7,7 @@
 
 export const TRIAL_DAYS = 7;
 export const WA_VENTAS = "5493482254317"; // Activación de cuenta
-export const WA_VENTAS_MSG = "Hola! Terminó mi prueba de TallerOS y quiero seguir usándolo. ¿Cómo activo mi cuenta?";
+export const WA_VENTAS_MSG = "Hola! Terminó mi prueba de Tallerista y quiero seguir usándolo. ¿Cómo activo mi cuenta?";
 
 export interface SessionData {
   email: string;
@@ -149,7 +149,7 @@ export function clearSession(): void {
 // ─── Link de WhatsApp para activar ───────────────────────────────────────────
 export function buildActivationWALink(tallerNombre?: string): string {
   const msg = tallerNombre
-    ? `Hola! Soy el dueño de "${tallerNombre}" y quiero activar TallerOS. ¿Cómo sigo?`
+    ? `Hola! Soy el dueño de "${tallerNombre}" y quiero activar Tallerista. ¿Cómo sigo?`
     : WA_VENTAS_MSG;
   return `https://wa.me/${WA_VENTAS}?text=${encodeURIComponent(msg)}`;
 }
@@ -161,7 +161,7 @@ export function buildActivationWALink(tallerNombre?: string): string {
 export const WA_SOPORTE = WA_VENTAS; // Un solo número para todo el contacto de WhatsApp
 
 export function buildOlvideWALink(identifier?: string): string {
-  const base = "Hola! No recuerdo mi contraseña de TallerOS y necesito recuperar el acceso.";
+  const base = "Hola! No recuerdo mi contraseña de Tallerista y necesito recuperar el acceso.";
   const msg = identifier?.trim()
     ? `${base} Mi usuario/email es: ${identifier.trim()}`
     : base;

@@ -1,4 +1,4 @@
-# Django Auth — Endpoints requeridos por TallerOS
+# Django Auth — Endpoints requeridos por Tallerista
 
 El frontend envía `Authorization: Token <token>` en **cada** request a `/api/*`.
 Sin este token Django debe responder **401** (no 200 con datos de otro usuario).

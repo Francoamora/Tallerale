@@ -42,10 +42,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title: `${v.patente} · ${v.marca} ${v.modelo}`,
       description: `Historial y seguimiento del ${v.marca} ${v.modelo} (${v.patente})`,
       openGraph: {
-        title: `${v.patente} · TallerOS`,
+        title: `${v.patente} · Tallerista`,
         description: `${v.marca} ${v.modelo} · ${v.historial.length} servicio${v.historial.length !== 1 ? "s" : ""} registrado${v.historial.length !== 1 ? "s" : ""}`,
-        siteName: "TallerOS",
-        images: imageUrl ? [{ url: imageUrl, width: 1104, height: 720, alt: "TallerOS" }] : undefined,
+        siteName: "Tallerista",
+        images: imageUrl ? [{ url: imageUrl, width: 1104, height: 720, alt: "Tallerista" }] : undefined,
       },
     };
   } catch {

@@ -1,9 +1,9 @@
 /**
  * app/landing/page.tsx
  *
- * Landing page pública de TallerOS.
- * Marca: TallerOS — "El sistema operativo de tu taller"
- * Dominio sugerido: talleros.com.ar / tutallermecanico.com.ar (alias SEO)
+ * Landing page pública de Tallerista.
+ * Marca: Tallerista — "El sistema operativo de tu taller"
+ * Dominio sugerido: talleristas.com.ar / tutallermecanico.com.ar (alias SEO)
  */
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -12,7 +12,7 @@ import { CarIcon, CheckIcon, XIcon } from "@/components/icons";
 import { WA_SOPORTE } from "@/lib/trial";
 
 export const metadata: Metadata = {
-  title: "TallerOS · El sistema operativo de tu taller mecánico",
+  title: "Tallerista · El sistema operativo de tu taller mecánico",
   description:
     "Presupuestos digitales, órdenes de trabajo, portal del cliente y control de caja. Probalo 7 días gratis — sin tarjeta, sin contrato.",
   keywords: "software taller mecanico, gestion taller, presupuesto digital, orden de trabajo, argentina",
@@ -88,7 +88,7 @@ const I = {
   ),
 };
 
-// ─── Logo TallerOS ────────────────────────────────────────────────────────────
+// ─── Logo Tallerista ────────────────────────────────────────────────────────────
 function LogoOS({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   const dims = size === "sm" ? "h-7 w-7 text-[10px]" : size === "lg" ? "h-14 w-14 text-lg" : "h-9 w-9 text-xs";
   return (
@@ -102,7 +102,7 @@ function BrandName({ className = "" }: { className?: string }) {
   return (
     <span className={className}>
       <span className="text-slate-900">Taller</span>
-      <span className="text-orange-500">OS</span>
+      <span className="text-orange-500">ista</span>
     </span>
   );
 }
@@ -222,7 +222,7 @@ export default function LandingPage() {
                 </svg>
               </Link>
               <a
-                href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero saber más sobre TallerOS")}`}
+                href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero saber más sobre Tallerista")}`}
                 className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:border-white/30 hover:bg-white/10 sm:px-8 sm:py-4 sm:text-base"
               >
                 {I.wa}
@@ -340,7 +340,7 @@ export default function LandingPage() {
               </p>
               <h2 className="text-3xl font-black leading-tight tracking-tight text-white sm:text-4xl">
                 Así se ve{" "}
-                <span className="text-orange-400">TallerOS por dentro.</span>
+                <span className="text-orange-400">Tallerista por dentro.</span>
               </h2>
               <p className="mt-5 text-base leading-relaxed text-slate-400">
                 Cada presupuesto se convierte en un documento prolijo y en un Portal
@@ -461,9 +461,9 @@ export default function LandingPage() {
                     {/* Header portal */}
                     <div className="border-b border-slate-100 px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500 text-[8px] font-black text-white">OS</div>
+                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-orange-500 text-[8px] font-black text-white">TA</div>
                         <div>
-                          <p className="text-[9px] font-black text-slate-900">TallerOS</p>
+                          <p className="text-[9px] font-black text-slate-900">Tallerista</p>
                           <p className="text-[7px] font-bold uppercase tracking-wider text-slate-400">Portal del Cliente</p>
                         </div>
                         <span className="ml-auto rounded-full bg-orange-50 px-2 py-0.5 text-[7px] font-black uppercase tracking-wider text-orange-600 ring-1 ring-orange-200">Portal</span>
@@ -583,7 +583,7 @@ export default function LandingPage() {
                   <span>{I.arrow}</span>
                 </Link>
                 <a
-                  href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero saber más sobre TallerOS antes de registrarme")}`}
+                  href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero saber más sobre Tallerista antes de registrarme")}`}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-7 py-4 text-sm font-black text-white transition hover:bg-[#1ebe5d] active:scale-95"
                 >
                   {I.wa}
@@ -646,7 +646,7 @@ export default function LandingPage() {
           {/* Oferta principal */}
           <div className="text-center lg:text-left">
             <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-2xl shadow-orange-500/40 lg:mx-0">
-              <span className="text-lg font-black text-white">OS</span>
+              <span className="text-lg font-black text-white">TA</span>
             </div>
 
             <h2 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
@@ -677,7 +677,7 @@ export default function LandingPage() {
               ¿Tu negocio necesita algo a medida?
             </h3>
             <p className="mx-auto mt-2.5 max-w-sm text-sm leading-relaxed text-slate-400 lg:mx-0">
-              TallerOS es nuestro sistema listo para usar. Si lo tuyo es otro rubro,
+              Tallerista es nuestro sistema listo para usar. Si lo tuyo es otro rubro,
               también desarrollamos sitios y sistemas desde cero.
             </p>
 
@@ -767,7 +767,7 @@ export default function LandingPage() {
               © {new Date().getFullYear()}{" "}
               <span className="font-semibold">
                 <span className="text-slate-600">Taller</span>
-                <span className="text-orange-500">OS</span>
+                <span className="text-orange-500">ista</span>
               </span>
               {" "}· Todos los derechos reservados
             </p>

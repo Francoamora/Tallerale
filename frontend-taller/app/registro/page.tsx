@@ -3,7 +3,7 @@
 /**
  * app/registro/page.tsx
  *
- * Registro multi-paso de TallerOS.
+ * Registro multi-paso de Tallerista.
  * Paso 1: Datos de la cuenta (nombre, email, contraseña)
  * Paso 2: Datos del taller (nombre del taller, ciudad, teléfono)
  * Paso 3: ¡Listo! — inicia prueba de 7 días → redirect onboarding
@@ -180,10 +180,10 @@ export default function RegistroPage() {
         <div className="mb-8 text-center">
           <Link href="/landing" className="inline-flex items-center gap-2.5 transition hover:opacity-80">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/30">
-              <span className="text-sm font-black text-white">OS</span>
+              <span className="text-sm font-black text-white">TA</span>
             </div>
             <span className="text-lg font-black text-white">
-              Taller<span className="text-orange-400">OS</span>
+              Taller<span className="text-orange-400">ista</span>
             </span>
           </Link>
           <p className="mt-2 text-sm text-slate-500">Creá tu cuenta gratis · 7 días de prueba</p>
@@ -307,7 +307,7 @@ export default function RegistroPage() {
                       <div>
                         <p className="text-sm font-bold text-white">{tallerNombre}</p>
                         <p className="text-[10px] text-slate-400">
-                          {tallerCiudad || "Tu ciudad"} · TallerOS
+                          {tallerCiudad || "Tu ciudad"} · Tallerista
                         </p>
                       </div>
                     </div>
@@ -346,7 +346,7 @@ export default function RegistroPage() {
             <div className="text-center">
               {/* Animación confetti simple */}
               <div className="mb-6 text-6xl">🎉</div>
-              <h1 className="text-xl font-black text-white">¡Bienvenido a TallerOS!</h1>
+              <h1 className="text-xl font-black text-white">¡Bienvenido a Tallerista!</h1>
               <p className="mt-2 text-sm font-semibold text-orange-400">
                 {tallerNombre} ya está listo
               </p>

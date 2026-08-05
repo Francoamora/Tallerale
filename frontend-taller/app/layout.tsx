@@ -17,8 +17,8 @@ const themeBootScript = `
 
 export const metadata: Metadata = {
   title: {
-    default: "TallerOS · Panel de Control",
-    template: "%s | TallerOS",
+    default: "Tallerista · Panel de Control",
+    template: "%s | Tallerista",
   },
   description: "Cabina operativa y panel de control del taller mecánico.",
 };

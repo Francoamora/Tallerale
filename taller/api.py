@@ -151,7 +151,7 @@ class TokenAuth:
 # ==========================================
 api = NinjaAPI(
     auth=TokenAuth(),
-    title="TallerOS - Core API",
+    title="Tallerista - Core API",
     version="7.2.0",
     description="Motor operativo multi-tenant. Cada usuario solo accede a sus propios datos.",
     docs_url="/docs" if settings.API_DOCS_ENABLED else None,

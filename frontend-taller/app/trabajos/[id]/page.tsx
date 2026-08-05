@@ -426,7 +426,7 @@ function DocumentoA4({
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: "9px", fontWeight: 900, color: "#334155" }}>
-                TallerOS <span style={{ color: "#cbd5e1" }}>·</span> <span style={{ color: "#f97316" }}>FAM Desarrollos</span>
+                Tallerista <span style={{ color: "#cbd5e1" }}>·</span> <span style={{ color: "#f97316" }}>FAM Desarrollos</span>
               </div>
               <div style={{ marginTop: "2px", fontSize: "7px", letterSpacing: ".5px", color: "#94a3b8" }}>Tecnología para talleres</div>
             </div>

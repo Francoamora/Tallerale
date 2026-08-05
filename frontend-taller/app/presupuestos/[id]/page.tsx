@@ -370,7 +370,7 @@ function DocumentoA4({ p, tallerNombre, tallerCiudad, tallerCuit, tallerLogoUrl 
               Documento de servicio sin valor fiscal.
             </div>
             <div style={{ textAlign: "right", fontSize: "8px", color: "#94a3b8" }}>
-              <strong style={{ color: "#475569" }}>TallerOS</strong> · Desarrollado por <strong style={{ color: "#92400e" }}>FAM Desarrollos</strong>
+              <strong style={{ color: "#475569" }}>Tallerista</strong> · Desarrollado por <strong style={{ color: "#92400e" }}>FAM Desarrollos</strong>
             </div>
           </div>
         </footer>

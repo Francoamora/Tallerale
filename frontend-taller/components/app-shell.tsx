@@ -231,7 +231,7 @@ export function AppShell({
             <span className="truncate text-sm font-bold tracking-tight text-slate-900 dark:text-white">
               {tallerNombre || ownerNombre}
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-600 dark:text-brand-500">TallerOS</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-600 dark:text-brand-500">Tallerista</span>
           </div>
         </Link>
         <button

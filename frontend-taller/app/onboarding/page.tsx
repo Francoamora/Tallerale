@@ -17,7 +17,7 @@ const PASOS = [
   {
     emoji: "👋",
     titulo: (nombre: string) => `¡Hola, ${nombre}!`,
-    desc: "Te damos la bienvenida a TallerOS. En los próximos 30 segundos te mostramos cómo sacarle el máximo provecho desde el primer día.",
+    desc: "Te damos la bienvenida a Tallerista. En los próximos 30 segundos te mostramos cómo sacarle el máximo provecho desde el primer día.",
     cta: "Empezar →",
     href: null,
     color: "from-orange-500 to-orange-600",
@@ -129,8 +129,8 @@ export default function OnboardingPage() {
         {/* Marca */}
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500 text-[10px] font-black text-white">OS</div>
-            <span className="text-sm font-black text-white">Taller<span className="text-orange-400">OS</span></span>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500 text-[10px] font-black text-white">TA</div>
+            <span className="text-sm font-black text-white">Taller<span className="text-orange-400">ista</span></span>
           </div>
         </div>
 

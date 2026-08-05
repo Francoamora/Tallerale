@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * app/login/page.tsx — TallerOS Premium Login
+ * app/login/page.tsx — Tallerista Premium Login
  *
  * Layout split: panel izquierdo (auto SVG + branding) / panel derecho (form).
  * Lógica idéntica, diseño completamente renovado.
@@ -131,10 +131,10 @@ function HeroPanel() {
         {/* Logo */}
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/30">
-            <span className="text-sm font-black text-white">OS</span>
+            <span className="text-sm font-black text-white">TA</span>
           </div>
           <div>
-            <span className="text-xl font-black tracking-tight text-white">Taller<span className="text-orange-400">OS</span></span>
+            <span className="text-xl font-black tracking-tight text-white">Taller<span className="text-orange-400">ista</span></span>
           </div>
         </div>
 
@@ -254,10 +254,10 @@ function LoginForm() {
           {/* Logo — solo visible en mobile (el panel izquierdo lo muestra en desktop) */}
           <div className="mb-10 flex items-center gap-3 lg:hidden">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/30">
-              <span className="text-sm font-black text-white">OS</span>
+              <span className="text-sm font-black text-white">TA</span>
             </div>
             <span className="text-xl font-black tracking-tight text-white">
-              Taller<span className="text-orange-400">OS</span>
+              Taller<span className="text-orange-400">ista</span>
             </span>
           </div>
 
@@ -397,7 +397,7 @@ function LoginForm() {
 
             {/* ── Botón WhatsApp ── */}
             <a
-              href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero acceder a TallerOS")}`}
+              href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero acceder a Tallerista")}`}
               className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] py-3.5 text-sm font-semibold text-slate-300 transition hover:border-[#25D366]/40 hover:bg-[#25D366]/10 hover:text-[#25D366] active:scale-[0.99]"
             >
               <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
@@ -445,7 +445,7 @@ function LoginForm() {
 
           {/* Crédito — centrado en mobile, a la derecha en desktop */}
           <p className="mx-auto text-[11px] text-slate-600 lg:mx-0">
-            © {new Date().getFullYear()} TallerOS · Desarrollado por{" "}
+            © {new Date().getFullYear()} Tallerista · Desarrollado por{" "}
             <a
               href="https://famdesarrollos.com.ar"
               target="_blank"
@@ -468,7 +468,7 @@ export default function LoginPage() {
       <div className="flex min-h-screen items-center justify-center bg-[#070d1a]">
         <div className="flex flex-col items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-xl shadow-orange-500/30">
-            <span className="text-base font-black text-white">OS</span>
+            <span className="text-base font-black text-white">TA</span>
           </div>
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
         </div>

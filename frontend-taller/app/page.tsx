@@ -139,7 +139,7 @@ export default function Home() {
             id="hint-dashboard-v1"
             variant="inline"
             emoji="🚀"
-            title="¡Bienvenido a TallerOS!"
+            title="¡Bienvenido a Tallerista!"
             desc="Para empezar: primero cargá un cliente, después su vehículo, y luego creá tu primer presupuesto u orden de trabajo. ¡En 5 minutos ya tenés el taller funcionando!"
             action={{ label: "Ver guía de inicio", href: "/onboarding" }}
           />}
