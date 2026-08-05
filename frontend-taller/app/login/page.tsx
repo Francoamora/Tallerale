@@ -3,8 +3,9 @@
 /**
  * app/login/page.tsx — Tallerista Premium Login
  *
- * Layout split: panel izquierdo (auto SVG + branding) / panel derecho (form).
- * Lógica idéntica, diseño completamente renovado.
+ * Layout split: panel izquierdo (branding + mockup del dashboard) / panel
+ * derecho (card de acceso). Lógica idéntica a la versión anterior, diseño
+ * renovado: menos glow, mockup más creíble, login contenido en una card.
  */
 
 import { useState, useEffect, type FormEvent, type MouseEvent, Suspense } from "react";
@@ -13,146 +14,162 @@ import Link from "next/link";
 import { saveSession, getSession, clearSession, buildOlvideWALink, WA_SOPORTE } from "@/lib/trial";
 import { loginDjango } from "@/lib/api";
 
-// ─── Preview del producto — panel izquierdo ──────────────────────────────────
-// Muestra el panel real en miniatura en vez de un adorno genérico: comunica
-// qué hace el sistema apenas se abre la pantalla de acceso.
+// ─── Mockup del dashboard — panel izquierdo ──────────────────────────────────
+// Reemplaza al preview anterior (una sola tarjeta angosta) por una captura
+// creíble del panel real: sidebar, header, métricas, tabla y gráfico.
+const SIDEBAR_ITEMS = [
+  "Resumen", "Órdenes de trabajo", "Presupuestos", "Vehículos", "Clientes",
+  "Caja", "Inventario", "Reportes", "Configuración",
+];
+
+const ESTADO_STYLE: Record<string, string> = {
+  "En proceso": "bg-amber-500/10 text-amber-400 ring-amber-500/20",
+  "Listo":      "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
+  "Ingresado":  "bg-sky-500/10 text-sky-400 ring-sky-500/20",
+  "En espera":  "bg-slate-500/15 text-slate-400 ring-slate-500/20",
+};
+
 const ORDENES_DEMO = [
-  { patente: "AB 123 CD", auto: "Toyota Hilux · 2021", estado: "En proceso", total: "$ 185.000",
-    badge: "bg-amber-500/15 text-amber-400 ring-amber-500/25" },
-  { patente: "HHJ 517",   auto: "Fiat Toro · 2022",    estado: "Listo",      total: "$ 92.400",
-    badge: "bg-emerald-500/15 text-emerald-400 ring-emerald-500/25" },
-  { patente: "OP 908 LM", auto: "VW Amarok · 2020",    estado: "Ingresado",  total: "$ 240.000",
-    badge: "bg-sky-500/15 text-sky-400 ring-sky-500/25" },
+  { orden: "OT-0421", vehiculo: "Toyota Hilux 2021", cliente: "Marcos D.", estado: "En proceso", importe: "$185.000" },
+  { orden: "OT-0418", vehiculo: "Fiat Toro 2022",     cliente: "Lucía R.",  estado: "Listo",      importe: "$92.400"  },
+  { orden: "OT-0415", vehiculo: "VW Amarok 2020",     cliente: "Javier P.", estado: "Ingresado",  importe: "$240.000" },
+  { orden: "OT-0409", vehiculo: "Peugeot 208 2019",   cliente: "Ana G.",    estado: "En espera",  importe: "$58.000"  },
+];
+
+const METRICAS_DEMO = [
+  { label: "Órdenes activas",       valor: "12" },
+  { label: "Facturación del mes",   valor: "$517.000" },
+  { label: "Vehículos ingresados",  valor: "24" },
+  { label: "Turnos de hoy",         valor: "4" },
 ];
 
 const FACTURACION_DEMO = [38, 55, 46, 70, 62, 95];
 
-function AppPreview() {
+function DashboardPreview() {
   return (
-    <div className="relative w-full max-w-[400px]">
-      {/* Glow ambiental detrás de la ventana */}
-      <div className="pointer-events-none absolute -inset-10 rounded-[3rem] bg-orange-500/10 blur-3xl" />
+    <div className="w-full max-w-[600px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0b1220] shadow-xl shadow-black/30">
 
-      {/* Ventana del panel */}
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0d1424] shadow-2xl shadow-black/60">
-
-        {/* Barra de ventana */}
-        <div className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.02] px-4 py-3">
-          <span className="h-2.5 w-2.5 rounded-full bg-red-500/60" />
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-500/60" />
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/60" />
-          <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
-            Panel del taller
-          </span>
-        </div>
-
-        {/* KPIs */}
-        <div className="grid grid-cols-3 divide-x divide-white/[0.06] border-b border-white/[0.06]">
-          {[
-            { valor: "12",     label: "Órdenes" },
-            { valor: "$ 517k", label: "Del mes" },
-            { valor: "4",      label: "Turnos"  },
-          ].map((kpi) => (
-            <div key={kpi.label} className="px-4 py-3">
-              <div className="font-mono text-base font-black text-white">{kpi.valor}</div>
-              <div className="mt-0.5 text-[9px] font-bold uppercase tracking-widest text-slate-600">{kpi.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Órdenes de trabajo */}
-        <div className="divide-y divide-white/[0.05]">
-          {ORDENES_DEMO.map((o) => (
-            <div key={o.patente} className="flex items-center gap-2.5 px-4 py-3">
-              <span className="shrink-0 rounded-md bg-white/[0.07] px-2 py-1 font-mono text-[10px] font-black tracking-widest text-white">
-                {o.patente}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[11px] text-slate-400">{o.auto}</span>
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ring-1 ${o.badge}`}>
-                {o.estado}
-              </span>
-              <span className="shrink-0 font-mono text-[11px] font-bold text-slate-200">{o.total}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Facturación */}
-        <div className="border-t border-white/[0.06] px-4 py-3.5">
-          <div className="mb-2.5 flex items-center justify-between">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-600">
-              Facturación · 6 meses
-            </span>
-            <span className="font-mono text-[10px] font-black text-orange-400">+18%</span>
-          </div>
-          <div className="flex h-10 items-end gap-1.5">
-            {FACTURACION_DEMO.map((h, i) => (
-              <div
-                key={i}
-                className="flex-1 rounded-t-sm bg-gradient-to-t from-orange-600/30 to-orange-500"
-                style={{ height: `${h}%` }}
-              />
-            ))}
-          </div>
-        </div>
+      {/* Barra de ventana */}
+      <div className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
+        <span className="h-2 w-2 rounded-full bg-red-500/50" />
+        <span className="h-2 w-2 rounded-full bg-amber-500/50" />
+        <span className="h-2 w-2 rounded-full bg-emerald-500/50" />
+        <span className="ml-2 text-[9px] font-bold uppercase tracking-widest text-slate-600">
+          Panel del taller
+        </span>
       </div>
 
-      {/* Notificación flotante — arriba a la derecha para no tapar el gráfico */}
-      <div className="absolute -right-4 -top-6 flex items-center gap-2.5 rounded-xl border border-emerald-500/20 bg-[#0d1424] px-3.5 py-2.5 shadow-2xl shadow-black/60">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15">
-          <svg className="h-3.5 w-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </span>
-        <div>
-          <div className="text-[11px] font-bold text-white">Presupuesto aprobado</div>
-          <div className="text-[9px] text-slate-500">P-0042 · el cliente confirmó</div>
+      <div className="flex">
+        {/* Sidebar */}
+        <div className="hidden w-[128px] shrink-0 border-r border-white/[0.06] py-3 sm:block">
+          {SIDEBAR_ITEMS.map((item, i) => (
+            <div
+              key={item}
+              className={
+                i === 0
+                  ? "border-l-2 border-orange-500 bg-orange-500/[0.06] px-3 py-1.5 text-[9.5px] font-bold text-orange-400"
+                  : "border-l-2 border-transparent px-3 py-1.5 text-[9.5px] font-medium text-slate-500"
+              }
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+
+        {/* Área principal */}
+        <div className="min-w-0 flex-1 p-4">
+
+          {/* Header */}
+          <div className="mb-3.5">
+            <div className="text-[13px] font-black text-white">Resumen general</div>
+            <div className="text-[9.5px] text-slate-500">Vista general de tu taller</div>
+          </div>
+
+          {/* Métricas */}
+          <div className="mb-3.5 grid grid-cols-2 gap-2">
+            {METRICAS_DEMO.map((m) => (
+              <div key={m.label} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2">
+                <div className="truncate text-[8px] font-bold uppercase tracking-wide text-slate-500">{m.label}</div>
+                <div className="mt-0.5 font-mono text-[12px] font-black text-white">{m.valor}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabla de órdenes recientes */}
+          <div className="mb-3.5 overflow-hidden rounded-lg border border-white/[0.06]">
+            <div className="grid grid-cols-[46px_1fr_58px_58px_56px] gap-2 border-b border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-[7.5px] font-bold uppercase tracking-wider text-slate-500">
+              <span>Orden</span>
+              <span>Vehículo / Cliente</span>
+              <span>Estado</span>
+              <span className="text-right">Importe</span>
+              <span />
+            </div>
+            <div className="divide-y divide-white/[0.04]">
+              {ORDENES_DEMO.map((o) => (
+                <div key={o.orden} className="grid grid-cols-[46px_1fr_58px_58px_56px] items-center gap-2 px-2.5 py-1.5">
+                  <span className="truncate font-mono text-[8.5px] font-bold text-slate-400">{o.orden}</span>
+                  <span className="min-w-0 truncate text-[9px] text-slate-300">
+                    {o.vehiculo} <span className="text-slate-600">· {o.cliente}</span>
+                  </span>
+                  <span className={`justify-self-start rounded-full px-1.5 py-0.5 text-center text-[7px] font-bold ring-1 ${ESTADO_STYLE[o.estado]}`}>
+                    {o.estado}
+                  </span>
+                  <span className="text-right font-mono text-[9px] font-bold text-slate-200">{o.importe}</span>
+                  <span />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Gráfico de facturación */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Facturación · 6 meses</span>
+              <span className="font-mono text-[9px] font-bold text-orange-400">+18%</span>
+            </div>
+            <div className="flex h-9 items-end gap-1.5">
+              {FACTURACION_DEMO.map((h, i) => (
+                <div key={i} className="flex-1 rounded-t-sm bg-orange-500/70" style={{ height: `${h}%` }} />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Panel izquierdo — hero con preview del panel ────────────────────────────
-// Sin fondo propio: hereda el del contenedor para que no se marque una costura
-// vertical contra el formulario.
+// ─── Panel izquierdo — branding + mockup del dashboard ───────────────────────
 function HeroPanel() {
   return (
-    <div className="relative hidden flex-col overflow-hidden lg:flex lg:w-[55%]">
+    <div className="relative hidden flex-col overflow-hidden lg:flex lg:w-[56%]">
 
-      {/* Glow naranja superior */}
-      <div className="pointer-events-none absolute -top-60 left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-orange-500/10 blur-3xl" />
+      {/* Un único glow, sutil, sin saturar */}
+      <div className="pointer-events-none absolute -top-52 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-orange-500/[0.06] blur-3xl" />
 
-      {/* Glow frío inferior — da profundidad sin ensuciar el fondo */}
-      <div className="pointer-events-none absolute -bottom-40 -left-20 h-[420px] w-[420px] rounded-full bg-sky-500/[0.07] blur-3xl" />
+      <div className="relative flex flex-1 flex-col px-12 py-12">
 
-      {/* ── Contenido ── */}
-      <div className="relative flex flex-1 flex-col px-12 pt-12">
+        {/* Marca */}
+        <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
 
-        {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div>
-            <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
-          </div>
-        </div>
-
-        {/* Headline */}
-        <div className="mt-16">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-orange-500/10 px-3 py-1.5 ring-1 ring-orange-500/20">
+        {/* Título y bajada */}
+        <div className="mt-14">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-1.5 ring-1 ring-white/[0.08]">
             <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-            <span className="text-xs font-bold text-orange-400">Sistema multi-taller</span>
+            <span className="text-xs font-bold text-slate-300">Sistema multi-taller</span>
           </div>
           <h2 className="text-4xl font-black leading-tight tracking-tight text-white">
-            Tu taller,<br />
-            <span className="text-orange-400">en control total.</span>
+            Todo tu taller,<br />
+            <span className="text-orange-400">bajo control.</span>
           </h2>
-          <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-400">
-            Presupuestos, órdenes de trabajo, clientes, caja y agenda — todo en un solo lugar.
+          <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-400">
+            Gestioná órdenes, clientes, vehículos, presupuestos y más. Desde cualquier lugar, en tiempo real.
           </p>
         </div>
 
-        {/* Preview del panel */}
-        <div className="mt-auto flex items-center justify-center pb-16 pt-10">
-          <AppPreview />
+        {/* Mockup del dashboard */}
+        <div className="mt-auto flex items-center justify-center pt-14">
+          <DashboardPreview />
         </div>
       </div>
     </div>
@@ -227,7 +244,7 @@ function LoginForm() {
   }
 
   return (
-    // Un único fondo para toda la pantalla: sin cambio de color al 55% no hay
+    // Un único fondo para toda la pantalla: sin cambio de color al 56% no hay
     // costura vertical entre el hero y el formulario.
     <div className="flex min-h-screen w-full flex-col bg-[#070d1a]">
 
@@ -237,30 +254,28 @@ function LoginForm() {
         {/* ── Panel izquierdo ── */}
         <HeroPanel />
 
-        {/* ── Panel derecho — formulario ── */}
+        {/* ── Panel derecho — card de acceso ── */}
         <div className="relative flex flex-1 flex-col">
 
-          {/* Glows de fondo en mobile, donde el hero no se muestra */}
+          {/* Glow de fondo en mobile, donde el hero no se muestra — muy sutil */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden lg:hidden">
-            <div className="absolute -top-32 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-orange-500/10 blur-3xl" />
-            <div className="absolute -bottom-20 left-0 h-60 w-60 rounded-full bg-orange-500/5 blur-3xl" />
+            <div className="absolute -top-32 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-orange-500/[0.06] blur-3xl" />
           </div>
 
           <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-10 sm:px-10">
 
           {/* Logo — solo visible en mobile (el panel izquierdo lo muestra en desktop) */}
-          <div className="mb-10 flex items-center gap-3 lg:hidden">
-            <span className="text-xl font-black tracking-tight text-white">
-              Tallerista
-            </span>
+          <div className="mb-8 lg:hidden">
+            <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
           </div>
 
-          <div className="w-full max-w-[380px]">
+          {/* ── Card de acceso ── */}
+          <div className="w-full max-w-[380px] rounded-2xl border border-white/[0.07] bg-white/[0.02] p-7 shadow-xl shadow-black/20 sm:p-8">
 
             {/* Encabezado del form */}
-            <div className="mb-8">
+            <div className="mb-7">
               <h1 className="text-2xl font-black tracking-tight text-white">
-                Bienvenido de nuevo
+                Bienvenido
               </h1>
               <p className="mt-1 text-sm text-slate-400">
                 Ingresá para acceder al panel de tu taller.
@@ -269,7 +284,7 @@ function LoginForm() {
 
             {/* Banner sesión expirada */}
             {expiredMsg && (
-              <div className="mb-5 flex items-center gap-2.5 rounded-2xl bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-400 ring-1 ring-amber-500/20 animate-in slide-in-from-top-2">
+              <div className="mb-5 flex items-center gap-2.5 rounded-xl bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-400 ring-1 ring-amber-500/20 animate-in slide-in-from-top-2">
                 <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 Tu sesión expiró. Volvé a ingresar.
               </div>
@@ -286,7 +301,7 @@ function LoginForm() {
               {/* Email / usuario */}
               <div>
                 <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-500">
-                  Email o usuario
+                  Correo o usuario
                 </label>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
@@ -303,7 +318,7 @@ function LoginForm() {
                     suppressHydrationWarning
                     data-lpignore="true"
                     data-1p-ignore=""
-                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.06] py-3.5 pl-11 pr-4 text-sm font-medium text-white placeholder-slate-600 outline-none transition focus:border-orange-500/60 focus:bg-white/[0.09] focus:ring-2 focus:ring-orange-500/20"
+                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.05] py-3.5 pl-11 pr-4 text-sm font-medium text-white placeholder-slate-600 outline-none transition focus:border-orange-500/60 focus:bg-white/[0.08] focus:ring-2 focus:ring-orange-500/20"
                   />
                 </div>
               </div>
@@ -320,7 +335,7 @@ function LoginForm() {
                     rel="noopener noreferrer"
                     className="text-xs font-semibold text-orange-400 transition hover:text-orange-300"
                   >
-                    ¿Olvidaste tu contraseña?
+                    Recuperar contraseña
                   </a>
                 </div>
                 <div className="relative">
@@ -338,7 +353,7 @@ function LoginForm() {
                     suppressHydrationWarning
                     data-lpignore="true"
                     data-1p-ignore=""
-                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.06] py-3.5 pl-11 pr-12 text-sm font-medium text-white placeholder-slate-600 outline-none transition focus:border-orange-500/60 focus:bg-white/[0.09] focus:ring-2 focus:ring-orange-500/20"
+                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.05] py-3.5 pl-11 pr-12 text-sm font-medium text-white placeholder-slate-600 outline-none transition focus:border-orange-500/60 focus:bg-white/[0.08] focus:ring-2 focus:ring-orange-500/20"
                   />
                   <button
                     type="button"
@@ -366,7 +381,7 @@ function LoginForm() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={loading}
-                className="relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 py-3.5 text-sm font-black text-white shadow-lg shadow-orange-500/25 transition hover:from-orange-400 hover:to-orange-500 disabled:opacity-60 active:scale-[0.99]"
+                className="relative w-full overflow-hidden rounded-xl bg-orange-500 py-3.5 text-sm font-black text-white transition hover:bg-orange-400 disabled:opacity-60 active:scale-[0.99]"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -375,7 +390,7 @@ function LoginForm() {
                   </span>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
-                    Ingresar al panel
+                    Acceder al sistema
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                   </span>
                 )}
@@ -392,7 +407,7 @@ function LoginForm() {
             {/* ── Botón WhatsApp ── */}
             <a
               href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent("Hola! Quiero acceder a Tallerista")}`}
-              className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] py-3.5 text-sm font-semibold text-slate-300 transition hover:border-[#25D366]/40 hover:bg-[#25D366]/10 hover:text-[#25D366] active:scale-[0.99]"
+              className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] py-3.5 text-sm font-semibold text-slate-300 transition hover:border-white/[0.14] hover:bg-white/[0.04] active:scale-[0.99]"
             >
               <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
@@ -404,41 +419,25 @@ function LoginForm() {
             <p className="mt-6 text-center text-sm text-slate-500">
               ¿No tenés cuenta?{" "}
               <Link href="/registro" className="font-bold text-orange-400 transition hover:text-orange-300">
-                Probá 7 días gratis →
+                Probá 7 días gratis
               </Link>
             </p>
+          </div>
 
-            <div className="mt-4 text-center">
-              <Link href="/landing" className="text-xs text-slate-600 transition hover:text-slate-400">
-                ← Volver a la página de inicio
-              </Link>
-            </div>
+          <div className="mt-6 text-center">
+            <Link href="/landing" className="text-xs text-slate-600 transition hover:text-slate-400">
+              ← Volver a la página de inicio
+            </Link>
+          </div>
 
-            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Barra inferior única — cruza hero y formulario sin cortes ── */}
-      <div className="relative border-t border-white/[0.06] bg-white/[0.015]">
-        <div className="flex items-center justify-between gap-6 px-6 py-4 sm:px-10 lg:px-12">
-
-          {/* Stats — acompañan al hero, solo en desktop */}
-          <div className="hidden items-center gap-8 lg:flex">
-            {[
-              { n: "100%",   label: "Multi-tenant" },
-              { n: "7 días", label: "Prueba gratis" },
-              { n: "24/7",   label: "Acceso desde el cel" },
-            ].map((s) => (
-              <div key={s.n}>
-                <div className="text-lg font-black text-orange-400">{s.n}</div>
-                <div className="text-[11px] text-slate-500">{s.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Crédito — centrado en mobile, a la derecha en desktop */}
-          <p className="mx-auto text-[11px] text-slate-600 lg:mx-0">
+      {/* ── Barra inferior — cruza hero y formulario sin cortes ── */}
+      <div className="relative border-t border-white/[0.06]">
+        <div className="px-6 py-4 text-center sm:px-10 lg:px-12">
+          <p className="text-[11px] text-slate-600">
             © {new Date().getFullYear()} Tallerista · Desarrollado por{" "}
             <a
               href="https://famdesarrollos.com.ar"
