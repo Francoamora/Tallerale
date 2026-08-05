@@ -80,13 +80,13 @@ function DashboardPreview() {
         <div className="min-w-0 flex-1 p-4">
 
           {/* Header */}
-          <div className="mb-3.5">
+          <div className="mb-2.5">
             <div className="text-[13px] font-black text-white">Resumen general</div>
             <div className="text-[9.5px] text-slate-500">Vista general de tu taller</div>
           </div>
 
           {/* Métricas */}
-          <div className="mb-3.5 grid grid-cols-2 gap-2">
+          <div className="mb-2.5 grid grid-cols-2 gap-2">
             {METRICAS_DEMO.map((m) => (
               <div key={m.label} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2">
                 <div className="truncate text-[8px] font-bold uppercase tracking-wide text-slate-500">{m.label}</div>
@@ -96,8 +96,8 @@ function DashboardPreview() {
           </div>
 
           {/* Tabla de órdenes recientes */}
-          <div className="mb-3.5 overflow-hidden rounded-lg border border-white/[0.06]">
-            <div className="grid grid-cols-[46px_1fr_58px_58px_56px] gap-2 border-b border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-[7.5px] font-bold uppercase tracking-wider text-slate-500">
+          <div className="mb-2.5 overflow-hidden rounded-lg border border-white/[0.06]">
+            <div className="grid grid-cols-[46px_1fr_58px_58px_56px] gap-2 border-b border-white/[0.06] bg-white/[0.02] px-2.5 py-1 text-[7.5px] font-bold uppercase tracking-wider text-slate-500">
               <span>Orden</span>
               <span>Vehículo / Cliente</span>
               <span>Estado</span>
@@ -106,7 +106,7 @@ function DashboardPreview() {
             </div>
             <div className="divide-y divide-white/[0.04]">
               {ORDENES_DEMO.map((o) => (
-                <div key={o.orden} className="grid grid-cols-[46px_1fr_58px_58px_56px] items-center gap-2 px-2.5 py-1.5">
+                <div key={o.orden} className="grid grid-cols-[46px_1fr_58px_58px_56px] items-center gap-2 px-2.5 py-1">
                   <span className="truncate font-mono text-[8.5px] font-bold text-slate-400">{o.orden}</span>
                   <span className="min-w-0 truncate text-[9px] text-slate-300">
                     {o.vehiculo} <span className="text-slate-600">· {o.cliente}</span>
@@ -127,7 +127,7 @@ function DashboardPreview() {
               <span className="text-[8px] font-bold uppercase tracking-wide text-slate-500">Facturación · 6 meses</span>
               <span className="font-mono text-[9px] font-bold text-orange-400">+18%</span>
             </div>
-            <div className="flex h-9 items-end gap-1.5">
+            <div className="flex h-8 items-end gap-1.5">
               {FACTURACION_DEMO.map((h, i) => (
                 <div key={i} className="flex-1 rounded-t-sm bg-orange-500/70" style={{ height: `${h}%` }} />
               ))}
@@ -147,13 +147,13 @@ function HeroPanel() {
       {/* Un único glow, sutil, sin saturar */}
       <div className="pointer-events-none absolute -top-52 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-orange-500/[0.06] blur-3xl" />
 
-      <div className="relative flex flex-1 flex-col px-12 py-12">
+      <div className="relative flex flex-1 flex-col px-12 py-8">
 
         {/* Marca */}
         <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
 
         {/* Título y bajada */}
-        <div className="mt-16">
+        <div className="mt-8">
           <h2 className="text-4xl font-black leading-tight tracking-tight text-white">
             Todo tu taller,<br />
             <span className="text-orange-400">bajo control.</span>
@@ -164,7 +164,7 @@ function HeroPanel() {
         </div>
 
         {/* Mockup del dashboard */}
-        <div className="mt-auto flex items-center justify-center pt-14">
+        <div className="mt-auto flex items-center justify-center pt-6">
           <DashboardPreview />
         </div>
       </div>
@@ -258,7 +258,7 @@ function LoginForm() {
             <div className="absolute -top-32 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-orange-500/[0.06] blur-3xl" />
           </div>
 
-          <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-10 sm:px-10">
+          <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-8 sm:px-10">
 
           {/* Logo — solo visible en mobile (el panel izquierdo lo muestra en desktop) */}
           <div className="mb-8 lg:hidden">
@@ -432,7 +432,7 @@ function LoginForm() {
 
       {/* ── Barra inferior — cruza hero y formulario sin cortes ── */}
       <div className="relative border-t border-white/[0.06]">
-        <div className="px-6 py-4 text-center sm:px-10 lg:px-12">
+        <div className="px-6 py-3 text-center sm:px-10 lg:px-12">
           <p className="text-[11px] text-slate-600">
             © {new Date().getFullYear()} Tallerista · Desarrollado por{" "}
             <a
