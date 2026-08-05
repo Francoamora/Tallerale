@@ -152,8 +152,8 @@ function HeroPanel() {
         {/* Marca */}
         <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
 
-        {/* Título y bajada — alineado con "Bienvenido" de la card de la derecha */}
-        <div className="mt-[122px]">
+        {/* Título y bajada */}
+        <div className="mt-16">
           <h2 className="text-4xl font-black leading-tight tracking-tight text-white">
             Todo tu taller,<br />
             <span className="text-orange-400">bajo control.</span>
