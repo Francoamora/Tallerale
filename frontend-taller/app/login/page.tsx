@@ -152,20 +152,22 @@ function HeroPanel() {
         {/* Marca */}
         <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
 
-        {/* Título y bajada */}
-        <div className="mt-8">
-          <h2 className="text-4xl font-black leading-tight tracking-tight text-white">
-            Todo tu taller,<br />
-            <span className="text-orange-400">bajo control.</span>
-          </h2>
-          <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-400">
-            Gestioná órdenes, clientes, vehículos, presupuestos y más. Desde cualquier lugar, en tiempo real.
-          </p>
-        </div>
+        {/* Título, bajada y mockup — centrados como grupo en el espacio disponible,
+            en vez de texto pegado arriba e imagen pegada abajo. */}
+        <div className="flex flex-1 flex-col justify-center">
+          <div>
+            <h2 className="text-4xl font-black leading-tight tracking-tight text-white">
+              Todo tu taller,<br />
+              <span className="text-orange-400">bajo control.</span>
+            </h2>
+            <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-400">
+              Gestioná órdenes, clientes, vehículos, presupuestos y más. Desde cualquier lugar, en tiempo real.
+            </p>
+          </div>
 
-        {/* Mockup del dashboard */}
-        <div className="mt-auto flex items-center justify-center pt-6">
-          <DashboardPreview />
+          <div className="flex items-center justify-center pt-8">
+            <DashboardPreview />
+          </div>
         </div>
       </div>
     </div>
