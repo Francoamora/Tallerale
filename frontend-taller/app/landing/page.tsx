@@ -10,12 +10,48 @@ import Link from "next/link";
 import { LandingNav } from "@/components/landing-nav";
 import { CarIcon, CheckIcon, XIcon } from "@/components/icons";
 import { WA_SOPORTE } from "@/lib/trial";
+import { SEO, SITE_URL } from "@/lib/seo";
 
+// absolute: sin el sufijo "| Tallerista" del layout, que duplicaba la marca.
+// canonical "/": la landing se sirve en la raíz; /landing apunta ahí.
 export const metadata: Metadata = {
-  title: "Tallerista · El sistema operativo de tu taller mecánico",
-  description:
-    "Presupuestos digitales, órdenes de trabajo, portal del cliente y control de caja. Probalo 7 días gratis — sin tarjeta, sin contrato.",
-  keywords: "software taller mecanico, gestion taller, presupuesto digital, orden de trabajo, argentina",
+  title: { absolute: SEO.title },
+  description: SEO.description,
+  keywords: "sistema para taller mecánico, software taller mecánico, gestión de taller, órdenes de trabajo, presupuesto digital, argentina",
+  alternates: { canonical: "/" },
+  // La imagen de app/opengraph-image va explícita: al definir openGraph en este
+  // segmento, Next reemplaza el del layout y la imagen se perdía.
+  openGraph: { title: SEO.title, description: SEO.description, url: "/", images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: SEO.tagline }] },
+  twitter: { title: SEO.title, description: SEO.description, images: ["/opengraph-image"] },
+};
+
+/** Qué es Tallerista, en el formato que leen Google y las IAs. */
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${SITE_URL}/#app`,
+      name: "Tallerista",
+      url: SITE_URL,
+      description: SEO.description,
+      applicationCategory: "BusinessApplication",
+      applicationSubCategory: "Gestión de talleres mecánicos",
+      operatingSystem: "Web, Android, iOS",
+      inLanguage: "es-AR",
+      audience: { "@type": "BusinessAudience", audienceType: "Talleres mecánicos" },
+      featureList: [
+        "Presupuestos digitales con aprobación del cliente",
+        "Órdenes de trabajo por estado",
+        "Estado del taller en tiempo real",
+        "Clientes y vehículos con historial",
+        "Portal del cliente",
+        "Control de caja",
+      ],
+      publisher: { "@id": "https://famdesarrollos.com.ar/#organization" },
+    },
+    { "@type": "Organization", "@id": "https://famdesarrollos.com.ar/#organization", name: "FAM Desarrollos", url: "https://famdesarrollos.com.ar" },
+  ],
 };
 
 // ─── Íconos ───────────────────────────────────────────────────────────────────
@@ -180,7 +216,15 @@ export default function LandingPage() {
         <div className="relative mt-auto w-full px-4 pb-16 pt-24 sm:pb-20 lg:pb-24">
           <div className="max-w-2xl">
             {/* Headline */}
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c") }}
+            />
+            {/* La primera línea del h1 es lo que se busca; la segunda, la marca. */}
             <h1 className="text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-6xl 2xl:text-7xl">
+              <span className="mb-3 block text-sm font-bold uppercase leading-snug tracking-[0.14em] text-orange-300/90 sm:text-base">
+                {SEO.tagline}
+              </span>
               El sistema{" "}
               <br />
               operativo de{" "}

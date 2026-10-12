@@ -8,11 +8,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { SEO_FILES } from "@/lib/seo";
+
 const AUTH_PATHS = ["/login", "/registro", "/landing", "/invitacion", "/recuperar"];
 const ALWAYS_PUBLIC = ["/p/", "/api/", "/_next/", "/images/", "/videos/", "/favicon", "/icons/", "/file.svg", "/globe.svg", "/next.svg", "/vercel.svg", "/window.svg"];
 
 function isAlwaysPublic(pathname: string): boolean {
-  return ALWAYS_PUBLIC.some((path) => pathname.startsWith(path));
+  // robots.txt, sitemap e imagen al compartir: antes caían en el redirect al
+  // login y Google nunca podía leerlos.
+  return ALWAYS_PUBLIC.some((path) => pathname.startsWith(path)) || SEO_FILES.some((path) => pathname.startsWith(path));
 }
 
 function isAuthPath(pathname: string): boolean {
@@ -57,7 +61,10 @@ export function proxy(request: NextRequest) {
   }
 
   if (!isLoggedIn) {
-    if (pathname === "/") return sinCache(NextResponse.redirect(new URL("/landing", request.url)));
+    // Sin sesión, la raíz muestra la landing en la misma URL (rewrite, no
+    // redirect). Con el redirect temporal a /landing, Google no tenía una
+    // portada clara para indexar.
+    if (pathname === "/") return sinCache(NextResponse.rewrite(new URL("/landing", request.url)));
     if (isAuthPath(pathname)) return sinCache(NextResponse.next());
     return sinCache(NextResponse.redirect(new URL("/login", request.url)));
   }

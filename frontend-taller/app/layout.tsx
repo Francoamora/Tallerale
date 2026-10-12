@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/seo";
 import "./globals.css";
 
 const themeBootScript = `
@@ -16,6 +17,10 @@ const themeBootScript = `
 `;
 
 export const metadata: Metadata = {
+  // Base para las URLs absolutas de canonical, Open Graph y la imagen al compartir.
+  metadataBase: new URL(SITE_URL),
+  openGraph: { type: "website", siteName: "Tallerista", locale: "es_AR" },
+  twitter: { card: "summary_large_image" },
   title: {
     default: "Tallerista · Panel de Control",
     template: "%s | Tallerista",

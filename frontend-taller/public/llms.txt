@@ -1,0 +1,25 @@
+# Tallerista
+
+> Sistema de gestión para talleres mecánicos de Argentina, hecho por FAM Desarrollos.
+> Presupuestos digitales, órdenes de trabajo, estado del taller, portal del cliente y control
+> de caja, desde el celular o la PC. Prueba gratis de 7 días, sin tarjeta y sin contrato.
+
+## Funciones
+
+- Presupuestos digitales que el cliente aprueba desde el celular.
+- Órdenes de trabajo que avanzan por estado.
+- Estado del taller: qué auto está en qué etapa.
+- Directorio de clientes y vehículos, con el historial de cada uno.
+- Portal del cliente para seguir su trabajo.
+- Control de caja.
+- Funciona en el celular o la PC, sin instalar nada.
+
+## Precio
+
+Se prueba 7 días gratis. Después, la continuidad se acuerda en pesos argentinos por WhatsApp.
+
+## Enlaces
+
+- https://tallerista.famdesarrollos.com.ar — landing y registro
+- https://famdesarrollos.com.ar — FAM Desarrollos, la empresa que lo desarrolla
+- WhatsApp: +54 9 3482 254317
