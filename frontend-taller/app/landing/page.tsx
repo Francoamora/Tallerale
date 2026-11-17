@@ -50,7 +50,7 @@ const JSON_LD = {
       ],
       publisher: { "@id": "https://famdesarrollos.com.ar/#organization" },
     },
-    { "@type": "Organization", "@id": "https://famdesarrollos.com.ar/#organization", name: "FAM Desarrollos", url: "https://famdesarrollos.com.ar" },
+    { "@type": "Organization", "@id": "https://famdesarrollos.com.ar/#organization", name: "FAM Desarrollos", url: "https://famdesarrollos.com.ar", sameAs: ["https://www.instagram.com/famdesarrollos/"] },
   ],
 };
 
@@ -803,6 +803,16 @@ export default function LandingPage() {
                 className="font-bold text-slate-600 underline-offset-2 transition hover:text-orange-500 hover:underline"
               >
                 FAM Desarrollos
+              </a>
+              {/* La página del rubro en el sitio de FAM: une los dos sitios para Google. */}
+              <span aria-hidden="true">·</span>
+              <a
+                href="https://famdesarrollos.com.ar/soluciones/programa-para-taller-mecanico"
+                target="_blank"
+                rel="noopener"
+                className="underline-offset-2 transition hover:text-orange-500 hover:underline"
+              >
+                Programa para taller mecánico
               </a>
             </p>
           </div>
