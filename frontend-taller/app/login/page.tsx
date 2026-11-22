@@ -8,10 +8,11 @@
  * renovado: menos glow, mockup más creíble, login contenido en una card.
  */
 
-import { useState, useEffect, type FormEvent, type MouseEvent, Suspense } from "react";
+import { LogoTallerista } from "@/components/marca-tallerista";
+import { useState, useEffect, type FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { saveSession, getSession, clearSession, buildOlvideWALink, WA_SOPORTE } from "@/lib/trial";
+import { saveSession, getSession, clearSession, esMismoUsuario, sesionDesdeDjango, buildOlvideWALink, WA_SOPORTE } from "@/lib/trial";
 import { loginDjango } from "@/lib/api";
 
 // ─── Mockup del dashboard — panel izquierdo ──────────────────────────────────
@@ -150,7 +151,7 @@ function HeroPanel() {
       <div className="relative flex flex-1 flex-col px-12 py-8">
 
         {/* Marca */}
-        <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
+        <LogoTallerista oscuro />
 
         {/* Título, bajada y mockup — centrados como grupo en el espacio disponible,
             en vez de texto pegado arriba e imagen pegada abajo. */}
@@ -191,14 +192,21 @@ function LoginForm() {
   const [error,      setError]      = useState("");
   const [showPass,   setShowPass]   = useState(false);
   const [expiredMsg, setExpiredMsg] = useState(false);
+  const [hidratado,  setHidratado]  = useState(false);
 
   useEffect(() => {
-    const session = getSession();
-    if (session) { router.replace("/"); return; }
+    setHidratado(true);
+    // Si esta página llegó a mostrarse es porque no hay cookie de sesión:
+    // con cookie, proxy.ts redirige al panel antes de renderizarla. Así que
+    // cualquier sesión guardada en el navegador es vieja (la cookie vence a
+    // los 30 días, el localStorage no). Antes se redirigía a "/" confiando en
+    // ella, y como sin cookie "/" es la portada, el usuario quedaba rebotando
+    // entre portada y login sin poder volver a entrar nunca.
+    if (getSession()) clearSession();
     if (searchParams.get("expired") === "1") setExpiredMsg(true);
-  }, [router, searchParams]);
+  }, [searchParams]);
 
-  async function handleSubmit(e: FormEvent | MouseEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(""); setExpiredMsg(false);
     if (!identifier.trim() || !password.trim()) {
@@ -209,24 +217,9 @@ function LoginForm() {
     try {
       const auth = await loginDjango(identifier.trim().toLowerCase(), password);
       const prev = getSession();
-      const sameUser = prev && (prev.user_id === auth.user_id || prev.email.toLowerCase() === auth.email.toLowerCase());
+      const sameUser = esMismoUsuario(prev, auth);
       if (!sameUser) clearSession();
-      saveSession({
-        email:           auth.email,
-        owner_nombre:    auth.nombre,
-        taller_nombre:   auth.taller_nombre,
-        taller_ciudad:   auth.taller_ciudad ?? (sameUser ? (prev?.taller_ciudad ?? "") : ""),
-        taller_tel:      auth.taller_tel    ?? (sameUser ? (prev?.taller_tel    ?? "") : ""),
-        taller_cuit:     auth.taller_cuit   ?? (sameUser ? (prev?.taller_cuit   ?? "") : ""),
-        taller_logo_url: auth.taller_logo_url ?? (sameUser ? (prev?.taller_logo_url ?? null) : null),
-        trial_start:     auth.trial_start   ?? (sameUser ? prev?.trial_start : undefined) ?? new Date().toISOString(),
-        plan_activo_hasta: auth.plan_activo_hasta ?? (sameUser ? prev?.plan_activo_hasta : null) ?? null,
-        onboarding_done: sameUser ? (prev?.onboarding_done ?? false) : false,
-        taller_id:       auth.taller_id,
-        user_id:         auth.user_id,
-        rol:             auth.rol ?? "ADMIN",
-        es_superusuario: auth.es_superusuario ?? false,
-      });
+      saveSession(sesionDesdeDjango(auth, sameUser ? prev : null));
       router.push("/");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al iniciar sesión.";
@@ -265,7 +258,7 @@ function LoginForm() {
 
           {/* Logo — solo visible en mobile (el panel izquierdo lo muestra en desktop) */}
           <div className="mb-8 lg:hidden">
-            <span className="text-xl font-black tracking-tight text-white">Tallerista</span>
+            <LogoTallerista oscuro />
           </div>
 
           {/* ── Card de acceso ── */}
@@ -322,22 +315,15 @@ function LoginForm() {
                 </div>
               </div>
 
-              {/* Contraseña */}
-              <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <label className="block text-xs font-bold uppercase tracking-widest text-slate-500">
-                    Contraseña
-                  </label>
-                  <a
-                    href={buildOlvideWALink(identifier)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-semibold text-orange-400 transition hover:text-orange-300"
-                  >
-                    Recuperar contraseña
-                  </a>
-                </div>
-                <div className="relative">
+              {/* Contraseña — el link de recuperar va después del campo en el HTML
+                  (la grilla lo sigue mostrando arriba a la derecha): antes estaba
+                  primero, así que Tab desde el email caía en el link, la contraseña
+                  no se escribía en ningún lado y Enter abría WhatsApp. */}
+              <div className="grid grid-cols-[1fr_auto] items-center gap-y-1.5">
+                <label className="col-start-1 row-start-1 block text-xs font-bold uppercase tracking-widest text-slate-500">
+                  Contraseña
+                </label>
+                <div className="relative col-span-2 row-start-2">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
                     <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -357,11 +343,21 @@ function LoginForm() {
                   <button
                     type="button"
                     onClick={() => setShowPass(!showPass)}
+                    aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    aria-pressed={showPass}
                     className="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-500 transition hover:text-slate-200"
                   >
                     <EyeIcon open={showPass} />
                   </button>
                 </div>
+                <a
+                  href={buildOlvideWALink(identifier)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="col-start-2 row-start-1 text-xs font-semibold text-orange-400 transition hover:text-orange-300"
+                >
+                  Recuperar contraseña
+                </a>
               </div>
 
               {/* Error */}
@@ -372,14 +368,15 @@ function LoginForm() {
                 </div>
               )}
 
-              {/* Submit — type="button" + onClick en vez de depender del submit nativo
-                  del form: si un gestor de contraseñas retrasa la hidratación, un toque
-                  que llegue antes no dispara una recarga de página (no hace nada, en vez
-                  de perder lo escrito), y funciona apenas React se engancha. */}
+              {/* Submit real del form: sin él, Enter en la contraseña, la tecla "Ir"
+                  del teclado del celular y el autoenvío de los gestores de contraseñas
+                  no hacían nada. Queda deshabilitado hasta que React se engancha: con el
+                  botón por defecto deshabilitado el navegador no envía el form, así que
+                  un toque temprano (hidratación demorada por un gestor de contraseñas)
+                  sigue sin recargar la página ni borrar lo escrito. */}
               <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={loading}
+                type="submit"
+                disabled={loading || !hidratado}
                 className="relative w-full overflow-hidden rounded-xl bg-orange-500 py-3.5 text-sm font-black text-white transition hover:bg-orange-400 disabled:opacity-60 active:scale-[0.99]"
               >
                 {loading ? (

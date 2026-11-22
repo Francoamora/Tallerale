@@ -1,13 +1,17 @@
 @import "tailwindcss";
 
-/* ¡ESTA ES LA MAGIA! Le obliga a Tailwind v4 a usar la clase .dark manual */
+/* Modo oscuro por clase (.dark en <html>), no por la preferencia del sistema:
+   el usuario lo elige con el selector de tema. */
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  /* Stack local para evitar fetch de Google Fonts durante el build */
-  --font-sans: "Aptos", "SF Pro Display", "Segoe UI Variable Text", "Segoe UI", "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Archivo va empaquetada (@fontsource-variable/archivo): se ve igual en
+     Windows, Mac y celular y el build no depende de Google Fonts. */
+  --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
   
-  /* Tu color naranja corporativo */
+  /* Naranja de marca */
   --color-brand-50: #fff7ed;
   --color-brand-100: #ffedd5;
   --color-brand-200: #fed7aa;
@@ -59,4 +63,36 @@ input.money-input {
   appearance: textfield;
   -moz-appearance: textfield;
   font-variant-numeric: tabular-nums;
+}
+
+/* Indicadores de carga diferidos: si los datos llegan antes de 200 ms (lo
+   normal), el esqueleto gris nunca llega a verse. Antes aparecía 40–90 ms y
+   se reemplazaba enseguida, y cada cambio de pantalla se sentía como un
+   parpadeo. El espacio se reserva igual, así que no mueve el layout. */
+@keyframes tallerista-carga-diferida {
+  from { visibility: hidden; }
+  to { visibility: visible; }
+}
+main .animate-pulse {
+  animation: tallerista-carga-diferida 0s linear 200ms both, pulse 2s cubic-bezier(0.4, 0, 0.6, 1) 200ms infinite;
+}
+main .animate-spin {
+  animation: tallerista-carga-diferida 0s linear 200ms both, spin 1s linear 200ms infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  main .animate-pulse, main .animate-spin { animation: tallerista-carga-diferida 0s linear 200ms both; }
+}
+
+/* Entrada suave del detalle al cambiar de pliegue en el inicio. */
+@keyframes aparecer {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Versión "display" de Archivo: angosta y pesada, para títulos y números
+   grandes. Misma familia que el texto, sólo cambia el ancho. */
+@layer utilities {
+  .font-display {
+    font-stretch: 72%;
+  }
 }

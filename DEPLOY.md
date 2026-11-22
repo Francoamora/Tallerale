@@ -47,7 +47,14 @@ DJANGO_CSRF_TRUSTED_ORIGINS=https://tu-backend.up.railway.app,https://tu-fronten
 DJANGO_CORS_ALLOWED_ORIGINS=https://tu-frontend.vercel.app
 DJANGO_MEDIA_ROOT=/app/media
 DATABASE_URL=postgresql://usuario:password@host:5432/database
+DJANGO_FRONTEND_URL=https://tu-frontend.vercel.app
 ```
+
+`DJANGO_FRONTEND_URL` redirige la raíz del backend a la aplicación real. El
+backend ya no publica interfaz propia: la app monolítica de Django (login por
+sesión, vistas y templates) se dio de baja porque duplicaba el frontend, no
+aplicaba el corte por trial vencido y su formulario de login no tenía límite de
+intentos. Sin esta variable la raíz simplemente no existe.
 
 Crear un volumen persistente en Railway y montarlo exactamente en
 `/app/media`. Los logos de cada taller se guardan allí; sin volumen se perderían
@@ -66,6 +73,24 @@ Activar `SECURE_HSTS_PRELOAD` no debe formar parte del primer despliegue. Primer
 hay que confirmar que todos los subdominios funcionen exclusivamente por HTTPS;
 la inclusión en la lista preload es una decisión de infraestructura difícil de
 revertir.
+
+## Escalar a varios workers
+
+El servicio arranca con un único worker de `gunicorn`, así que una operación
+lenta bloquea a todos los talleres. Para escalar alcanza con definir
+`WEB_CONCURRENCY`, que `gunicorn` lee solo, **pero antes hay que configurar
+Redis**:
+
+```env
+REDIS_URL=redis://default:password@host:6379
+WEB_CONCURRENCY=3
+```
+
+El límite de intentos de login se guarda en el cache. Sin `REDIS_URL` Django usa
+memoria local, que es privada de cada proceso: con tres workers cada uno lleva su
+propia cuenta y en la práctica se permiten tres veces más intentos, sin que nada
+falle de forma visible. `python manage.py check` avisa si se configuran varios
+workers sin Redis.
 
 ## Flujo sugerido
 

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Max, Q, Sum
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, TruncMonth
 from django.utils import timezone
 
 from .models import Cliente, MovimientoCuenta, Presupuesto, Trabajo, TrabajoItem, Turno, Vehiculo
@@ -84,9 +84,31 @@ def resolver_vehiculo_express_para_usuario(
             f"La patente {patente} ya está registrada en tu taller y no se pudo asociar de forma segura."
         )
 
+def total_con_descuento(subtotal: Decimal, descuento: Decimal) -> Decimal:
+    """Total de una orden o presupuesto, validando el descuento.
+
+    Antes nadie comparaba el descuento contra el subtotal: una orden de
+    $10.000 con $50.000 de descuento quedaba guardada con total -$40.000, que
+    después entraba al ticket promedio y a lo que se le cobra al cliente.
+    """
+    if descuento < 0:
+        raise ValidationError("El descuento no puede ser un valor negativo.")
+    if descuento > subtotal:
+        raise ValidationError(
+            f"El descuento (${descuento:,.2f}) no puede superar el subtotal (${subtotal:,.2f}).".replace(",", "X").replace(".", ",").replace("X", ".")
+        )
+    return subtotal - descuento
+
+
 # ==========================================
 # SERVICIOS OPERATIVOS (TRANSACCIONALES)
 # ==========================================
+
+def _resumen_desde_items(items_data: List[Dict[str, Any]]) -> str:
+    descripciones = [str(i.get("descripcion", "")).strip() for i in items_data]
+    resumen = " · ".join(d for d in descripciones if d)
+    return (resumen[:497] + "…") if len(resumen) > 500 else (resumen or "Orden de trabajo")
+
 
 @transaction.atomic
 def crear_trabajo_completo(
@@ -179,7 +201,10 @@ def crear_trabajo_completo(
         kilometraje=kilometraje,
         estado=estado,
         fecha_ingreso=timezone.now(),
-        resumen_trabajos=(resumen_trabajos or "").strip() or "Trabajo registrado desde plataforma Express.",
+        # Sin diagnóstico escrito se resume con los ítems: el texto lo ve el
+        # cliente en el comprobante y en su portal ("Trabajo registrado desde
+        # plataforma Express." no le decía nada).
+        resumen_trabajos=(resumen_trabajos or "").strip() or _resumen_desde_items(items_data),
         observaciones_cliente=(observaciones_cliente or "").strip(),
         observaciones_internas=(observaciones_internas or "").strip(),
         estado_general=estado_general,
@@ -230,7 +255,7 @@ def crear_trabajo_completo(
     # 6. CONSOLIDACIÓN FINAL
     trabajo.total_mano_obra = total_mano_obra
     trabajo.total_repuestos = total_repuestos
-    trabajo.total = (total_mano_obra + total_repuestos) - descuento_decimal
+    trabajo.total = total_con_descuento(total_mano_obra + total_repuestos, descuento_decimal)
     trabajo.save(update_fields=["total_mano_obra", "total_repuestos", "total", "descuento"])
 
     # Convertir una cotización en trabajo implica aprobación interna del taller.
@@ -245,9 +270,10 @@ def crear_trabajo_completo(
 # ==========================================
 
 def obtener_dashboard_snapshot(user=None, months: int = 6) -> dict:
-    """
-    Motor analítico reescrito para esquivar Bugs de Timezone en SQLite.
-    Agrupa los ingresos en memoria usando Python estricto.
+    """Métricas del panel principal.
+
+    Los ingresos se agrupan por mes en la base, pasándole la zona horaria de
+    forma explícita para que el corte de mes sea el del taller y no el de UTC.
     """
     ahora = timezone.now()
     mes_actual = _month_floor(ahora)
@@ -284,14 +310,25 @@ def obtener_dashboard_snapshot(user=None, months: int = 6) -> dict:
         ingresos_dict[month_key] = data_mes
         ingresos_mensuales.append(data_mes)
 
-    # Iteramos la base de datos y sumamos usando el Local Time seguro
-    pagos_grafico = pagos_base.filter(fecha__gte=ventana_inicio)
-    for pago in pagos_grafico:
-        local_dt = timezone.localtime(pago.fecha)
-        key = f"{local_dt.year}-{local_dt.month:02d}-01"
+    # La agrupación la hace la base: traer un registro por pago hacía que el
+    # dashboard cargara en memoria todos los cobros de seis meses, y ese número
+    # sólo crece. TruncMonth recibe la zona horaria explícita para que un cobro
+    # de las 23:00 del último día del mes siga contando en el mes en que se
+    # cobró, que era el motivo por el que esto se resolvía en Python.
+    agrupados = (
+        pagos_base.filter(fecha__gte=ventana_inicio)
+        .annotate(mes=TruncMonth("fecha", tzinfo=timezone.get_current_timezone()))
+        .values("mes")
+        .annotate(total=Sum("monto"), cantidad=Count("id"))
+    )
+    for fila in agrupados:
+        mes = fila["mes"]
+        if timezone.is_aware(mes):
+            mes = timezone.localtime(mes)
+        key = f"{mes.year}-{mes.month:02d}-01"
         if key in ingresos_dict:
-            ingresos_dict[key]["total"] += pago.monto
-            ingresos_dict[key]["trabajos"] += 1
+            ingresos_dict[key]["total"] += fila["total"]
+            ingresos_dict[key]["trabajos"] += fila["cantidad"]
 
     # Convertimos a float para que el Frontend (React) no tire error
     for item in ingresos_mensuales:
@@ -381,15 +418,17 @@ def obtener_dashboard_snapshot(user=None, months: int = 6) -> dict:
         for t in turnos_qs.select_related("cliente", "vehiculo").order_by("fecha_hora")[:5]
     ]
 
-    # Señal comercial: clientes sin una orden cerrada en los últimos seis
-    # meses. No implica deuda ni problema técnico; sirve para recontactarlos.
+    # Señal comercial: clientes que no vinieron al taller en seis meses, para
+    # recontactarlos. Cuenta cualquier orden no anulada: antes sólo contaban las
+    # cerradas, y un cliente con el auto adentro del taller aparecía como
+    # "para recuperar" mientras esperaba que se lo arreglaran.
     limite_inactividad = ahora - timedelta(days=180)
     clientes_inactivos_qs = (
         clientes_qs
         .annotate(
             ultimo_trabajo=Max(
                 "trabajos__fecha_ingreso",
-                filter=Q(trabajos__activo=True, trabajos__estado__in=["FINALIZADO", "ENTREGADO"]),
+                filter=Q(trabajos__activo=True) & ~Q(trabajos__estado=Trabajo.ESTADO_ANULADO),
             )
         )
         .filter(Q(ultimo_trabajo__lt=limite_inactividad) | Q(ultimo_trabajo__isnull=True))
@@ -420,32 +459,3 @@ def obtener_dashboard_snapshot(user=None, months: int = 6) -> dict:
         "clientes_sin_actividad_total": clientes_inactivos_qs.count(),
         "clientes_sin_actividad": clientes_sin_actividad,
     }
-
-
-# ==========================================
-# SERVICIOS FINANCIEROS (LEGACY COMPATIBILITY)
-# ==========================================
-
-@transaction.atomic
-def registrar_pago_cliente(cliente_id: int, monto: float, metodo_pago: str, descripcion: str = "") -> MovimientoCuenta:
-    monto_decimal = Decimal(str(monto))
-    if monto_decimal <= 0:
-        raise ValidationError("El monto del pago debe ser mayor a cero.")
-
-    cliente = Cliente.objects.select_for_update().filter(pk=cliente_id).first()
-    if not cliente:
-        raise ValidationError("El cliente especificado no existe.")
-
-    pago = MovimientoCuenta.objects.create(
-        owner=cliente.owner,
-        cliente=cliente,
-        tipo=MovimientoCuenta.TIPO_PAGO,
-        monto=monto_decimal,
-        metodo_pago=metodo_pago,
-        descripcion=descripcion.strip()
-    )
-
-    cliente.saldo_balance -= monto_decimal
-    cliente.save(update_fields=['saldo_balance'])
-
-    return pago

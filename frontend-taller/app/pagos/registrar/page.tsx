@@ -31,6 +31,23 @@ function CheckIcon() {
   );
 }
 
+/** En palabras, qué cubre la plata que entra hoy. */
+function explicarPago({ modo, saldoPrevio, nuevoCargo, pago }: { modo: ModoOperacion; saldoPrevio: number; nuevoCargo: number; pago: number }) {
+  const deuda = Math.max(saldoPrevio, 0);
+  if (modo === "COBRO") {
+    if (deuda <= 0 || pago <= 0) return "";
+    if (pago >= deuda) return "Cancela toda la deuda: la cuenta queda al día.";
+    return `Paga ${formatCurrency(pago)} de los ${formatCurrency(deuda)} que debe. Quedan ${formatCurrency(deuda - pago)} por cobrar.`;
+  }
+  if (nuevoCargo <= 0) return "";
+  if (pago <= 0) return `No paga nada hoy: los ${formatCurrency(nuevoCargo)} de esta venta se suman a la cuenta.`;
+  if (pago < nuevoCargo) return `Paga ${formatCurrency(pago)} de esta venta. Los ${formatCurrency(nuevoCargo - pago)} restantes se suman a la cuenta.`;
+  if (pago === nuevoCargo) return deuda > 0 ? `Paga esta venta completa. Lo que debía de antes (${formatCurrency(deuda)}) sigue igual.` : "Paga esta venta completa.";
+  const aDeuda = Math.min(pago - nuevoCargo, deuda);
+  if (aDeuda >= deuda) return `Paga esta venta y también todo lo que debía (${formatCurrency(deuda)}). La cuenta queda al día.`;
+  return `Paga esta venta completa y ${formatCurrency(aDeuda)} de lo que debía. De lo anterior le quedan ${formatCurrency(deuda - aDeuda)}.`;
+}
+
 function formatAmountInput(value: number) {
   return Number.isFinite(value) && value > 0 ? String(value) : "";
 }
@@ -129,6 +146,11 @@ function RegistroPagoForm() {
       ? pagoActual > 0 && saldoPrevio > 0 && pagoActual <= saldoPrevio
       : nuevoCargo > 0 && pagoActual >= 0 && pagoActual <= saldoPrevio + nuevoCargo;
   const puedeConfirmar = identidadValida && importesValidos && !isSaving;
+  // Lo máximo que se puede recibir: lo que debía más lo que se le vende hoy.
+  const maximoPago = Math.max(saldoPrevio + nuevoCargo, 0);
+  const pagoExcedido = pagoActual > maximoPago && (modo === "VENTA_CUENTA" ? nuevoCargo > 0 : true);
+  const hayCliente = tipoCliente === "EXPRESS" || Boolean(clienteSeleccionado);
+  const reparto = explicarPago({ modo, saldoPrevio, nuevoCargo, pago: pagoActual });
 
   function cambiarModo(next: ModoOperacion) {
     setModo(next);
@@ -148,10 +170,6 @@ function RegistroPagoForm() {
     setBusqueda("");
     setMontoPagado("");
     setDropdownOpen(true);
-  }
-
-  function usarImporte(percentage: number) {
-    setMontoPagado(formatAmountInput(Math.round(saldoPrevio * percentage * 100) / 100));
   }
 
   async function procesarTransaccion(event: React.FormEvent) {
@@ -211,7 +229,7 @@ function RegistroPagoForm() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">
             <CheckIcon />
           </div>
-          <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">Movimiento registrado</p>
+          <p className="mt-5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">Movimiento registrado</p>
           <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
             La cuenta de {resultado.clienteNombre} quedó actualizada
           </h2>
@@ -219,8 +237,8 @@ function RegistroPagoForm() {
         </div>
         <div className="grid gap-3 p-6 sm:grid-cols-2">
           <div className="rounded-2xl bg-slate-100 p-4 dark:bg-slate-900">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nuevo saldo</p>
-            <p className={cn("mt-1 font-mono text-2xl font-black", resultado.nuevoSaldo > 0 ? "text-rose-500" : "text-emerald-500")}>
+            <p className="text-xs text-slate-500">{resultado.nuevoSaldo > 0 ? "Queda debiendo" : resultado.nuevoSaldo < 0 ? "Le queda a favor" : "Cuenta"}</p>
+            <p className={cn("mt-1 font-display text-3xl font-extrabold tabular-nums", resultado.nuevoSaldo > 0 ? "text-rose-600" : "text-emerald-600")}>
               {formatCurrency(Math.abs(resultado.nuevoSaldo))}
             </p>
             <p className="text-xs font-semibold text-slate-500">
@@ -233,7 +251,7 @@ function RegistroPagoForm() {
                 Ver cuenta del cliente
               </button>
             )}
-            <button type="button" onClick={() => router.push("/pagos")} className="flex-1 rounded-xl border border-slate-300 px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700">
+            <button type="button" onClick={() => router.push("/caja")} className="flex-1 rounded-xl border border-slate-300 px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700">
               Volver a Caja
             </button>
           </div>
@@ -380,12 +398,24 @@ function RegistroPagoForm() {
                               <span className="block text-xs text-slate-500">{clienteSeleccionado.telefono || clienteSeleccionado.dni || "Sin datos de contacto"}</span>
                             </span>
                           </div>
-                          <div className="sm:text-right">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Saldo actual</p>
-                            <p className={cn("font-mono text-lg font-black", saldoPrevio > 0 ? "text-rose-500" : saldoPrevio < 0 ? "text-sky-500" : "text-emerald-500")}>
-                              {formatCurrency(Math.abs(saldoPrevio))}
-                            </p>
-                            <p className="text-[11px] font-semibold text-slate-500">{saldoPrevio > 0 ? "Debe" : saldoPrevio < 0 ? "A favor" : "Al día"}</p>
+                          <div className="flex items-center gap-4 sm:text-right">
+                            <div>
+                              <p className="text-xs text-slate-500">{saldoPrevio > 0 ? "Debe hoy" : saldoPrevio < 0 ? "A favor hoy" : "Hoy"}</p>
+                              <p className={cn("font-display text-xl font-extrabold tabular-nums", saldoPrevio > 0 ? "text-rose-600" : saldoPrevio < 0 ? "text-sky-600" : "text-emerald-600")}>
+                                {saldoPrevio === 0 ? "Al día" : formatCurrency(Math.abs(saldoPrevio))}
+                              </p>
+                            </div>
+                            {(pagoActual > 0 || nuevoCargo > 0) && !pagoExcedido && (
+                              <>
+                                <span className="text-slate-300 dark:text-slate-600" aria-hidden="true">→</span>
+                                <div>
+                                  <p className="text-xs text-slate-500">Después de esto</p>
+                                  <p className={cn("font-display text-xl font-extrabold tabular-nums", saldoFinal > 0 ? "text-rose-600" : saldoFinal < 0 ? "text-sky-600" : "text-emerald-600")}>
+                                    {saldoFinal === 0 ? "Al día ✓" : formatCurrency(Math.abs(saldoFinal))}
+                                  </p>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}
@@ -417,26 +447,58 @@ function RegistroPagoForm() {
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
                   {modo === "VENTA_CUENTA" && (
                     <label>
-                      <span className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-300">Total de la venta</span>
+                      <span className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-300">¿Cuánto es la venta?</span>
                       <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono text-sm font-black text-slate-400">$</span>
-                        <input type="number" min="0.01" step="0.01" value={montoTotalVenta} onChange={(event) => setMontoTotalVenta(event.target.value)} placeholder="0" className={cn(inputClass, "pl-8 font-mono text-base font-black")} />
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">$</span>
+                        <input type="number" inputMode="decimal" min="0.01" step="any" value={montoTotalVenta} onChange={(event) => setMontoTotalVenta(event.target.value)} placeholder="0" className={cn(inputClass, "pl-8 text-base font-semibold tabular-nums")} />
                       </div>
                     </label>
                   )}
 
                   <label>
-                    <span className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-300">{modo === "COBRO" ? "Importe recibido" : "Pago inicial recibido"}</span>
+                    <span className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-300">{modo === "COBRO" ? "¿Cuánto paga?" : "¿Cuánto paga hoy?"}</span>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono text-sm font-black text-emerald-500">$</span>
-                      <input type="number" min="0" step="0.01" value={montoPagado} onChange={(event) => setMontoPagado(event.target.value)} placeholder="0" className={cn(inputClass, "border-emerald-500/40 pl-8 font-mono text-base font-black text-emerald-600 dark:text-emerald-400")} />
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-emerald-600">$</span>
+                      <input type="number" inputMode="decimal" min="0" step="any" value={montoPagado} onChange={(event) => setMontoPagado(event.target.value)} placeholder="0" aria-invalid={pagoExcedido} className={cn(inputClass, "pl-8 text-base font-semibold tabular-nums text-emerald-700 dark:text-emerald-400", pagoExcedido ? "border-rose-400 focus:border-rose-500" : "border-emerald-500/40")} />
                     </div>
-                    {modo === "COBRO" && saldoPrevio > 0 && (
-                      <span className="mt-2 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => usarImporte(1)} className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400">Saldo completo</button>
-                        <button type="button" onClick={() => usarImporte(0.5)} className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600">50%</button>
+                    {hayCliente && (
+                      <span className="mt-2 flex flex-wrap gap-1.5">
+                        {(modo === "COBRO"
+                          ? saldoPrevio > 0
+                            ? [
+                                { texto: `Todo (${formatCurrency(saldoPrevio)})`, monto: saldoPrevio },
+                                { texto: "La mitad", monto: Math.round(saldoPrevio / 2) },
+                              ]
+                            : []
+                          : nuevoCargo > 0
+                            ? [
+                                ...(saldoPrevio > 0 ? [{ texto: `Todo lo que debe (${formatCurrency(saldoPrevio + nuevoCargo)})`, monto: saldoPrevio + nuevoCargo }] : []),
+                                { texto: `Solo esta venta (${formatCurrency(nuevoCargo)})`, monto: nuevoCargo },
+                                { texto: "No paga hoy", monto: 0 },
+                              ]
+                            : []
+                        ).map((atajo) => {
+                          const activo = pagoActual === atajo.monto && (atajo.monto > 0 || montoPagado !== "");
+                          return (
+                            <button
+                              key={atajo.texto}
+                              type="button"
+                              onClick={() => setMontoPagado(atajo.monto > 0 ? formatAmountInput(atajo.monto) : "0")}
+                              className={cn("rounded-full px-3 py-1 text-xs font-semibold transition", activo ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600")}
+                            >
+                              {atajo.texto}
+                            </button>
+                          );
+                        })}
                       </span>
                     )}
+                    {pagoExcedido ? (
+                      <span className="mt-2 block text-xs font-medium text-rose-600 dark:text-rose-400">
+                        Es más de lo que debe en total. Lo máximo que puede pagar hoy es {formatCurrency(maximoPago)}.
+                      </span>
+                    ) : reparto ? (
+                      <span className="mt-2 block text-xs leading-relaxed text-slate-600 dark:text-slate-300">{reparto}</span>
+                    ) : null}
                   </label>
 
                   <label>
@@ -474,29 +536,42 @@ function RegistroPagoForm() {
                   </div>
                 </div>
 
-                <div className="mt-5 space-y-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+                <div className="mt-5 space-y-2.5 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-slate-500">Saldo anterior</span>
-                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{formatCurrency(saldoPrevio)}</span>
+                    <span className="text-slate-600 dark:text-slate-400">{saldoPrevio < 0 ? "Tenía a favor" : "Debía antes"}</span>
+                    <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{formatCurrency(Math.abs(saldoPrevio))}</span>
                   </div>
                   {modo === "VENTA_CUENTA" && (
                     <div className="flex items-center justify-between gap-3 text-sm">
-                      <span className="text-slate-500">Nueva venta</span>
-                      <span className="font-mono font-bold text-rose-500">+ {formatCurrency(nuevoCargo)}</span>
+                      <span className="text-slate-600 dark:text-slate-400">Esta venta</span>
+                      <span className="font-semibold tabular-nums text-rose-600">+ {formatCurrency(nuevoCargo)}</span>
+                    </div>
+                  )}
+                  {modo === "VENTA_CUENTA" && (
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-slate-600 dark:text-slate-400">Total a pagar</span>
+                      <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{formatCurrency(maximoPago)}</span>
                     </div>
                   )}
                   <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3 text-sm dark:border-slate-700">
-                    <span className="text-slate-500">Pago recibido</span>
-                    <span className="font-mono font-bold text-emerald-500">− {formatCurrency(pagoActual)}</span>
+                    <span className="text-slate-600 dark:text-slate-400">Paga hoy</span>
+                    <span className="font-semibold tabular-nums text-emerald-600">− {formatCurrency(pagoActual)}</span>
                   </div>
                   <div className="pt-1">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Saldo resultante</p>
-                    <p className={cn("mt-1 font-mono text-3xl font-black", saldoFinal > 0 ? "text-rose-500" : saldoFinal < 0 ? "text-sky-500" : "text-emerald-500")}>
-                      {formatCurrency(Math.abs(saldoFinal))}
+                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                      {pagoExcedido ? "Revisá el pago" : saldoFinal > 0 ? "Queda debiendo" : saldoFinal < 0 ? "Le queda a favor" : "Queda al día"}
                     </p>
-                    <p className={cn("mt-1 text-xs font-bold", saldoFinal > 0 ? "text-rose-500" : saldoFinal < 0 ? "text-sky-500" : "text-emerald-500")}>
-                      {saldoFinal > 0 ? "Quedará pendiente de cobro" : saldoFinal < 0 ? "Quedará a favor del cliente" : "La cuenta quedará al día"}
+                    <p className={cn("mt-0.5 font-display text-4xl font-extrabold leading-none tabular-nums", pagoExcedido ? "text-slate-400" : saldoFinal > 0 ? "text-rose-600" : saldoFinal < 0 ? "text-sky-600" : "text-emerald-600")}>
+                      {saldoFinal === 0 && !pagoExcedido ? "$ 0 ✓" : formatCurrency(Math.abs(saldoFinal))}
                     </p>
+                    {maximoPago > 0 && !pagoExcedido && (
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-rose-100 dark:bg-rose-950/40" aria-hidden="true">
+                        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.min(100, (pagoActual / maximoPago) * 100)}%` }} />
+                      </div>
+                    )}
+                    {maximoPago > 0 && !pagoExcedido && (
+                      <p className="mt-1.5 text-xs text-slate-500">Paga el {Math.round(Math.min(100, (pagoActual / maximoPago) * 100))}% de lo que debe en total</p>
+                    )}
                   </div>
                 </div>
 
@@ -515,7 +590,7 @@ function RegistroPagoForm() {
                   {isSaving ? "Registrando…" : modo === "COBRO" ? "Confirmar cobro" : "Confirmar venta"}
                   {!isSaving && <span aria-hidden="true">→</span>}
                 </button>
-                <button type="button" onClick={() => router.push("/pagos")} className="mt-2 w-full rounded-xl px-5 py-2.5 text-xs font-bold text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white">
+                <button type="button" onClick={() => router.push("/caja")} className="mt-2 w-full rounded-xl px-5 py-2.5 text-xs font-bold text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white">
                   Cancelar y volver a Caja
                 </button>
                 <p className="mt-3 text-center text-[11px] leading-4 text-slate-400">Al confirmar, el movimiento se guardará en el historial del cliente y de Caja.</p>
@@ -531,7 +606,7 @@ function RegistroPagoForm() {
 export default function PagosPage() {
   return (
     <AppShell
-      currentPath="/pagos"
+      currentPath="/caja"
       badge="Caja"
       title="Registrar movimiento"
       description="Cobrá un saldo o registrá una venta a cuenta con su pago inicial."

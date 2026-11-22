@@ -9,6 +9,7 @@
  * Paso 3: ¡Listo! — inicia prueba de 7 días → redirect onboarding
  */
 
+import { LogoTallerista } from "@/components/marca-tallerista";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -180,9 +181,7 @@ export default function RegistroPage() {
         {/* ── Marca ── */}
         <div className="mb-8 text-center">
           <Link href="/landing" className="inline-flex items-center gap-2.5 transition hover:opacity-80">
-            <span className="text-lg font-black text-white">
-              Tallerista
-            </span>
+            <LogoTallerista oscuro />
           </Link>
           <p className="mt-2 text-sm text-slate-500">Creá tu cuenta gratis · 7 días de prueba</p>
         </div>
@@ -332,7 +331,7 @@ export default function RegistroPage() {
                         <div className="h-4 w-4 animate-spin rounded-full border-2 border-orange-300 border-t-white" />
                         Creando…
                       </span>
-                    ) : "Empezar prueba 🚀"}
+                    ) : "Empezar prueba"}
                   </button>
                 </div>
               </form>
@@ -342,8 +341,9 @@ export default function RegistroPage() {
           {/* ═══ PASO 3: ¡Listo! ════════════════════════════════════════════ */}
           {step === 3 && (
             <div className="text-center">
-              {/* Animación confetti simple */}
-              <div className="mb-6 text-6xl">🎉</div>
+              <div className="mx-auto mb-6 grid h-16 w-16 place-items-center rounded-full bg-emerald-500/15 text-emerald-400">
+                <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              </div>
               <h1 className="text-xl font-black text-white">¡Bienvenido a Tallerista!</h1>
               <p className="mt-2 text-sm font-semibold text-orange-400">
                 {tallerNombre} ya está listo

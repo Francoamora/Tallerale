@@ -5,6 +5,7 @@
  * Navbar de la landing — client component para manejar el menú mobile.
  */
 
+import { MarcaTallerista } from "@/components/marca-tallerista";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { WA_SOPORTE } from "@/lib/trial";
@@ -37,6 +38,7 @@ export function LandingNav() {
           {/* ── Logo + firma de la casa ── */}
           {/* El link a FAM va afuera del <Link> del logo: anidar anchors es HTML inválido. */}
           <div className="flex min-w-0 items-center gap-2.5">
+            <Link href="/landing" onClick={close} aria-label="Tallerista" className="shrink-0 transition active:scale-95"><MarcaTallerista className="h-9 w-9" /></Link>
             <div className="flex min-w-0 flex-col leading-none">
               <Link href="/landing" onClick={close} className="text-[15px] font-black tracking-tight text-slate-900 transition active:scale-95">
                 Tallerista

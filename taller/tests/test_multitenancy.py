@@ -8,7 +8,9 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from PIL import Image
 
@@ -277,6 +279,32 @@ class PortalPublicoTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.presupuesto.refresh_from_db()
         self.assertEqual(self.presupuesto.estado, "APROBADO")
+
+    def test_portal_publico_puede_aprobar_presupuesto_en_borrador(self):
+        self.presupuesto.estado = "BORRADOR"
+        self.presupuesto.save(update_fields=["estado"])
+        response = self.http.patch(
+            f"/api/public/presupuestos/{self.presupuesto.token}/estado/",
+            data=json.dumps({"estado": "APROBADO"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.presupuesto.refresh_from_db()
+        self.assertEqual(self.presupuesto.estado, "APROBADO")
+
+    def test_portal_publico_no_cambia_un_presupuesto_ya_respondido(self):
+        self.presupuesto.estado = "RECHAZADO"
+        self.presupuesto.save(update_fields=["estado"])
+        response = self.http.patch(
+            f"/api/public/presupuestos/{self.presupuesto.token}/estado/",
+            data=json.dumps({"estado": "APROBADO"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.presupuesto.refresh_from_db()
+        self.assertEqual(self.presupuesto.estado, "RECHAZADO")
 
     def test_api_admin_detalle_presupuesto_serializa_token_como_string_json(self):
         api_token = ApiToken.objects.create(user=self.owner)
@@ -890,18 +918,32 @@ class SecurityBoundaryAttackTests(TestCase):
         self.assertIn(response.status_code, {400, 404})
         self.assertFalse(Trabajo.objects.filter(owner=self.owner_1, resumen_trabajos="Intento de cruce").exists())
 
-    def test_vistas_clasicas_tambien_bloquean_idor(self):
+    def test_la_app_monolitica_ya_no_esta_publicada(self):
+        """La interfaz vieja de Django no debe volver a aparecer.
+
+        Salteaba el corte por trial vencido, su login por sesión no tenía
+        límite de intentos y publicaba la marca del cliente original. Una
+        sesión válida tampoco alcanza para llegar a esas rutas.
+        """
         self.http.force_login(self.owner_1)
-        private_paths = (
-            f"/clientes/{self.cliente_2.id}/",
-            f"/vehiculos/{self.vehiculo_2.id}/",
+        rutas_dadas_de_baja = (
+            "/login/",
+            "/logout/",
+            "/clientes/",
+            f"/clientes/{self.cliente_1.id}/",
+            "/vehiculos/",
+            f"/vehiculos/{self.vehiculo_1.id}/",
+            "/trabajos/",
             f"/trabajos/{self.trabajo_2.id}/",
+            f"/trabajos/{self.trabajo_2.id}/comprobante/",
+            "/turnos/",
             f"/turnos/{self.turno_2.id}/",
+            "/presupuestos/",
             f"/presupuestos/{self.presupuesto_2.id}/",
         )
 
-        for path in private_paths:
-            self.assertEqual(self.http.get(path).status_code, 404, path)
+        for ruta in rutas_dadas_de_baja:
+            self.assertEqual(self.http.get(ruta).status_code, 404, ruta)
 
     def test_no_puede_convertir_un_presupuesto_de_otro_taller_en_orden(self):
         response = self.http.post(
@@ -1002,6 +1044,50 @@ class SecurityBoundaryAttackTests(TestCase):
 
         response = self.http.get("/api/finanzas/caja", HTTP_AUTHORIZATION=f"Token {token_empleado.key}")
         self.assertEqual(response.status_code, 403)
+
+    def _token_de_empleado(self, rol, username):
+        taller, _ = Taller.objects.get_or_create(owner=self.owner_1, defaults={"nombre": "Taller Red"})
+        empleado = User.objects.create_user(username=username, password="clave-empleado")
+        MembresiaTaller.objects.create(taller=taller, user=empleado, rol=rol)
+        return ApiToken.objects.create(user=empleado).key
+
+    def test_la_agenda_no_queda_abierta_a_mecanicos_ni_contadores(self):
+        """La interfaz ya les oculta la agenda; el backend tiene que cortarla igual.
+
+        Con el token en la mano, la UI no es una barrera: leer o borrar turnos
+        expone y destruye datos de clientes de todo el taller.
+        """
+        turno = Turno.objects.create(
+            owner=self.owner_1,
+            cliente=self.cliente_1,
+            vehiculo=self.vehiculo_1,
+            fecha_hora="2026-09-01T10:00:00-03:00",
+            motivo="Service programado",
+        )
+        for rol, username in (
+            (MembresiaTaller.ROL_MECANICO, "mecanico-agenda@red.com"),
+            (MembresiaTaller.ROL_CONTADOR, "contador-agenda@red.com"),
+        ):
+            token = self._token_de_empleado(rol, username)
+            auth = {"HTTP_AUTHORIZATION": f"Token {token}"}
+
+            self.assertEqual(self.http.get("/api/turnos/", **auth).status_code, 403, rol)
+            self.assertEqual(self.http.get(f"/api/turnos/{turno.id}", **auth).status_code, 403, rol)
+            self.assertEqual(self.http.delete(f"/api/turnos/{turno.id}", **auth).status_code, 403, rol)
+
+        self.assertTrue(Turno.objects.filter(pk=turno.pk).exists())
+
+    def test_mecanico_no_puede_leer_el_precio_de_costo_del_inventario(self):
+        Producto.objects.create(
+            owner=self.owner_1, codigo="FILTRO-99", nombre="Filtro",
+            precio_costo=Decimal("8000.00"), precio_venta=Decimal("14000.00"),
+        )
+        token = self._token_de_empleado(MembresiaTaller.ROL_MECANICO, "mecanico-stock@red.com")
+
+        response = self.http.get("/api/productos", HTTP_AUTHORIZATION=f"Token {token}")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(b"8000", response.content)
 
     def test_recepcion_puede_cobrar_sin_acceder_a_reportes_financieros(self):
         taller = Taller.objects.create(owner=self.owner_1, nombre="Taller Red")
@@ -1605,3 +1691,105 @@ class HistorialVehiculoTests(TestCase):
         other_vehiculo = Vehiculo.objects.create(owner=other, cliente=other_cliente, patente="OTH123", marca="Fiat", modelo="Uno")
         response = self.http.get(f"/api/vehiculos/{other_vehiculo.id}/historial/", **self.auth)
         self.assertEqual(response.status_code, 404)
+
+
+class DatosSuciosTests(TestCase):
+    """El panel no puede caerse por un dato mal cargado.
+
+    /avisos arma mensajes de WhatsApp tomando la primera palabra del nombre.
+    Con un cliente sin nombre el índice se iba de rango y el endpoint entero
+    devolvía 500: el taller perdía el panel de avisos completo.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.http = Client()
+        self.owner = User.objects.create_user(username="sucio@example.com", password="clave-sucia")
+        self.token = ApiToken.objects.create(user=self.owner)
+        self.auth = {"HTTP_AUTHORIZATION": f"Token {self.token.key}"}
+
+    def test_no_se_puede_crear_un_cliente_sin_nombre(self):
+        for nombre in ("", "   ", "\t"):
+            response = self.http.post(
+                "/api/clientes/",
+                data=json.dumps({"nombre": nombre}),
+                content_type="application/json",
+                **self.auth,
+            )
+            self.assertEqual(response.status_code, 400, repr(nombre))
+        self.assertFalse(Cliente.objects.filter(owner=self.owner).exists())
+
+    def test_no_se_puede_dejar_sin_nombre_a_un_cliente_existente(self):
+        cliente = Cliente.objects.create(owner=self.owner, nombre="Juan", apellido="Pérez")
+
+        response = self.http.put(
+            f"/api/clientes/{cliente.id}",
+            data=json.dumps({"nombre": "   ", "apellido": "Pérez"}),
+            content_type="application/json",
+            **self.auth,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        cliente.refresh_from_db()
+        self.assertEqual(cliente.nombre, "Juan")
+
+    def test_el_nombre_se_guarda_sin_espacios_sobrantes(self):
+        response = self.http.post(
+            "/api/clientes/",
+            data=json.dumps({"nombre": "  Ana  ", "apellido": "  Gómez  "}),
+            content_type="application/json",
+            **self.auth,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        cliente = Cliente.objects.get(owner=self.owner)
+        self.assertEqual(cliente.nombre, "Ana")
+        self.assertEqual(cliente.apellido, "Gómez")
+
+    def test_avisos_sobrevive_a_clientes_sin_nombre_ya_cargados(self):
+        # Creado por fuera de la API, como los que ya están en producción.
+        cliente = Cliente.objects.create(owner=self.owner, nombre="   ", saldo_balance=Decimal("5000.00"))
+        Vehiculo.objects.create(
+            owner=self.owner, cliente=cliente, patente="ZZZ999",
+            marca="Ford", modelo="Focus",
+            kilometraje_actual=100_000, proximo_service_km=100_100,
+        )
+
+        response = self.http.get("/api/avisos", **self.auth)
+
+        self.assertEqual(response.status_code, 200)
+        tipos = {aviso["tipo"] for aviso in response.json()}
+        self.assertIn("SERVICE", tipos)
+        self.assertIn("DEUDA", tipos)
+
+    def test_avisos_de_service_no_recorre_la_flota_entera(self):
+        """El filtro tiene que resolverse en la base, no en Python."""
+        cliente = Cliente.objects.create(owner=self.owner, nombre="Flota")
+        for i in range(30):
+            Vehiculo.objects.create(
+                owner=self.owner, cliente=cliente, patente=f"AAA{i:03d}",
+                marca="Ford", modelo="Focus", kilometraje_actual=1_000,
+                proximo_service_km=90_000,  # lejísimos: ninguno debe avisar
+            )
+        Vehiculo.objects.create(
+            owner=self.owner, cliente=cliente, patente="DUE001",
+            marca="Ford", modelo="Ranger", kilometraje_actual=100_000,
+            proximo_service_km=100_100,
+        )
+
+        # La primera consulta crea taller, membresía y perfil (auto-reparación
+        # de TokenAuth); se mide la siguiente, que es el estado estable.
+        self.http.get("/api/avisos", **self.auth)
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.http.get("/api/avisos", **self.auth)
+
+        consulta_vehiculos = [q["sql"] for q in queries.captured_queries if 'FROM "taller_vehiculo"' in q["sql"]]
+        self.assertEqual(len(consulta_vehiculos), 1, "la flota debe resolverse en una sola consulta")
+        self.assertIn("LIMIT", consulta_vehiculos[0])
+        self.assertIn("proximo_service_km", consulta_vehiculos[0])
+
+        self.assertEqual(response.status_code, 200)
+        services = [a for a in response.json() if a["tipo"] == "SERVICE"]
+        self.assertEqual(len(services), 1)
+        self.assertIn("DUE001", services[0]["detalle"])

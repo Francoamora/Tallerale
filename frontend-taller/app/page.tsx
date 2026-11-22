@@ -1,118 +1,257 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { SectionCard } from "@/components/section-card";
 import { StatusBadge } from "@/components/status-badge";
-import { getAvisos, getDashboardData } from "@/lib/api";
-import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/format";
-import type { DashboardStats } from "@/lib/types";
-import type { Aviso } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { HintBubble } from "@/components/hint-bubble";
-import { getSession, getTrialInfo, type SessionData } from "@/lib/trial";
+import { getAvisos, getDashboardData, type Aviso } from "@/lib/api";
+import { formatCurrency, formatDate } from "@/lib/format";
+import type { DashboardStats, IngresoMensual, TurnoProximo } from "@/lib/types";
+import { getSession, type SessionData } from "@/lib/trial";
+import { ESTADO_TRABAJO_LABEL, numeroOrden, type EstadoTrabajo } from "@/lib/documentos";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { cn } from "@/lib/utils";
 
 type UserRole = NonNullable<SessionData["rol"]>;
+
+/**
+ * Etapas del taller, en el orden del flujo. Los colores son los mismos de las
+ * etiquetas de estado en toda la app (StatusBadge), validados con el script de
+ * dataviz: claro 500 sobre blanco, oscuro 600 sobre slate-800. La separación
+ * para daltonismo entre ámbar y verde queda en la banda 6–8 en modo oscuro, así
+ * que cada segmento va siempre acompañado de su nombre y su cantidad.
+ */
+const ETAPAS: { estado: EstadoTrabajo; ayuda: string; color: string }[] = [
+  { estado: "INGRESADO", ayuda: "Esperan diagnóstico", color: "bg-sky-500 dark:bg-sky-600" },
+  { estado: "EN_PROCESO", ayuda: "En reparación", color: "bg-amber-500 dark:bg-amber-600" },
+  { estado: "FINALIZADO", ayuda: "Avisale al cliente", color: "bg-emerald-500 dark:bg-emerald-600" },
+];
+
+/** "2026-10-01" -> "Octubre" */
+function nombreDelMes(mesIso: string): string {
+  const [anio, mes] = mesIso.split("-").map(Number);
+  const nombre = new Intl.DateTimeFormat("es-AR", { month: "long" }).format(new Date(anio, mes - 1, 1));
+  return nombre.charAt(0).toUpperCase() + nombre.slice(1);
+}
+
+/**
+ * El inicio es un abanico: cada pliegue es un tema del día con su número, y
+ * al tocarlo se abre su detalle al lado. Cada persona abre sólo lo que
+ * necesita; el último pliegue elegido queda guardado en este navegador.
+ */
+type PliegueId = "todo" | "taller" | "turnos" | "avisos" | "cobros" | "clientes";
 
 export default function Home() {
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
   const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [chartMounted, setChartMounted] = useState(false);
-  const [tallerNombre, setTallerNombre] = useState("tu taller");
   const [todayLabel, setTodayLabel] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
-  const alertasRailRef = useRef<HTMLDivElement>(null);
-  const turnosRailRef = useRef<HTMLDivElement>(null);
+  const [elegido, setElegido] = useState<PliegueId | null>(null);
+  const [ventana, setVentana] = useState<Exclude<PliegueId, "todo" | "taller"> | null>(null);
+  const cerrarVentana = useCallback(() => setVentana(null), []);
 
   useEffect(() => {
-    // Valores dependientes del navegador: se calculan después de hidratar para
-    // evitar que la zona horaria del servidor y del cliente difieran.
+    // Valores dependientes del navegador: se calculan después de hidratar.
     const frame = requestAnimationFrame(() => {
-      const info = getTrialInfo();
       setRole(getSession()?.rol ?? "ADMIN");
-      if (info.tallerNombre) setTallerNombre(info.tallerNombre);
-      setTodayLabel(new Intl.DateTimeFormat("es-AR", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-      }).format(new Date()));
+      const hoy = new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+      setTodayLabel(hoy.charAt(0).toUpperCase() + hoy.slice(1));
+      try {
+        const guardado = localStorage.getItem("inicio-pliegue");
+        if (guardado) setElegido(guardado as PliegueId);
+      } catch { /* sin almacenamiento */ }
     });
 
     getDashboardData()
-      .then((data) => {
-        setDashboard(data);
-        // Pequeño delay para que el DOM pinte primero y la transición se vea
-        requestAnimationFrame(() => setTimeout(() => setChartMounted(true), 80));
-      })
-      .catch((error) => {
-        setLoadError(error instanceof Error ? error.message : "Falla en el enlace con el motor operativo.");
-      })
+      .then(setDashboard)
+      .catch((error) => setLoadError(error instanceof Error ? error.message : "No pudimos cargar el panel."))
       .finally(() => setLoading(false));
-
-    getAvisos().then(setAvisos).catch(() => {
-      // Los avisos mejoran la operación, pero no deben impedir abrir el panel.
-    });
+    getAvisos().then(setAvisos).catch(() => { /* los avisos no bloquean el panel */ });
 
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  // ── Derivados del gráfico ──────────────────────────────────
-  const ingresos = dashboard?.ingresos_mensuales ?? [];
-
-  // Parsear siempre a número (Django puede devolver strings "15000.00")
-  const ingresosNum = ingresos.map((m) => ({ ...m, totalNum: parseFloat(String(m.total)) }));
-  const maxIngreso = ingresosNum.length ? Math.max(...ingresosNum.map((m) => m.totalNum), 1) : 1;
-  const maxIngresoIdx = ingresosNum.reduce((best, m, i) => (m.totalNum > ingresosNum[best].totalNum ? i : best), 0);
-  const total6m = ingresosNum.reduce((acc, m) => acc + m.totalNum, 0);
-  const ultimoMes = ingresosNum[ingresosNum.length - 1];
-  const penultimoMes = ingresosNum[ingresosNum.length - 2];
-  const tendenciaPct =
-    penultimoMes && penultimoMes.totalNum > 0
-      ? ((ultimoMes.totalNum - penultimoMes.totalNum) / penultimoMes.totalNum) * 100
-      : null;
-
-  const canSeeFinance = role === "ADMIN" || role === "CONTADOR";
   const isMechanic = role === "MECANICO";
   const isReception = role === "RECEPCION";
   const isAccountant = role === "CONTADOR";
-  const alertasOrdenadas = [...(dashboard?.alertas_service ?? [])].sort((a, b) => {
-    const estadoA = a.status === "VENCIDO" ? 0 : 1;
-    const estadoB = b.status === "VENCIDO" ? 0 : 1;
-    return estadoA - estadoB || a.diferencia_km - b.diferencia_km;
-  });
-  const turnosOrdenados = [...(dashboard?.turnos_proximos ?? [])].sort(
-    (a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime(),
-  );
+  const canSeeFinance = role === "ADMIN" || isAccountant;
+  const canSeeOperations = !isAccountant;
+  const canCreateOrders = role === "ADMIN" || isReception;
+
+  const conteoPorEstado = new Map((dashboard?.trabajos_por_estado ?? []).map((fila) => [fila.estado, fila.cantidad]));
+  const etapas = ETAPAS.map((etapa) => ({ ...etapa, cantidad: conteoPorEstado.get(etapa.estado) ?? 0 }));
+  const autosEnElTaller = etapas.reduce((total, etapa) => total + etapa.cantidad, 0);
+  const ingresos = (dashboard?.ingresos_mensuales ?? []).map((mes) => ({ ...mes, total: Number(mes.total) }));
+  const mesAnterior = ingresos.length >= 2 ? ingresos[ingresos.length - 2] : null;
+  const turnos = [...(dashboard?.turnos_proximos ?? [])].sort((a, b) => new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime());
+  const hoyIso = new Date().toDateString();
+  const turnosDeHoy = turnos.filter((t) => new Date(t.fecha_hora).toDateString() === hoyIso).length;
   const clientesSinActividad = dashboard?.clientes_sin_actividad ?? [];
-  const moveRail = (rail: HTMLDivElement | null, direction: -1 | 1) => {
-    rail?.scrollBy({ left: direction * Math.max(280, rail.clientWidth * 0.8), behavior: "smooth" });
+  const clientesParaRecuperar = dashboard?.clientes_sin_actividad_total ?? clientesSinActividad.length;
+  const tallerVacio = !loading && dashboard?.total_clientes === 0 && dashboard?.total_vehiculos === 0;
+
+  const pliegues: Pliegue[] = [
+    { id: "todo", nombre: "Todo", valor: "", detalle: "vista completa" },
+    canSeeOperations && { id: "taller", nombre: "Taller", valor: String(autosEnElTaller), detalle: autosEnElTaller === 1 ? "auto" : "autos" },
+    canSeeOperations && { id: "turnos", nombre: "Turnos", valor: String(turnosDeHoy), detalle: "hoy" },
+    canSeeOperations && !isMechanic && { id: "avisos", nombre: "Avisos", valor: String(avisos.length), detalle: "para enviar" },
+    canSeeFinance && { id: "cobros", nombre: "Cobros", valor: formatCompacto(dashboard?.cuenta_corriente_pendiente ?? 0), detalle: "por cobrar" },
+    !isMechanic && { id: "clientes", nombre: "Clientes", valor: String(clientesParaRecuperar), detalle: "sin volver" },
+  ].filter(Boolean) as Pliegue[];
+  const activo = pliegues.find((p) => p.id === elegido) ?? pliegues[0];
+
+  const ahora = new Date();
+  const centroDelDia = {
+    dia: todayLabel ? String(ahora.getDate()) : "",
+    semana: todayLabel ? new Intl.DateTimeFormat("es-AR", { weekday: "short" }).format(ahora).replace(".", "") : "hoy",
   };
+
+  function elegir(id: PliegueId) {
+    setElegido(id);
+    try { localStorage.setItem("inicio-pliegue", id); } catch { /* sin almacenamiento */ }
+  }
+
+  const linkDetalle: Record<PliegueId, { href: string; texto: string } | null> = {
+    todo: null,
+    taller: { href: "/trabajos/tablero", texto: "Abrir tablero" },
+    turnos: isMechanic ? null : { href: "/turnos", texto: "Ver agenda" },
+    avisos: null,
+    cobros: { href: "/caja", texto: "Ir a caja" },
+    clientes: { href: "/clientes", texto: "Ver directorio" },
+  };
+  const tituloDetalle: Record<PliegueId, string> = {
+    todo: "Todo el taller de un vistazo",
+    taller: "Autos en el taller",
+    turnos: "Próximos turnos",
+    avisos: "Para avisar por WhatsApp",
+    cobros: "Cobros y saldos",
+    clientes: "Clientes para recuperar",
+  };
+
+  /** Bloque con título y atajo, para la vista "Todo". */
+  function bloque(id: Exclude<PliegueId, "todo">) {
+    const link = linkDetalle[id];
+    return (
+      <section key={id} className="min-w-0 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+        <header className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{tituloDetalle[id]}</h3>
+          {link && <Link href={link.href} className="shrink-0 text-xs font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400">{link.texto} →</Link>}
+        </header>
+        {detalle(id)}
+      </section>
+    );
+  }
+  const visibles = new Set(pliegues.map((p) => p.id));
+
+  function detalle(id: PliegueId): ReactNode {
+    switch (id) {
+      case "todo":
+        // Turnos, avisos y clientes van como tarjetas con un adelanto: la
+        // lista completa se abre en una ventana, así la vista no se estira
+        // cuando hay muchos.
+        return (
+          <div className="space-y-4">
+            {visibles.has("taller") && bloque("taller")}
+            <div className="grid gap-3 md:grid-cols-3">
+              {visibles.has("turnos") && (
+                <TarjetaVentana
+                  titulo="Próximos turnos"
+                  valor={turnos.length}
+                  unidad={turnos.length === 1 ? "turno" : "turnos"}
+                  loading={loading}
+                  vacio="No hay turnos programados."
+                  adelanto={turnos.slice(0, 2).map((t) => ({ clave: String(t.id), principal: t.cliente_nombre, secundario: `${new Date(t.fecha_hora).toLocaleDateString("es-AR", { weekday: "short", day: "numeric" })} · ${new Date(t.fecha_hora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}` }))}
+                  onAbrir={() => setVentana("turnos")}
+                />
+              )}
+              {visibles.has("avisos") && (
+                <TarjetaVentana
+                  titulo="Para avisar por WhatsApp"
+                  valor={avisos.length}
+                  unidad={avisos.length === 1 ? "aviso" : "avisos"}
+                  loading={loading}
+                  vacio="No hay avisos pendientes."
+                  adelanto={avisos.slice(0, 2).map((a, i) => ({ clave: `${a.href}-${i}`, principal: a.titulo, secundario: a.detalle }))}
+                  onAbrir={() => setVentana("avisos")}
+                />
+              )}
+              {visibles.has("clientes") && (
+                <TarjetaVentana
+                  titulo="Clientes para recuperar"
+                  valor={clientesParaRecuperar}
+                  unidad="sin volver"
+                  loading={loading}
+                  vacio="Todos volvieron en los últimos 6 meses."
+                  adelanto={clientesSinActividad.slice(0, 2).map((c) => ({ clave: String(c.id), principal: c.nombre, secundario: c.ultimo_trabajo ? `Última visita ${formatDate(c.ultimo_trabajo)}` : "Sin visitas" }))}
+                  onAbrir={() => setVentana("clientes")}
+                />
+              )}
+            </div>
+          </div>
+        );
+      case "taller":
+        return (
+          <div className="space-y-5">
+            <EtapasDelTaller loading={loading} total={autosEnElTaller} etapas={etapas} canCreateOrders={canCreateOrders} />
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{isMechanic ? "Trabajo técnico reciente" : "Órdenes recientes"}</h3>
+              <OrdenesRecientes loading={loading} dashboard={dashboard} isMechanic={isMechanic} canSeeFinance={canSeeFinance} />
+            </div>
+          </div>
+        );
+      case "turnos":
+        return <ProximosTurnos loading={loading} turnos={turnos.slice(0, 8)} />;
+      case "avisos":
+        if (!loading && !avisos.length) return <p className="py-6 text-center text-sm text-slate-500">No hay avisos pendientes.</p>;
+        return (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
+            {avisos.map((aviso, index) => <Recordatorio key={`${aviso.tipo}-${aviso.href}-${index}`} aviso={aviso} />)}
+          </ul>
+        );
+      case "cobros":
+        return (
+          <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Cifra loading={loading} label="Cobrado este mes" value={formatCurrency(dashboard?.ingresos_mes_actual ?? 0)} detail={mesAnterior ? `${nombreDelMes(mesAnterior.month)} cerró en ${formatCurrency(mesAnterior.total)}` : undefined} />
+              <Cifra loading={loading} label="Por cobrar" value={formatCurrency(dashboard?.cuenta_corriente_pendiente ?? 0)} detail="Saldos en cuenta corriente" />
+              <Cifra loading={loading} label="Ticket promedio" value={formatCurrency(dashboard?.ticket_promedio ?? 0)} detail="Órdenes terminadas" />
+            </div>
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-slate-700 dark:text-slate-200">Cobros de los últimos 6 meses</h3>
+              <IngresosChart loading={loading} meses={ingresos} />
+            </div>
+          </div>
+        );
+      case "clientes":
+        if (!loading && !clientesSinActividad.length) return <p className="py-6 text-center text-sm text-slate-500">Todos tus clientes volvieron en los últimos 6 meses.</p>;
+        return (
+          <>
+            <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">{clientesParaRecuperar} sin visitas al taller en 6 meses. Un mensaje a tiempo los trae de vuelta.</p>
+            <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
+              {clientesSinActividad.map((cliente) => (
+                <li key={cliente.id}>
+                  <Link href={`/clientes/${cliente.id}`} className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                    <span className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{cliente.nombre}</span>
+                    <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{cliente.ultimo_trabajo ? `Última visita ${formatDate(cliente.ultimo_trabajo)}` : "Sin visitas"}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        );
+    }
+  }
+
   const pageCopy = isMechanic
-    ? {
-        badge: "Área técnica",
-        title: "Prioridades de trabajo",
-        description: "Órdenes activas, vehículos y próximos mantenimientos.",
-      }
+    ? { badge: "Área técnica", title: "Prioridades de trabajo", description: "Qué hay en el taller y qué sigue." }
     : isReception
-      ? {
-          badge: "Recepción",
-          title: "Agenda y atención",
-          description: "Turnos, clientes y seguimiento operativo del taller.",
-        }
+      ? { badge: "Recepción", title: "Agenda y atención", description: "Turnos, autos en el taller y avisos a clientes." }
       : isAccountant
-        ? {
-            badge: "Administración financiera",
-            title: "Control financiero",
-            description: "Ingresos, saldos pendientes y evolución de facturación.",
-          }
-        : {
-            badge: "Centro de Control",
-            title: "Estado del Taller",
-            description: `Analítica operativa y financiera en tiempo real — ${tallerNombre}.`,
-          };
+        ? { badge: "Administración", title: "Control financiero", description: "Cobros, saldos pendientes y clientes." }
+        : { badge: "Panel principal", title: "Estado del taller", description: "Elegí qué querés ver del día." };
 
   return (
     <AppShell
@@ -121,501 +260,693 @@ export default function Home() {
       badge={pageCopy.badge}
       title={pageCopy.title}
       description={pageCopy.description}
-      actions={
-        <div className="hidden h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex">
-          <svg className="h-4 w-4 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-            {todayLabel ?? "Cargando fecha…"}
-          </span>
+      leading={todayLabel && (
+        <div>
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">{todayLabel}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{autosEnElTaller} {autosEnElTaller === 1 ? "auto" : "autos"} en el taller</p>
         </div>
+      )}
+      actions={
+        <>
+          {(canCreateOrders || canSeeFinance) && (
+            <GrupoAtajos
+              atajos={[
+                canCreateOrders && { href: "/turnos/nuevo", texto: "Turno" },
+                canCreateOrders && { href: "/clientes/nuevo", texto: "Cliente" },
+                canSeeFinance && { href: "/caja", texto: "Cobro" },
+              ]}
+            />
+          )}
+          {canCreateOrders && (
+            <Link href="/trabajos/nuevo" className="inline-flex h-9 items-center rounded-xl bg-brand-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700">
+              + Nueva orden
+            </Link>
+          )}
+        </>
       }
     >
       {loadError ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-6 dark:border-red-900/50 dark:bg-red-950/20">
-          <h3 className="text-sm font-bold uppercase tracking-widest text-red-800 dark:text-red-400">Falla Crítica de Enlace</h3>
-          <p className="mt-2 text-sm text-red-700 dark:text-red-300/80">{loadError}</p>
-          <button onClick={() => window.location.reload()} className="mt-4 text-xs font-bold underline text-red-800 dark:text-red-400 hover:text-red-900">Reintentar conexión</button>
+          <h3 className="text-sm font-bold text-red-800 dark:text-red-300">No pudimos cargar el panel</h3>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-300/80">{loadError}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 text-xs font-bold text-red-800 underline hover:text-red-900 dark:text-red-300">Reintentar</button>
         </div>
       ) : (
-        <div className="space-y-4 animate-in fade-in duration-500">
-
-          {/* HINT — bienvenida primera vez */}
-          {role === "ADMIN" && !loading && dashboard?.total_clientes === 0 && dashboard?.total_vehiculos === 0 && <HintBubble
-            id="hint-dashboard-v1"
-            variant="inline"
-            emoji="🚀"
-            title="¡Bienvenido a Tallerista!"
-            desc="Para empezar: primero cargá un cliente, después su vehículo, y luego creá tu primer presupuesto u orden de trabajo. ¡En 5 minutos ya tenés el taller funcionando!"
-            action={{ label: "Ver guía de inicio", href: "/onboarding" }}
-          />}
-
-          {/* 1. BOTONERA GIGANTE DE COLORES (ACCESOS RÁPIDOS) */}
-          <div className="grid gap-3 sm:grid-cols-3">
-            
-            {/* ACCESO AL KANBAN */}
-            {(role === "ADMIN" || isMechanic) && <Link href="/trabajos/tablero" className="group relative overflow-hidden rounded-2xl border border-brand-200 bg-brand-50 p-4 transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-brand-900/50 dark:bg-brand-900/20">
-              <div className="absolute right-0 top-0 -mr-4 -mt-4 h-24 w-24 rounded-full bg-brand-500/10 blur-2xl transition-all group-hover:bg-brand-500/20"></div>
-              <div className="relative z-10 flex items-center gap-3">
-                <div className="inline-flex shrink-0 rounded-xl bg-brand-100 p-2.5 text-brand-600 dark:bg-brand-800/50 dark:text-brand-300">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-                  </svg>
-                </div>
-                <div><h3 className="text-sm font-black tracking-tight text-brand-900 dark:text-white">Tablero de Operaciones</h3>
-                <p className="mt-0.5 text-xs font-medium text-brand-700/80 dark:text-brand-200/60">Autos en proceso y listos</p></div>
-              </div>
-            </Link>}
-
-            {/* ACCESO A CAJA */}
-            {canSeeFinance && <Link href="/caja" className="group relative overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50 p-4 transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-900/50 dark:bg-emerald-900/20">
-              <div className="absolute right-0 top-0 -mr-4 -mt-4 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl transition-all group-hover:bg-emerald-500/20"></div>
-              <div className="relative z-10 flex items-center gap-3">
-                <div className="inline-flex shrink-0 rounded-xl bg-emerald-100 p-2.5 text-emerald-600 dark:bg-emerald-800/50 dark:text-emerald-300">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div><h3 className="text-sm font-black tracking-tight text-emerald-900 dark:text-white">Caja Diaria</h3>
-                <p className="mt-0.5 text-xs font-medium text-emerald-700/80 dark:text-emerald-200/60">Ingresos, cobros y gastos</p></div>
-              </div>
-            </Link>}
-
-            {/* ACCESO A TURNOS */}
-            {(role === "ADMIN" || isReception) && <Link href="/turnos" className="group relative overflow-hidden rounded-2xl border border-purple-200 bg-purple-50 p-4 transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-purple-900/50 dark:bg-purple-900/20">
-              <div className="absolute right-0 top-0 -mr-4 -mt-4 h-24 w-24 rounded-full bg-purple-500/10 blur-2xl transition-all group-hover:bg-purple-500/20"></div>
-              <div className="relative z-10 flex items-center gap-3">
-                <div className="inline-flex shrink-0 rounded-xl bg-purple-100 p-2.5 text-purple-600 dark:bg-purple-800/50 dark:text-purple-300">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div><h3 className="text-sm font-black tracking-tight text-purple-900 dark:text-white">Agenda de Turnos</h3>
-                <p className="mt-0.5 text-xs font-medium text-purple-700/80 dark:text-purple-200/60">Citas programadas</p></div>
-              </div>
-            </Link>}
-
-            {isMechanic && (
-              <>
-                <RoleActionCard href="/trabajos" tone="amber" title="Órdenes activas" description="Qué hacer y en qué vehículo" />
-                <RoleActionCard href="/clientes" tone="slate" title="Clientes y vehículos" description="Personas, kilometraje e historial técnico" />
-              </>
-            )}
-
-            {isReception && (
-              <>
-                <RoleActionCard href="/clientes" tone="amber" title="Directorio de clientes" description="Datos y vehículos de cada cliente" />
-                <RoleActionCard href="/presupuestos" tone="slate" title="Presupuestos" description="Preparar y dar seguimiento" />
-              </>
-            )}
-
-            {isAccountant && (
-              <>
-                <RoleActionCard href="/gastos" tone="amber" title="Gastos y compras" description="Egresos y comprobantes" />
-                <RoleActionCard href="/caja" tone="slate" title="Movimientos" description="Revisar cobros y saldos" />
-              </>
-            )}
-
-          </div>
-
-          {/* 2. KPIs ESTRATÉGICOS MINIMALISTAS */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {canSeeFinance ? (
-              <>
-                <MetricCard title="Ingresos del Mes" value={loading ? "..." : formatCurrency(dashboard?.ingresos_mes_actual || 0)} loading={loading} highlight="text-emerald-600 dark:text-emerald-400" />
-                <MetricCard title="Saldos pendientes" value={loading ? "..." : formatCurrency(dashboard?.cuenta_corriente_pendiente || 0)} loading={loading} highlight="text-red-500 dark:text-red-400" />
-                <MetricCard title="Ticket promedio" value={loading ? "..." : formatCurrency(dashboard?.ticket_promedio || 0)} loading={loading} />
-                <MetricCard title="Órdenes activas" value={loading ? "..." : formatNumber(dashboard?.trabajos_activos || 0)} loading={loading} />
-              </>
-            ) : (
-              <>
-                <MetricCard title="Órdenes activas" value={loading ? "..." : formatNumber(dashboard?.trabajos_activos || 0)} loading={loading} highlight="text-brand-600 dark:text-brand-400" />
-                <MetricCard title="Vehículos registrados" value={loading ? "..." : formatNumber(dashboard?.total_vehiculos || 0)} loading={loading} />
-                <MetricCard title={isMechanic ? "Controles próximos" : "Turnos próximos"} value={loading ? "..." : formatNumber(isMechanic ? dashboard?.alertas_service.length || 0 : dashboard?.turnos_proximos.length || 0)} loading={loading} />
-                <MetricCard title="Actividad reciente" value={loading ? "..." : formatNumber(dashboard?.trabajos_recientes.length || 0)} loading={loading} />
-              </>
-            )}
-          </div>
-
-          {!loading && !isAccountant && clientesSinActividad.length > 0 && (
-            <SectionCard
-              compact
-              title="Clientes para recuperar"
-              description={`${dashboard?.clientes_sin_actividad_total ?? clientesSinActividad.length} sin una orden cerrada en los últimos 6 meses.`}
-              action={<Link href="/clientes" className="text-xs font-bold text-brand-600 hover:text-brand-700 dark:text-brand-300">Abrir directorio →</Link>}
-            >
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                {clientesSinActividad.map((cliente) => (
-                  <Link key={cliente.id} href={`/clientes/${cliente.id}`} className="rounded-xl border border-slate-200 p-3 transition hover:border-brand-300 hover:bg-brand-50/40 dark:border-slate-700 dark:hover:border-brand-700 dark:hover:bg-brand-950/20">
-                    <p className="truncate text-xs font-black text-slate-900 dark:text-white">{cliente.nombre}</p>
-                    <p className="mt-1 text-[10px] text-slate-500">{cliente.ultimo_trabajo ? `Última OT: ${formatDate(cliente.ultimo_trabajo)}` : "Sin servicios cerrados"}</p>
-                  </Link>
-                ))}
-              </div>
-            </SectionCard>
+        <div className="space-y-4">
+          {role === "ADMIN" && tallerVacio && (
+            <HintBubble
+              id="hint-dashboard-v1"
+              variant="inline"
+              title="¡Bienvenido a Tallerista!"
+              desc="Para empezar: cargá un cliente, después su vehículo, y luego creá tu primer presupuesto u orden de trabajo."
+              action={{ label: "Ver guía de inicio", href: "/onboarding" }}
+            />
           )}
 
-          {/* 3. ZONA DE GRÁFICOS Y LISTAS */}
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-            
-            <div className="contents">
-              {/* Gráfico financiero a ancho completo */}
-              {canSeeFinance && <SectionCard
-                compact
-                className="order-3 lg:col-span-2 lg:row-start-2"
-                title="Evolución de Facturación"
-                description="Ingresos consolidados de los últimos 6 meses."
-                action={
-                  !loading && ingresosNum.length > 0 ? (
-                    <div className="flex items-center divide-x divide-slate-200 rounded-xl border border-slate-200 bg-slate-50 text-center dark:divide-slate-700 dark:border-slate-700 dark:bg-slate-900/40">
-                      <div className="px-4 py-2">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Acumulado 6M</p>
-                        <p className="font-mono text-sm font-black text-slate-900 dark:text-white">{formatCurrency(total6m)}</p>
+          {role && activo && (
+            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
+              <div className="space-y-4">
+                <section className="rounded-2xl border border-slate-200 bg-white px-4 pb-1 pt-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 lg:px-0 lg:py-3">
+                  <Abanico pliegues={pliegues} activo={activo.id} onElegir={elegir} loading={loading} centro={centroDelDia} />
+                </section>
+                {canSeeFinance && (
+                  <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                    <header className="mb-2 flex items-center justify-between gap-2">
+                      <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Cobros y saldos</h2>
+                      <div className="flex items-center gap-3 text-xs font-bold">
+                        <button type="button" onClick={() => setVentana("cobros")} aria-haspopup="dialog" className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">Gráfico</button>
+                        <Link href="/caja" className="text-brand-600 hover:text-brand-700 dark:text-brand-400">Caja →</Link>
                       </div>
-                      <div className="px-4 py-2">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Ticket Prom.</p>
-                        <p className="font-mono text-sm font-black text-slate-900 dark:text-white">{formatCurrency(dashboard?.ticket_promedio ?? 0)}</p>
-                      </div>
-                      {tendenciaPct !== null && (
-                        <div className="px-4 py-2">
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Tendencia</p>
-                          <p className={cn("font-mono text-sm font-black", tendenciaPct >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400")}>
-                            {tendenciaPct >= 0 ? "▲" : "▼"} {Math.abs(tendenciaPct).toFixed(0)}%
-                          </p>
+                    </header>
+                    <dl className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                      {[
+                        ["Cobrado este mes", dashboard?.ingresos_mes_actual ?? 0, mesAnterior ? `${nombreDelMes(mesAnterior.month)} cerró en ${formatCurrency(mesAnterior.total)}` : ""],
+                        ["Por cobrar", dashboard?.cuenta_corriente_pendiente ?? 0, "Cuenta corriente"],
+                        ["Ticket promedio", dashboard?.ticket_promedio ?? 0, "Órdenes terminadas"],
+                      ].map(([etiqueta, monto, ayuda]) => (
+                        <div key={String(etiqueta)} className="flex items-end justify-between gap-3 py-2">
+                          <div className="min-w-0">
+                            <dt className="text-xs font-medium text-slate-600 dark:text-slate-300">{etiqueta}</dt>
+                            {ayuda && <dd className="truncate text-[11px] text-slate-400">{ayuda}</dd>}
+                          </div>
+                          <dd className="shrink-0 font-display text-2xl font-extrabold leading-none tabular-nums text-slate-900 dark:text-white">
+                            {loading ? "·" : formatCurrency(Number(monto))}
+                          </dd>
                         </div>
-                      )}
-                    </div>
-                  ) : null
-                }
-              >
-                {loading ? (
-                  <div className="h-48 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-900/40" />
-                ) : ingresosNum.length > 0 ? (
-                  <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-3 pb-3 pt-4 dark:border-slate-700 dark:bg-slate-900/30 sm:px-6">
-                    <div className="pointer-events-none absolute inset-x-3 bottom-12 top-12 flex flex-col justify-between sm:inset-x-6">
-                      {[1, 2, 3].map((line) => (
-                        <div key={line} className="border-t border-dashed border-slate-200 dark:border-slate-700/70" />
                       ))}
-                    </div>
-
-                    <div className="relative flex h-52 items-end justify-between gap-2 sm:gap-5">
-                      {ingresosNum.map((item, index) => {
-                        const isCurrentMonth = index === ingresosNum.length - 1;
-                        const isMejorMes = index === maxIngresoIdx && item.totalNum > 0;
-                        const pct = maxIngreso > 0 ? (item.totalNum / maxIngreso) * 100 : 0;
-                        const barHeight = chartMounted
-                          ? `${Math.max(pct, item.totalNum > 0 ? 8 : 3)}%`
-                          : "0%";
-                        const [monthName, year] = item.label.split(" ");
-
-                        return (
-                          <div key={item.month} className="group flex h-full min-w-0 flex-1 flex-col justify-end text-center">
-                            <div className="mb-2 min-h-8">
-                              <p className={cn(
-                                "truncate font-mono text-[10px] font-black sm:text-xs",
-                                item.totalNum > 0 ? "text-slate-800 dark:text-white" : "text-slate-400",
-                              )}>
-                                {formatCurrency(item.total)}
-                              </p>
-                              <p className="mt-0.5 text-[9px] font-semibold text-slate-400">
-                                {item.trabajos} {item.trabajos === 1 ? "orden" : "órdenes"}
-                              </p>
-                            </div>
-
-                            <div className="flex h-28 items-end justify-center sm:h-32">
-                              <div
-                                title={`${item.label}: ${formatCurrency(item.total)}`}
-                                className={cn(
-                                  "w-full max-w-24 rounded-t-lg transition-[height,filter] duration-700 ease-out group-hover:brightness-110",
-                                  isCurrentMonth
-                                    ? "bg-gradient-to-t from-brand-600 to-brand-400 shadow-[0_0_24px_rgba(249,115,22,0.18)]"
-                                    : isMejorMes
-                                      ? "bg-gradient-to-t from-emerald-600 to-emerald-400"
-                                      : item.totalNum === 0
-                                        ? "bg-slate-200 dark:bg-slate-700"
-                                        : "bg-gradient-to-t from-slate-500 to-slate-400",
-                                )}
-                                style={{ height: barHeight }}
-                              />
-                            </div>
-
-                            <div className={cn(
-                              "mt-2 rounded-lg px-1 py-1",
-                              isCurrentMonth && "bg-brand-50 dark:bg-brand-900/20",
-                            )}>
-                              <p className={cn(
-                                "text-xs font-black",
-                                isCurrentMonth ? "text-brand-600 dark:text-brand-400" : "text-slate-700 dark:text-slate-300",
-                              )}>
-                                {monthName}
-                              </p>
-                              <p className="text-[9px] text-slate-400">{year}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="mt-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 border-t border-slate-200 pt-3 text-[10px] font-semibold text-slate-500 dark:border-slate-700">
-                      <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-brand-500" /> Mes actual</span>
-                      <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-emerald-500" /> Mejor mes</span>
-                      <span>Altura proporcional a la facturación</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
-                    <p className="text-sm font-bold text-slate-500">Todavía no hay movimientos para graficar.</p>
-                    <p className="mt-1 text-xs text-slate-400">El gráfico se completará automáticamente con los próximos cobros.</p>
-                  </div>
+                    </dl>
+                  </section>
                 )}
-              </SectionCard>}
+              </div>
 
-              {/* Últimos Trabajos */}
-              <SectionCard
-                compact
-                className="order-1 min-w-0 lg:col-start-1 lg:row-start-1"
-                title={isMechanic ? "Trabajo técnico pendiente" : "Órdenes de Trabajo Recientes"}
-                description={isMechanic ? "Qué hay que hacer y sobre qué vehículo." : "Monitoreo de actividad actual."}
-              >
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {loading ? (
-                    <div className="h-32 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800"></div>
-                  ) : dashboard?.trabajos_recientes && dashboard.trabajos_recientes.length > 0 ? (
-                    dashboard.trabajos_recientes.slice(0, 5).map((t) => (
-                      <div key={t.id} className="flex items-center justify-between py-2.5 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 font-mono text-[10px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                            #{t.id}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-bold text-slate-900 dark:text-white">
-                                {isMechanic ? (t.resumen || "Sin detalle técnico") : t.patente}
-                              </p>
-                              <StatusBadge status={t.estado} />
-                            </div>
-                            <p className="text-xs text-slate-500">
-                              {isMechanic ? `${t.patente} • ${t.vehiculo}` : `${t.cliente_nombre} • ${t.vehiculo}`}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          {canSeeFinance && <p className="font-mono font-bold text-slate-900 dark:text-white">{formatCurrency(t.total)}</p>}
-                          <p className="text-[10px] text-slate-400">{formatDateTime(t.fecha_ingreso)}</p>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-center text-sm text-slate-500 py-6">No hay trabajos recientes.</p>
+              <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800" aria-live="polite">
+                <header className="mb-4 flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">{tituloDetalle[activo.id]}</h2>
+                  {linkDetalle[activo.id] && (
+                    <Link href={linkDetalle[activo.id]!.href} className="shrink-0 text-xs font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400">
+                      {linkDetalle[activo.id]!.texto} →
+                    </Link>
                   )}
-                </div>
-                <div className="border-t border-slate-100 pt-3 text-center dark:border-slate-800">
-                  <Link href="/trabajos" className="text-xs font-bold uppercase tracking-widest text-brand-600 hover:text-brand-700 dark:text-brand-400">
-                    Ver todo el historial →
-                  </Link>
-                </div>
-              </SectionCard>
+                </header>
+                <div key={activo.id} className="motion-safe:animate-[aparecer_180ms_ease-out]">{detalle(activo.id)}</div>
+              </section>
             </div>
+          )}
 
-            {/* 4. AGENDA Y ALERTAS (Columna Lateral) */}
-            <div className="order-2 flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-1">
-
-              {!loading && !isAccountant && avisos.length > 0 && (
-                <SectionCard
-                  compact
-                  title="Recordatorios para enviar"
-                  description="Elegí uno y abrí WhatsApp con el mensaje listo."
-                  action={<span className="rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-black text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">{avisos.length}</span>}
-                >
-                  <div className="space-y-2">
-                    {avisos.slice(0, 5).map((aviso, index) => {
-                      const telefono = aviso.telefono?.replace(/\D/g, "");
-                      const waHref = telefono ? `https://wa.me/${telefono}?text=${encodeURIComponent(aviso.mensaje)}` : null;
-                      return (
-                        <div key={`${aviso.tipo}-${aviso.href}-${index}`} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-xs font-black text-slate-900 dark:text-white">{aviso.titulo}</p>
-                              <p className="mt-0.5 truncate text-[11px] text-slate-500">{aviso.detalle}</p>
-                            </div>
-                            <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase", aviso.prioridad === "ALTA" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300" : "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300")}>{aviso.prioridad}</span>
-                          </div>
-                          <div className="mt-2 flex gap-3 text-[11px] font-bold">
-                            <Link href={aviso.href} className="text-brand-600 hover:text-brand-700 dark:text-brand-300">Ver ficha</Link>
-                            {waHref && <a href={waHref} target="_blank" rel="noreferrer" className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-300">WhatsApp →</a>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </SectionCard>
-              )}
-              
-              {/* Alertas de Service */}
-              {!loading && alertasOrdenadas.length > 0 && (
-                <SectionCard
-                  compact
-                  title="Alertas de Mantenimiento"
-                  description="De mayor a menor prioridad."
-                  action={
-                    <RailControls
-                      count={`${alertasOrdenadas.length} avisos`}
-                      onPrevious={() => moveRail(alertasRailRef.current, -1)}
-                      onNext={() => moveRail(alertasRailRef.current, 1)}
-                    />
-                  }
-                >
-                  <div ref={alertasRailRef} className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {alertasOrdenadas.map((alerta) => {
-                      const vencido = alerta.status === "VENCIDO";
-                      const prioridad = vencido ? "Urgente" : alerta.diferencia_km <= 500 ? "Alta" : "Media";
-                      return <div key={alerta.vehiculo_id} className={cn(
-                        "min-w-[270px] snap-start rounded-xl border p-4",
-                        vencido
-                          ? "border-red-200 bg-red-50/60 dark:border-red-900/40 dark:bg-red-950/20"
-                          : "border-amber-100 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-900/10",
-                      )}>
-                        <div className="flex items-center justify-between">
-                          <span className={cn(
-                            "text-[9px] font-black uppercase tracking-widest",
-                            vencido ? "text-red-600 dark:text-red-400" : "text-amber-700 dark:text-amber-400",
-                          )}>{prioridad} · {alerta.status}</span>
-                          <span className={cn("font-mono text-[10px] font-bold", vencido ? "text-red-500" : "text-amber-600")}>
-                            {Math.abs(alerta.diferencia_km)} km
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{alerta.patente} - {alerta.cliente_nombre}</p>
-                        <p className="text-xs text-slate-500">Service sugerido: {formatNumber(alerta.proximo_service_km)} km</p>
-                      </div>;
-                    })}
-                  </div>
-                </SectionCard>
-              )}
-
-              {/* Agenda Inmediata */}
-              {!isAccountant && <SectionCard
-                compact
-                title="Próximos Turnos"
-                description="Primero, los más cercanos."
-                action={turnosOrdenados.length > 0 ? (
-                  <RailControls
-                    count={`${turnosOrdenados.length} próximos`}
-                    onPrevious={() => moveRail(turnosRailRef.current, -1)}
-                    onNext={() => moveRail(turnosRailRef.current, 1)}
-                  />
-                ) : null}
-              >
-                <div>
-                  {loading ? (
-                     <div className="h-24 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800"></div>
-                  ) : turnosOrdenados.length > 0 ? (
-                    <div ref={turnosRailRef} className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {turnosOrdenados.map((turno, index) => (
-                      <div key={turno.id} className="group relative min-w-[270px] snap-start rounded-xl border border-slate-200 p-4 transition-all hover:border-brand-500 dark:border-slate-700">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-bold text-brand-600 dark:text-brand-400">{formatDateTime(turno.fecha_hora)}</p>
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                            {index === 0 ? "Siguiente" : turno.estado}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm font-bold text-slate-900 dark:text-white">{turno.cliente_nombre}</p>
-                        <p className="text-xs text-slate-500">{turno.vehiculo}</p>
-                        <p className="mt-2 truncate text-[10px] font-semibold text-slate-600 dark:text-slate-300">{turno.motivo}</p>
-                      </div>
-                    ))}
-                    </div>
-                  ) : (
-                    <p className="py-5 text-center text-xs text-slate-400">Sin turnos programados.</p>
-                  )}
-                </div>
-              </SectionCard>}
-
-            </div>
-          </div>
+          {ventana && (
+            <Ventana titulo={tituloDetalle[ventana]} link={linkDetalle[ventana]} onCerrar={cerrarVentana}>
+              {detalle(ventana)}
+            </Ventana>
+          )}
         </div>
       )}
     </AppShell>
   );
 }
 
-function MetricCard({ title, value, loading, highlight = "text-slate-900 dark:text-white" }: { title: string, value: string | undefined, loading: boolean, highlight?: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-800">
-      <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{title}</p>
-      {loading ? (
-        <div className="mt-1 h-6 w-20 animate-pulse rounded bg-slate-100 dark:bg-slate-700"></div>
-      ) : (
-        <p className={cn("mt-0.5 font-mono text-xl font-black tracking-tight", highlight)}>{value}</p>
-      )}
-    </div>
-  );
+// ─── Abanico ────────────────────────────────────────────────────────────────
+
+type Pliegue = { id: PliegueId; nombre: string; valor: string; detalle: string };
+
+/**
+ * Un color por tema. En reposo el pliegue es blanco y sólo el nombre lleva
+ * su color (así el abanico no compite con el contenido); el elegido se pinta
+ * entero (600, con texto blanco).
+ */
+const TONO: Record<PliegueId, { reposo: string; activo: string; texto: string }> = {
+  todo: {
+    reposo: "fill-white stroke-slate-200 group-hover:fill-slate-50 dark:fill-slate-800 dark:stroke-slate-700 dark:group-hover:fill-slate-700/60",
+    activo: "fill-brand-600 stroke-brand-600",
+    texto: "fill-brand-700 dark:fill-brand-300",
+  },
+  taller: {
+    reposo: "fill-white stroke-slate-200 group-hover:fill-slate-50 dark:fill-slate-800 dark:stroke-slate-700 dark:group-hover:fill-slate-700/60",
+    activo: "fill-sky-600 stroke-sky-600",
+    texto: "fill-sky-700 dark:fill-sky-300",
+  },
+  turnos: {
+    reposo: "fill-white stroke-slate-200 group-hover:fill-slate-50 dark:fill-slate-800 dark:stroke-slate-700 dark:group-hover:fill-slate-700/60",
+    activo: "fill-violet-600 stroke-violet-600",
+    texto: "fill-violet-700 dark:fill-violet-300",
+  },
+  avisos: {
+    reposo: "fill-white stroke-slate-200 group-hover:fill-slate-50 dark:fill-slate-800 dark:stroke-slate-700 dark:group-hover:fill-slate-700/60",
+    activo: "fill-emerald-600 stroke-emerald-600",
+    texto: "fill-emerald-700 dark:fill-emerald-300",
+  },
+  cobros: {
+    reposo: "fill-white stroke-slate-200 group-hover:fill-slate-50 dark:fill-slate-800 dark:stroke-slate-700 dark:group-hover:fill-slate-700/60",
+    activo: "fill-amber-600 stroke-amber-600",
+    texto: "fill-amber-700 dark:fill-amber-300",
+  },
+  clientes: {
+    reposo: "fill-white stroke-slate-200 group-hover:fill-slate-50 dark:fill-slate-800 dark:stroke-slate-700 dark:group-hover:fill-slate-700/60",
+    activo: "fill-rose-600 stroke-rose-600",
+    texto: "fill-rose-700 dark:fill-rose-300",
+  },
+};
+
+/** "$ 180.500" -> "$180k": entra en el pliegue sin achicar la letra. */
+function formatCompacto(monto: number): string {
+  if (monto >= 1_000_000) return `$${(monto / 1_000_000).toLocaleString("es-AR", { maximumFractionDigits: 1 })}M`;
+  if (monto >= 10_000) return `$${Math.round(monto / 1000)}k`;
+  return formatCurrency(monto);
 }
 
-function RailControls({
-  count,
-  onPrevious,
-  onNext,
-}: {
-  count: string;
-  onPrevious: () => void;
-  onNext: () => void;
+/**
+ * Abanico partido en pliegues; cada pliegue es un botón (con teclado: flechas
+ * para moverse, Enter/Espacio para abrir). En pantallas anchas se dibuja
+ * achatado y a lo ancho; en el celular, como semicírculo. El elegido se pinta
+ * con el color de marca y se separa apenas del centro.
+ */
+function Abanico(props: {
+  pliegues: Pliegue[];
+  activo: PliegueId;
+  onElegir: (id: PliegueId) => void;
+  loading: boolean;
+  centro: { dia: string; semana: string };
 }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="mr-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">
-        {count}
-      </span>
-      <button
-        type="button"
-        onClick={onPrevious}
-        aria-label="Ver anteriores"
-        title="Ver anteriores"
-        className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-black text-slate-500 transition hover:border-brand-400 hover:text-brand-600 active:scale-95 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-      >
-        ←
-      </button>
-      <button
-        type="button"
-        onClick={onNext}
-        aria-label="Ver siguientes"
-        title="Ver siguientes"
-        className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-black text-slate-500 transition hover:border-brand-400 hover:text-brand-600 active:scale-95 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-      >
-        →
-      </button>
-    </div>
-  );
-}
-
-function RoleActionCard({
-  href,
-  title,
-  description,
-  tone,
-}: {
-  href: string;
-  title: string;
-  description: string;
-  tone: "amber" | "slate";
-}) {
-  const styles = tone === "amber"
-    ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-white"
-    : "border-slate-200 bg-slate-50 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white";
-
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "group relative flex items-center gap-3 overflow-hidden rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-md",
-        styles,
-      )}
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/70 text-base font-black shadow-sm dark:bg-slate-950/30">
-        →
+    <>
+      {/* En pantallas anchas va acostado en la columna izquierda: el lado
+          plano contra el borde y los pliegues abriéndose hacia el detalle. */}
+      <div className="hidden lg:block">
+        <AbanicoSvg {...props} acostado ancho={300} alto={556} Rx={278} Ry={262} rx={88} ry={92} letra={1.05} />
       </div>
-      <div><h3 className="text-sm font-black tracking-tight">{title}</h3>
-      <p className="mt-0.5 text-xs font-medium opacity-65">{description}</p></div>
-    </Link>
+      <div className="mx-auto max-w-md lg:hidden">
+        <AbanicoSvg {...props} ancho={400} alto={212} Rx={190} Ry={190} rx={66} ry={66} letra={1} />
+      </div>
+    </>
+  );
+}
+
+function AbanicoSvg({
+  pliegues,
+  activo,
+  onElegir,
+  loading,
+  centro,
+  ancho,
+  alto,
+  Rx,
+  Ry,
+  rx,
+  ry,
+  letra,
+  acostado = false,
+}: {
+  pliegues: Pliegue[];
+  activo: PliegueId;
+  onElegir: (id: PliegueId) => void;
+  loading: boolean;
+  centro: { dia: string; semana: string };
+  ancho: number;
+  alto: number;
+  Rx: number;
+  Ry: number;
+  rx: number;
+  ry: number;
+  letra: number;
+  acostado?: boolean;
+}) {
+  // Acostado: centro contra el borde izquierdo y el abanico abre hacia la
+  // derecha (de -90° a 90°). Parado: centro abajo, abre hacia arriba.
+  const cx = acostado ? 8 : ancho / 2, cy = acostado ? alto / 2 : alto - 10, sep = 0.012;
+  const inicio = acostado ? -Math.PI / 2 : Math.PI;
+  const n = pliegues.length;
+  const punto = (ang: number, ex: number, ey: number) => [cx + ex * Math.cos(ang), cy + ey * Math.sin(ang)];
+  const chico = n > 5 && letra === 1;
+  const f = (px: number) => `${Math.round(px * letra * (chico ? 0.88 : 1))}px`;
+
+  function mover(e: KeyboardEvent<SVGGElement>, i: number) {
+    const paso = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (paso) {
+      e.preventDefault();
+      const sig = pliegues[(i + paso + n) % n];
+      onElegir(sig.id);
+      (e.currentTarget.parentElement?.querySelector(`[data-pliegue="${sig.id}"]`) as SVGGElement | null)?.focus();
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onElegir(pliegues[i].id);
+    }
+  }
+
+  return (
+    <svg viewBox={`0 0 ${ancho} ${alto}`} className="w-full select-none" role="tablist" aria-label="Qué querés ver">
+      {pliegues.map((p, i) => {
+        const a0 = inicio + (i * Math.PI) / n + sep;
+        const a1 = inicio + ((i + 1) * Math.PI) / n - sep;
+        const medio = (a0 + a1) / 2;
+        const esActivo = p.id === activo;
+        const dx = esActivo ? 8 * letra * Math.cos(medio) : 0;
+        const dy = esActivo ? 8 * letra * Math.sin(medio) : 0;
+        const [x0, y0] = punto(a0, Rx, Ry), [x1, y1] = punto(a1, Rx, Ry), [x2, y2] = punto(a1, rx, ry), [x3, y3] = punto(a0, rx, ry);
+        const [tx, ty] = punto(medio, (Rx + rx) / 2 + 4, (Ry + ry) / 2 + 4);
+        const sinValor = !p.valor;
+        return (
+          <g
+            key={p.id}
+            data-pliegue={p.id}
+            role="tab"
+            aria-selected={esActivo}
+            aria-label={sinValor ? `${p.nombre}: ${p.detalle}` : `${p.nombre}: ${p.valor} ${p.detalle}`}
+            tabIndex={esActivo ? 0 : -1}
+            onClick={() => onElegir(p.id)}
+            onKeyDown={(e) => mover(e, i)}
+            transform={`translate(${dx} ${dy})`}
+            className="group cursor-pointer outline-none transition-transform duration-200"
+          >
+            <path
+              d={`M${x0} ${y0} A${Rx} ${Ry} 0 0 1 ${x1} ${y1} L${x2} ${y2} A${rx} ${ry} 0 0 0 ${x3} ${y3}Z`}
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+              className={cn(
+                "transition-colors duration-200",
+                esActivo ? TONO[p.id].activo : cn(TONO[p.id].reposo, "group-focus-visible:stroke-slate-900 dark:group-focus-visible:stroke-white"),
+              )}
+            />
+            {sinValor ? (
+              <>
+                <text x={tx} y={ty + 2} textAnchor="middle" style={{ fontSize: f(32), fontStretch: "72%", letterSpacing: "0" }} className={cn("font-extrabold uppercase", esActivo ? "fill-white" : TONO[p.id].texto)}>{p.nombre}</text>
+                <text x={tx} y={ty + 18 * letra} textAnchor="middle" style={{ fontSize: f(10.5) }} className={cn("font-medium", esActivo ? "fill-white/85" : "fill-slate-500 dark:fill-slate-400")}>{p.detalle}</text>
+              </>
+            ) : (
+              <>
+                <text x={tx} y={ty - 20 * letra} textAnchor="middle" style={{ fontSize: f(12), fontStretch: "80%", letterSpacing: "0.08em" }} className={cn("font-bold uppercase", esActivo ? "fill-white/90" : TONO[p.id].texto)}>{p.nombre}</text>
+                <text x={tx} y={ty + 12 * letra} textAnchor="middle" style={{ fontSize: f(34), fontStretch: "72%", letterSpacing: "-0.01em" }} className={cn("font-extrabold tabular-nums", esActivo ? "fill-white" : "fill-slate-900 dark:fill-white")}>{loading ? "·" : p.valor}</text>
+                <text x={tx} y={ty + 28 * letra} textAnchor="middle" style={{ fontSize: f(10.5) }} className={cn("font-medium", esActivo ? "fill-white/85" : "fill-slate-500 dark:fill-slate-400")}>{p.detalle}</text>
+              </>
+            )}
+          </g>
+        );
+      })}
+      <ellipse cx={cx} cy={cy} rx={rx - 10} ry={ry - 10} className="fill-white stroke-slate-200 dark:fill-slate-800 dark:stroke-slate-700" strokeWidth={1.5} />
+      {(() => {
+        // Centro visual de la media elipse (no el de la elipse entera).
+        const x = acostado ? cx + (rx - 10) * 0.46 : cx;
+        const y = acostado ? cy : cy - (ry - 10) * 0.42;
+        return (
+          <>
+            <text x={x} y={y + 9 * letra} textAnchor="middle" style={{ fontSize: f(40), fontStretch: "72%" }} className="fill-slate-900 font-extrabold tabular-nums dark:fill-white">{centro.dia}</text>
+            <text x={x} y={y + 24 * letra} textAnchor="middle" style={{ fontSize: f(10.5), letterSpacing: "0.08em" }} className="fill-brand-600 font-bold uppercase dark:fill-brand-400">{centro.semana}</text>
+          </>
+        );
+      })()}
+    </svg>
+  );
+}
+
+/**
+ * Atajos secundarios del encabezado unidos en un solo grupo (en vez de tres
+ * botones sueltos), con un "+" que dice que crean algo nuevo.
+ */
+function GrupoAtajos({ atajos }: { atajos: (false | { href: string; texto: string })[] }) {
+  const visibles = atajos.filter(Boolean) as { href: string; texto: string }[];
+  if (!visibles.length) return null;
+  return (
+    <div className="mr-1 hidden h-9 items-stretch overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:inline-flex" role="group" aria-label="Crear">
+      {visibles.map((a, i) => (
+        <Link
+          key={a.href}
+          href={a.href}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-700",
+            i > 0 && "border-l border-slate-200 dark:border-slate-700",
+          )}
+        >
+          <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" /></svg>
+          {a.texto}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+/** Tarjeta-botón: número, dos líneas de adelanto y la lista entera en una ventana. */
+function TarjetaVentana({
+  titulo,
+  valor,
+  unidad,
+  loading,
+  vacio,
+  adelanto,
+  onAbrir,
+}: {
+  titulo: string;
+  valor: number;
+  unidad: string;
+  loading: boolean;
+  vacio: string;
+  adelanto: { clave: string; principal: string; secundario: string }[];
+  onAbrir: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      aria-haspopup="dialog"
+      className="group flex min-h-40 flex-col rounded-xl border border-slate-200 p-4 text-left transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:border-slate-600 dark:hover:bg-slate-700/30"
+    >
+      <span className="text-sm font-semibold text-slate-900 dark:text-white">{titulo}</span>
+      <span className="mt-1 flex items-baseline gap-1.5">
+        <span className="font-display text-4xl font-extrabold leading-none tabular-nums text-slate-900 dark:text-white">{loading ? "·" : valor}</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">{unidad}</span>
+      </span>
+      <span className="mt-3 block flex-1 space-y-1.5">
+        {!loading && adelanto.length === 0 && <span className="block text-xs text-slate-500 dark:text-slate-400">{vacio}</span>}
+        {adelanto.map((item) => (
+          <span key={item.clave} className="block min-w-0">
+            <span className="block truncate text-xs font-semibold text-slate-700 dark:text-slate-200">{item.principal}</span>
+            <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">{item.secundario}</span>
+          </span>
+        ))}
+      </span>
+      {valor > 0 && (
+        <span className="mt-3 text-xs font-bold text-brand-600 group-hover:text-brand-700 dark:text-brand-400">
+          {valor > adelanto.length ? `Ver los ${valor}` : "Abrir"} →
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** Ventana emergente: se cierra con Escape, con la X o tocando afuera. */
+function Ventana({
+  titulo,
+  link,
+  onCerrar,
+  children,
+}: {
+  titulo: string;
+  link: { href: string; texto: string } | null;
+  onCerrar: () => void;
+  children: ReactNode;
+}) {
+  const cerrarRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    cerrarRef.current?.focus();
+    const alTeclear = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") onCerrar(); };
+    document.addEventListener("keydown", alTeclear);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", alTeclear);
+      document.body.style.overflow = overflow;
+    };
+  }, [onCerrar]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={titulo}>
+      <button type="button" aria-label="Cerrar" tabIndex={-1} className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]" onClick={onCerrar} />
+      <div className="relative flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl motion-safe:animate-[aparecer_160ms_ease-out] dark:bg-slate-800 sm:rounded-2xl">
+        <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-700">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">{titulo}</h2>
+          <div className="flex items-center gap-3">
+            {link && <Link href={link.href} className="text-xs font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400">{link.texto} →</Link>}
+            <button ref={cerrarRef} type="button" onClick={onCerrar} aria-label="Cerrar" className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </header>
+        <div className="overflow-y-auto px-5 py-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Cifra de plata dentro del detalle (sin tarjeta propia). */
+function Cifra({ loading, label, value, detail }: { loading: boolean; label: string; value: string; detail?: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+      {loading ? <div className="mt-1.5 h-7 w-28 animate-pulse rounded bg-slate-100 dark:bg-slate-700" /> : <p className="mt-1 font-display text-4xl font-extrabold leading-none tracking-tight tabular-nums text-slate-900 dark:text-white">{value}</p>}
+      {detail && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{detail}</p>}
+    </div>
+  );
+}
+
+// ─── 1. En el taller ahora ──────────────────────────────────────────────────
+
+function EtapasDelTaller({
+  loading,
+  total,
+  etapas,
+  canCreateOrders,
+}: {
+  loading: boolean;
+  total: number;
+  etapas: { estado: EstadoTrabajo; ayuda: string; color: string; cantidad: number }[];
+  canCreateOrders: boolean;
+}) {
+  return (
+    <div>
+      <div className="grid gap-5 xl:grid-cols-[auto_minmax(0,1fr)] xl:items-center xl:gap-8">
+        <div>
+          {loading ? (
+            <div className="mt-2 h-14 w-24 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-700" />
+          ) : (
+            <p className="mt-1 font-display text-7xl font-extrabold leading-none text-slate-900 dark:text-white">{total}</p>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          {!loading && total === 0 ? (
+            <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600 dark:border-slate-600 dark:text-slate-300 sm:flex-row sm:items-center sm:justify-between">
+              <span>No hay autos en el taller en este momento.</span>
+              {canCreateOrders && (
+                <Link href="/trabajos/nuevo" className="text-xs font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400">Registrar un ingreso →</Link>
+              )}
+            </div>
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-3">
+              {etapas.map((etapa) => (
+                <li key={etapa.estado}>
+                  <Link
+                    href={`/trabajos?estado=${etapa.estado}`}
+                    className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:border-slate-600 dark:hover:bg-slate-700/40"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold leading-tight text-slate-800 dark:text-slate-100">{ESTADO_TRABAJO_LABEL[etapa.estado]}</span>
+                        {loading ? (
+                          <span className="h-5 w-6 animate-pulse rounded bg-slate-100 dark:bg-slate-700" />
+                        ) : (
+                          <span className="font-display text-3xl font-extrabold leading-none text-slate-900 dark:text-white">{etapa.cantidad}</span>
+                        )}
+                      </span>
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">{etapa.ayuda}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 2. Indicadores de plata ────────────────────────────────────────────────
+
+// ─── Gráfico de cobros ──────────────────────────────────────────────────────
+
+/**
+ * Una sola serie a lo largo del tiempo: columnas finas (≤24px, punta
+ * redondeada y base recta), el mes en curso en el color de marca y el resto en
+ * gris (énfasis, no categorías). Sólo se rotula el mes en curso; el resto se
+ * lee pasando el mouse o con el teclado, y está completo en la tabla oculta
+ * para lectores de pantalla.
+ */
+function IngresosChart({ loading, meses }: { loading: boolean; meses: IngresoMensual[] }) {
+  const [activo, setActivo] = useState<number | null>(null);
+
+  if (loading) return <div className="h-56 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-700/50" />;
+  if (!meses.length || meses.every((m) => m.total === 0)) {
+    return (
+      <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 text-center dark:border-slate-600">
+        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Todavía no hay cobros para graficar.</p>
+        <p className="mt-1 text-xs text-slate-500">Se completa solo a medida que registres cobros en caja.</p>
+      </div>
+    );
+  }
+
+  const maximo = Math.max(...meses.map((m) => m.total), 1);
+  const ultimo = meses.length - 1;
+  const etiquetaCobros = (n: number) => `${n} ${n === 1 ? "cobro" : "cobros"}`;
+
+  return (
+    <div>
+      <div className="relative">
+        {/* Grilla: línea base y media, sólidas y finas */}
+        <div className="pointer-events-none absolute inset-x-0 top-8 bottom-6 flex flex-col justify-between" aria-hidden="true">
+          <div className="border-t border-slate-100 dark:border-slate-700/60" />
+          <div className="border-t border-slate-200 dark:border-slate-700" />
+        </div>
+
+        <div className="relative grid h-56 grid-cols-6 gap-2" onMouseLeave={() => setActivo(null)}>
+          {meses.map((mes, index) => {
+            const esActual = index === ultimo;
+            const alto = (mes.total / maximo) * 100;
+            const mostrarValor = esActual || activo === index;
+            return (
+              <button
+                key={mes.month}
+                type="button"
+                onMouseEnter={() => setActivo(index)}
+                onFocus={() => setActivo(index)}
+                onBlur={() => setActivo(null)}
+                aria-label={`${mes.label}: ${formatCurrency(mes.total)}, ${etiquetaCobros(mes.trabajos)}`}
+                className="group flex h-full flex-col items-center justify-end rounded-lg pb-6 pt-8 outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                <div className="relative flex w-full flex-1 items-end justify-center">
+                  {mostrarValor && (
+                    <div
+                      className="pointer-events-none absolute z-10 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2 py-1 text-center shadow-sm dark:border-slate-600 dark:bg-slate-900"
+                      style={{ bottom: `calc(${alto}% + 6px)` }}
+                    >
+                      <span className="block text-xs font-semibold text-slate-900 dark:text-white">{formatCurrency(mes.total)}</span>
+                      {activo === index && <span className="block text-[10px] text-slate-500 dark:text-slate-400">{etiquetaCobros(mes.trabajos)}</span>}
+                    </div>
+                  )}
+                  {mes.total > 0 && (
+                    <div
+                      className={cn(
+                        "w-full max-w-6 rounded-t motion-safe:transition-[height,filter] motion-safe:duration-500",
+                        esActual ? "bg-brand-500" : "bg-slate-300 dark:bg-slate-600",
+                        activo === index && "brightness-110",
+                      )}
+                      style={{ height: `${Math.max(alto, 2)}%` }}
+                    />
+                  )}
+                </div>
+                <span className={cn("absolute bottom-0 text-xs", esActual ? "font-bold text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400")}>
+                  {mes.label.split(" ")[0]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <table className="sr-only">
+        <caption>Cobros de los últimos 6 meses</caption>
+        <thead><tr><th scope="col">Mes</th><th scope="col">Total cobrado</th><th scope="col">Cobros</th></tr></thead>
+        <tbody>
+          {meses.map((mes) => (
+            <tr key={mes.month}><th scope="row">{mes.label}</th><td>{formatCurrency(mes.total)}</td><td>{mes.trabajos}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Listas ─────────────────────────────────────────────────────────────────
+
+function OrdenesRecientes({
+  loading,
+  dashboard,
+  isMechanic,
+  canSeeFinance,
+}: {
+  loading: boolean;
+  dashboard: DashboardStats | null;
+  isMechanic: boolean;
+  canSeeFinance: boolean;
+}) {
+  if (loading) return <div className="h-48 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-700/50" />;
+  const ordenes = dashboard?.trabajos_recientes ?? [];
+  if (!ordenes.length) return <p className="py-6 text-center text-sm text-slate-500">Todavía no hay órdenes.</p>;
+
+  return (
+    <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
+      {ordenes.slice(0, 5).map((t) => (
+        <li key={t.id}>
+          <Link href={`/trabajos/${t.id}`} className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/40">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="truncate font-semibold text-slate-900 dark:text-white">{isMechanic ? (t.resumen || "Sin detalle técnico") : t.patente}</p>
+                <StatusBadge status={t.estado} />
+              </div>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                {isMechanic ? `${t.patente} · ${t.vehiculo}` : `${t.cliente_nombre} · ${t.vehiculo}`}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              {canSeeFinance && <p className="font-semibold tabular-nums text-slate-900 dark:text-white">{formatCurrency(t.total)}</p>}
+              <p className="text-xs text-slate-500 dark:text-slate-400">{numeroOrden(t.id)} · {formatDate(t.fecha_ingreso)}</p>
+            </div>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function diaRelativo(fecha: Date): string {
+  const hoy = new Date();
+  const inicio = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dias = Math.round((inicio(fecha) - inicio(hoy)) / 86_400_000);
+  if (dias === 0) return "Hoy";
+  if (dias === 1) return "Mañana";
+  return new Intl.DateTimeFormat("es-AR", { weekday: "short", day: "numeric", month: "short" }).format(fecha);
+}
+
+function ProximosTurnos({ loading, turnos }: { loading: boolean; turnos: TurnoProximo[] }) {
+  if (loading) return <div className="h-32 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-700/50" />;
+  if (!turnos.length) return <p className="py-4 text-center text-sm text-slate-500">No hay turnos programados.</p>;
+
+  return (
+    <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
+      {turnos.map((turno) => {
+        const fecha = new Date(turno.fecha_hora);
+        return (
+          <li key={turno.id} className="flex gap-3 py-2.5">
+            <div className="w-16 shrink-0">
+              <p className="text-xs font-bold capitalize text-slate-900 dark:text-white">{diaRelativo(fecha)}</p>
+              <p className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                {fecha.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{turno.cliente_nombre}</p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">{turno.vehiculo} · {turno.motivo}</p>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Recordatorio({ aviso }: { aviso: Aviso }) {
+  // buildWhatsAppUrl normaliza el número (agrega el 549): el panel armaba
+  // wa.me/3425551020, que WhatsApp toma como número internacional inválido.
+  const waHref = buildWhatsAppUrl(aviso.mensaje, aviso.telefono);
+  return (
+    <li className="flex items-center justify-between gap-3 py-2.5">
+      <Link href={aviso.href} className="min-w-0 flex-1 rounded-md hover:underline">
+        <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+          {aviso.prioridad === "ALTA" && (
+            <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950/40 dark:text-red-300">Urgente</span>
+          )}
+          <span className="leading-tight">{aviso.titulo}</span>
+        </p>
+        <p className="truncate text-xs text-slate-500 dark:text-slate-400">{aviso.detalle}</p>
+      </Link>
+      {waHref ? (
+        <a
+          href={waHref}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 rounded-lg bg-[#25D366] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-[#1ebe5d]"
+        >
+          WhatsApp
+        </a>
+      ) : (
+        <span className="shrink-0 text-[11px] text-slate-400" title="Cargá un celular válido en la ficha del cliente">Sin celular</span>
+      )}
+    </li>
   );
 }

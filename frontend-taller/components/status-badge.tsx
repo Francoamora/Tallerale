@@ -1,11 +1,8 @@
 import { cn } from "@/lib/utils";
+import { ESTADO_TRABAJO_LABEL } from "@/lib/documentos";
 
 const STATUS_LABELS: Record<string, string> = {
-  INGRESADO: "Ingresado",
-  EN_PROCESO: "En proceso",
-  FINALIZADO: "Finalizado",
-  ENTREGADO: "Entregado",
-  ANULADO: "Anulado",
+  ...ESTADO_TRABAJO_LABEL,
   PENDIENTE: "Pendiente",
   CONFIRMADO: "Confirmado",
   CANCELADO: "Cancelado",
@@ -24,7 +21,8 @@ const STATUS_STYLES: Record<string, string> = {
   INGRESADO: "bg-sky-100 text-sky-700 ring-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:ring-sky-800",
   EN_PROCESO: "bg-amber-100 text-amber-700 ring-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-800",
   FINALIZADO: "bg-emerald-100 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800",
-  ENTREGADO: "bg-emerald-100 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800",
+  // Entregado es una orden cerrada: gris, para no confundirse con "Listo para retirar".
+  ENTREGADO: "bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700",
   ANULADO: "bg-rose-100 text-rose-700 ring-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:ring-rose-800",
   PENDIENTE: "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700",
   CONFIRMADO: "bg-indigo-100 text-indigo-700 ring-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:ring-indigo-800",
@@ -50,7 +48,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-widest ring-1 ring-inset transition-colors duration-200",
+        "inline-flex items-center whitespace-nowrap rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-widest ring-1 ring-inset transition-colors duration-200",
         style
       )}
     >

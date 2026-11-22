@@ -26,24 +26,6 @@ def logo_taller_upload_to(instance, filename):
     return f"taller/logos/{instance.user_id}/{uuid.uuid4().hex}{extension}"
 
 # ========================
-#    SISTEMA (SAAS / NUEVO)
-# ========================
-
-class ConfiguracionTaller(models.Model):
-    owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="configuracion_taller")
-    nombre_taller = models.CharField(max_length=150)
-    logo = models.ImageField(upload_to="taller/logos/", null=True, blank=True)
-    moneda = models.CharField(max_length=5, default="$")
-    prefijo_nro_trabajo = models.CharField(max_length=5, default="OT")
-
-    class Meta:
-        verbose_name = "Configuración del Taller"
-        verbose_name_plural = "Configuraciones del Taller"
-
-    def __str__(self):
-        return self.nombre_taller
-
-# ========================
 #    CLIENTES
 # ========================
 
@@ -335,7 +317,7 @@ class Turno(models.Model):
     creado_en = models.DateTimeField(auto_now_add=True)
 
 # ========================
-#    PRESUPUESTOS (¡ARREGLADO!)
+#    PRESUPUESTOS
 # ========================
 
 class Presupuesto(models.Model):
@@ -349,13 +331,15 @@ class Presupuesto(models.Model):
     portal_activo = models.BooleanField(default=True)
     portal_expires_at = models.DateTimeField(default=_portal_expiry_default, db_index=True)
 
-    # ---> CAMPOS LEGACY (Mantenidos para que no explote forms.py ni el admin viejo)
+    # Campos de la app monolítica original: ya nada los lee ni los escribe
+    # (ni la API, ni el admin, ni el frontend). Se conservan sólo porque
+    # tienen datos históricos; pendiente migrarlos y eliminarlos.
     tipo = models.CharField(max_length=15, choices=TIPO_CHOICES, default="DETALLADO")
     fecha = models.DateTimeField(default=timezone.now)
     titulo = models.CharField(max_length=160, default="Presupuesto")
     resumen = models.TextField(blank=True)
 
-    # ---> CAMPOS NUEVOS (Usados por nuestra nueva API en Next.js)
+    # Campos vigentes
     fecha_creacion = models.DateTimeField(default=timezone.now)
     valido_hasta = models.DateField(null=True, blank=True)
     estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default="BORRADOR")
@@ -499,6 +483,27 @@ class PerfilTaller(models.Model):
     taller_tel = models.CharField(max_length=50, blank=True)
     taller_cuit = models.CharField("CUIT", max_length=20, blank=True)
     logo = models.ImageField(upload_to=logo_taller_upload_to, null=True, blank=True)
+
+    # Datos fiscales: los usa el contador para facturar en ARCA y salen en
+    # los comprobantes. Todos opcionales; el taller los completa cuando puede.
+    CONDICION_IVA_CHOICES = [
+        ("MONOTRIBUTO", "Monotributo"),
+        ("RESPONSABLE_INSCRIPTO", "Responsable inscripto"),
+        ("EXENTO", "IVA exento"),
+    ]
+    razon_social = models.CharField("Razón social", max_length=150, blank=True)
+    condicion_iva = models.CharField("Condición frente al IVA", max_length=30, choices=CONDICION_IVA_CHOICES, blank=True)
+    domicilio_fiscal = models.CharField("Domicilio fiscal", max_length=200, blank=True)
+    ingresos_brutos = models.CharField("Ingresos brutos", max_length=30, blank=True)
+    inicio_actividades = models.DateField("Inicio de actividades", null=True, blank=True)
+    taller_email = models.EmailField("Email del taller", blank=True)
+    email_contador = models.EmailField("Email del contador", blank=True)
+    telefono_contador = models.CharField("WhatsApp del contador", max_length=40, blank=True)
+    mostrar_iva = models.BooleanField(
+        "Mostrar el IVA discriminado en los comprobantes",
+        default=False,
+        help_text="Opcional: los totales muestran neto + IVA 21% (los precios se toman con IVA incluido).",
+    )
     trial_start = models.DateTimeField(auto_now_add=True)
     plan_activo_hasta = models.DateTimeField(
         "Plan pago vigente hasta",

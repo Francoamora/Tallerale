@@ -23,7 +23,9 @@ function FormularioTurno() {
   const [vehiculosFiltrados, setVehiculosFiltrados] = useState<Vehiculo[]>([]);
   const [modoCliente, setModoCliente] = useState<"DIRECTORIO" | "EXPRESS">("DIRECTORIO");
 
-  const [fechaHora, setFechaHora] = useState("");
+  // Desde el calendario se llega con el día elegido: arranca a las 9.
+  const fechaPre = searchParams.get("fecha");
+  const [fechaHora, setFechaHora] = useState(() => (fechaPre && /^\d{4}-\d{2}-\d{2}$/.test(fechaPre) ? `${fechaPre}T09:00` : ""));
   const [motivo, setMotivo] = useState("");
   const [notas, setNotas] = useState("");
   const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState("");

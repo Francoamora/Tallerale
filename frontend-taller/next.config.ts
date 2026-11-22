@@ -22,14 +22,13 @@ const nextConfig: NextConfig = {
     "*.ngrok-free.app",
     "192.168.1.*",
     "192.168.0.*",
+    "192.168.18.*",
   ],
 
-  // En desarrollo, liberar enseguida las páginas que no se están usando.
-  // Reduce la memoria retenida al recorrer muchas pantallas del panel.
-  onDemandEntries: {
-    maxInactiveAge: 20 * 1000,
-    pagesBufferLength: 2,
-  },
+  // El desarrollo usa Turbopack (el default de Next 16): con webpack más esta
+  // config de onDemandEntries, cada pantalla tardaba 0,6–1,1 s en compilar y
+  // se descartaba a los 20 s sin uso, así que volver a ella recompilaba. El
+  // build de producción sigue con webpack (ver package.json y DEPLOY.md).
 
   // El reenvío de /api/* al Django local vive en proxy.ts (necesita
   // preservar la barra final exacta, algo que rewrites() de acá no logra).

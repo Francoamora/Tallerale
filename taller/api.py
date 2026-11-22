@@ -2,6 +2,7 @@
 from datetime import date, datetime, timedelta
 import hashlib
 import logging
+import re
 import secrets
 import warnings
 from typing import List, Optional, Tuple
@@ -17,7 +18,7 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.http import Http404
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -26,9 +27,10 @@ from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from PIL import Image, UnidentifiedImageError
 
-from .models import ApiToken, AuditoriaTaller, Cliente, Gasto, InvitacionTaller, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, Producto, RecuperacionContrasena, Taller, Trabajo, TrabajoItem, Turno, Vehiculo
+from .models import _portal_expiry_default, ApiToken, AuditoriaTaller, Cliente, Gasto, InvitacionTaller, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, Producto, RecuperacionContrasena, Taller, Trabajo, TrabajoItem, Turno, Vehiculo
 from .services import (
     crear_trabajo_completo,
+    total_con_descuento,
     obtener_dashboard_snapshot,
     resolver_vehiculo_express_para_usuario,
 )
@@ -190,7 +192,7 @@ class VehiculoSchema(ModelSchema):
 
     class Meta:
         model = Vehiculo
-        fields = ["id", "token", "patente", "marca", "modelo", "anio", "color", "kilometraje_actual", "proximo_service_km"]
+        fields = ["id", "token", "portal_activo", "portal_expires_at", "patente", "marca", "modelo", "anio", "color", "kilometraje_actual", "proximo_service_km"]
 
 
 class ProductoOut(ModelSchema):
@@ -215,13 +217,26 @@ class TrabajoRecienteOut(Schema):
     resumen: str
 
 
+class VehiculoHistorialItemOut(Schema):
+    descripcion: str
+    tipo: str
+    cantidad: float
+    completado: bool
+
+
 class VehiculoHistorialTrabajoOut(Schema):
     id: int
     fecha_ingreso: datetime
+    # Cuándo se terminó (o entregó); None si sigue en el taller.
+    fecha_realizado: Optional[datetime] = None
     estado: str
     resumen: str
     kilometraje: int
     total: float
+    items: List[VehiculoHistorialItemOut] = []
+    responsable_nombre: str = ""
+    recomendaciones_proximo_service: str = ""
+    proximo_control_km: Optional[int] = None
 
 
 class VehiculoHistorialPresupuestoOut(Schema):
@@ -270,6 +285,9 @@ class TurnoOut(Schema):
     cliente_nombre: str
     vehiculo_desc: str
     patente: str
+    cliente_id: Optional[int] = None
+    vehiculo_id: Optional[int] = None
+    cliente_telefono: str = ""
 
 class MovimientoCajaOut(Schema):
     id: str
@@ -278,6 +296,10 @@ class MovimientoCajaOut(Schema):
     concepto: str
     monto: float
     metodo: str
+    cliente_id: Optional[int] = None
+    cliente_nombre: str = ""
+    detalle: str = ""
+    categoria: str = ""
 
 class MovimientoCuentaOut(Schema):
     id: int
@@ -310,11 +332,20 @@ class GastosResumenOut(Schema):
     cantidad_periodo: int
     por_tipo: List[CategoriaGastoResumenOut]
 
+class CajaPorMedioOut(Schema):
+    metodo: str
+    ingresos: float
+    egresos: float
+
+
 class CajaResumenOut(Schema):
     ingresos: float
     egresos: float
     resultado: float
     cantidad_movimientos: int
+    cantidad_ingresos: int = 0
+    cantidad_egresos: int = 0
+    por_medio: List[CajaPorMedioOut] = []
 
 class PresupuestoItemOut(ModelSchema):
     class Meta:
@@ -331,6 +362,9 @@ class PresupuestoOut(Schema):
     cliente_nombre: str
     vehiculo: str
     patente: str
+    # Para el recordatorio por WhatsApp desde la lista.
+    cliente_telefono: str = ""
+    portal_activo: bool = True
 
 class PresupuestoDetalleOut(Schema):
     id: int
@@ -539,9 +573,26 @@ class ItemCompletadoIn(Schema):
     completado: bool
 
 
+class ItemRapidoIn(Schema):
+    """Algo que se hizo y no estaba en la orden, cargado desde el taller."""
+    tipo: str = "MANO_OBRA"
+    descripcion: str
+    cantidad: float = 1
+    precio_unitario: float = 0
+    completado: bool = True
+
+
+class ItemPrecioIn(Schema):
+    precio_unitario: Optional[float] = None
+    cantidad: Optional[float] = None
+
+
 class PortalAccessIn(Schema):
     activo: bool
     regenerar_token: bool = False
+
+class PortalVigenciaOut(Schema):
+    portal_expires_at: datetime
 
 class TurnoIn(Schema):
     fecha_hora: datetime
@@ -580,8 +631,22 @@ class GastoIn(Schema):
     fecha: Optional[date] = None
 
 
+class LineaCompraIn(Schema):
+    tipo: str
+    descripcion: str
+    monto: float
+
+
+class CompraLoteIn(Schema):
+    """Una compra con varias líneas (una factura de repuestos, por ejemplo)."""
+    metodo_pago: str = "EFECTIVO"
+    fecha: Optional[date] = None
+    comprobante: str = ""
+    lineas: List[LineaCompraIn]
+
+
 # ==========================================
-# HELPER SENIOR: RESOLUCIÓN DE ENTIDADES (DRY)
+# RESOLUCIÓN DE CLIENTE/VEHÍCULO (existente o alta express)
 # ==========================================
 
 def _resolver_entidades_express(payload, user=None) -> Tuple[Optional[Cliente], Optional[Vehiculo]]:
@@ -595,10 +660,13 @@ def _resolver_entidades_express(payload, user=None) -> Tuple[Optional[Cliente], 
     vehiculo = None
 
     if getattr(payload, "cliente_express", None):
+        nombre = (payload.cliente_express.nombre or "").strip()
+        if not nombre:
+            raise HttpError(400, "El nombre del cliente es obligatorio.")
         cliente = Cliente.objects.create(
             owner=user,
-            nombre=payload.cliente_express.nombre,
-            telefono=payload.cliente_express.telefono or ""
+            nombre=nombre,
+            telefono=(payload.cliente_express.telefono or "").strip(),
         )
     elif getattr(payload, "cliente_id", None):
         qs = Cliente.objects.filter(pk=payload.cliente_id)
@@ -735,6 +803,17 @@ def _serializar_vehiculo_publico(request, vehiculo: Vehiculo) -> PublicVehiculoO
     )
 
 
+def _primer_nombre(nombre_completo: str) -> str:
+    """Primera palabra del nombre, para el saludo de los mensajes.
+
+    Los clientes cargados antes de que la API validara el nombre pueden tener
+    el campo en blanco: indexar el split directo rompía /avisos entero con un
+    500 para todo el taller.
+    """
+    partes = (nombre_completo or "").split()
+    return partes[0] if partes else "cliente"
+
+
 def _parsear_token_publico(token: str):
     try:
         return UUID(str(token))
@@ -840,7 +919,7 @@ def listar_avisos(request):
     rol = membership.rol if membership else MembresiaTaller.ROL_ADMIN
     puede_gestionar_presupuestos = rol in {MembresiaTaller.ROL_ADMIN, MembresiaTaller.ROL_RECEPCION}
     puede_ver_saldos = rol == MembresiaTaller.ROL_ADMIN
-    for turno in Turno.objects.select_related("cliente", "vehiculo").filter(owner=request.user, fecha_hora__date=manana, estado__in=["PENDIENTE", "CONFIRMADO"]):
+    for turno in Turno.objects.select_related("cliente", "vehiculo").filter(owner=request.user, fecha_hora__date=manana, estado__in=["PENDIENTE", "CONFIRMADO"])[:20]:
         nombre = turno.cliente.nombre_completo if turno.cliente else "cliente"
         vehiculo = turno.vehiculo.patente if turno.vehiculo else "vehículo"
         hora = timezone.localtime(turno.fecha_hora).strftime("%H:%M")
@@ -848,13 +927,24 @@ def listar_avisos(request):
     if puede_gestionar_presupuestos:
         for presupuesto in Presupuesto.objects.select_related("cliente", "vehiculo").filter(owner=request.user, activo=True, estado="ENVIADO")[:20]:
             nombre = presupuesto.cliente.nombre_completo if presupuesto.cliente else "cliente"
-            avisos.append({"tipo":"PRESUPUESTO","prioridad":"MEDIA","titulo":"Presupuesto pendiente","detalle":f"P-{presupuesto.id} · {nombre}","mensaje":f"Hola {nombre}, quedamos atentos a tu respuesta sobre el presupuesto enviado.","href":f"/presupuestos/{presupuesto.id}", "telefono": presupuesto.cliente.telefono if presupuesto.cliente else None})
+            avisos.append({"tipo":"PRESUPUESTO","prioridad":"MEDIA","titulo":"Presupuesto pendiente","detalle":f"P-{presupuesto.id:04d} · {nombre}","mensaje":f"Hola {nombre}, quedamos atentos a tu respuesta sobre el presupuesto enviado.","href":f"/presupuestos/{presupuesto.id}", "telefono": presupuesto.cliente.telefono if presupuesto.cliente else None})
     for trabajo in Trabajo.objects.select_related("cliente", "vehiculo").filter(owner=request.user, activo=True, estado="FINALIZADO")[:20]:
         nombre = trabajo.cliente.nombre_completo
         avisos.append({"tipo":"RETIRO","prioridad":"MEDIA","titulo":"Vehículo listo para retirar","detalle":f"{trabajo.vehiculo.patente} · {nombre}","mensaje":f"Hola {nombre}, tu {trabajo.vehiculo.patente} ya está listo para retirar.","href":f"/trabajos/{trabajo.id}", "telefono": trabajo.cliente.telefono})
 
     limite_fecha_service = hoy + timedelta(days=14)
-    vehiculos = Vehiculo.objects.select_related("cliente").filter(owner=request.user).order_by("patente")
+    # El filtro va en la base: traer la flota completa para descartarla en
+    # Python hacía que el panel cargara miles de vehículos en cada consulta de
+    # un taller grande. El tope acompaña al del resto de los avisos.
+    vehiculos = (
+        Vehiculo.objects.select_related("cliente")
+        .filter(owner=request.user)
+        .filter(
+            Q(proximo_service_km__lte=F("kilometraje_actual") + 2500)
+            | Q(proximo_service_fecha__lte=limite_fecha_service)
+        )
+        .order_by("patente")[:20]
+    )
     for vehiculo in vehiculos:
         faltan_km = (
             vehiculo.proximo_service_km - vehiculo.kilometraje_actual
@@ -879,7 +969,7 @@ def listar_avisos(request):
             "prioridad": "ALTA" if (service_por_km and faltan_km <= 0) or (vehiculo.proximo_service_fecha and vehiculo.proximo_service_fecha <= hoy) else "MEDIA",
             "titulo": "Recordatorio de service",
             "detalle": f"{vehiculo.patente} · {nombre} · {' · '.join(motivos)}",
-            "mensaje": f"Hola {nombre.split()[0]}! Te recordamos que tu {vehiculo.marca} {vehiculo.modelo} ({vehiculo.patente}) tiene {motivos[0]}. Cuando quieras coordinamos el próximo service.",
+            "mensaje": f"Hola {_primer_nombre(nombre)}! Te recordamos que tu {vehiculo.marca} {vehiculo.modelo} ({vehiculo.patente}) tiene {motivos[0]}. Cuando quieras coordinamos el próximo service.",
             "href": f"/vehiculos/{vehiculo.id}/historial",
             "telefono": vehiculo.cliente.telefono,
         })
@@ -891,7 +981,7 @@ def listar_avisos(request):
                 "prioridad": "ALTA" if cliente.saldo_balance >= Decimal("100000") else "MEDIA",
                 "titulo": "Saldo pendiente",
                 "detalle": f"{cliente.nombre_completo} · ${cliente.saldo_balance:,.0f}".replace(",", "."),
-                "mensaje": f"Hola {cliente.nombre_completo.split()[0]}! Te compartimos que tenés un saldo pendiente de ${cliente.saldo_balance:,.0f} con el taller. Si necesitás el detalle, escribinos.".replace(",", "."),
+                "mensaje": f"Hola {_primer_nombre(cliente.nombre_completo)}! Te compartimos que tenés un saldo pendiente de ${cliente.saldo_balance:,.0f} con el taller. Si necesitás el detalle, escribinos.".replace(",", "."),
                 "href": "/clientes",
                 "telefono": cliente.telefono,
             })
@@ -913,14 +1003,17 @@ def obtener_cliente(request, cliente_id: int):
 @api.post("/clientes/", response={201: ClienteSchema, 400: ErrorSchema}, tags=["Directorio"])
 def crear_cliente(request, payload: ClienteIn):
     require_capability(request, "gestionar_ordenes")
+    nombre = payload.nombre.strip()
+    if not nombre:
+        return 400, {"message": "El nombre del cliente es obligatorio."}
     try:
         cliente = Cliente.objects.create(
             owner=request.user,
-            nombre=payload.nombre,
-            apellido=payload.apellido,
-            telefono=payload.telefono,
-            email=payload.email,
-            dni=payload.dni,
+            nombre=nombre,
+            apellido=payload.apellido.strip(),
+            telefono=payload.telefono.strip(),
+            email=payload.email.strip(),
+            dni=payload.dni.strip(),
         )
         return 201, cliente
     except Exception as error:
@@ -970,13 +1063,16 @@ def crear_cliente_con_vehiculo(request, payload: AltaDirectorioIn):
 @api.put("/clientes/{cliente_id}", response={200: ClienteSchema, 400: ErrorSchema}, tags=["Directorio"])
 def actualizar_cliente(request, cliente_id: int, payload: ClienteUpdateIn):
     require_capability(request, "gestionar_ordenes")
+    nombre = payload.nombre.strip()
+    if not nombre:
+        return 400, {"message": "El nombre del cliente es obligatorio."}
     try:
         cliente = get_object_or_404(Cliente, id=cliente_id, owner=request.user)
-        cliente.nombre = payload.nombre
-        cliente.apellido = payload.apellido
-        cliente.telefono = payload.telefono
-        cliente.email = payload.email
-        cliente.dni = payload.dni
+        cliente.nombre = nombre
+        cliente.apellido = payload.apellido.strip()
+        cliente.telefono = payload.telefono.strip()
+        cliente.email = payload.email.strip()
+        cliente.dni = payload.dni.strip()
         cliente.save(update_fields=['nombre', 'apellido', 'telefono', 'email', 'dni'])
         return 200, cliente
     except Exception as error:
@@ -1001,6 +1097,9 @@ def listar_vehiculos(request, q: Optional[str] = None, cliente_id: Optional[int]
 
 @api.get("/productos", response=List[ProductoOut], tags=["Inventario"])
 def listar_productos(request, q: Optional[str] = None):
+    # El inventario expone precio_costo, que es justamente el dato que el
+    # taller no le muestra a mecánicos ni contadores en el resto del sistema.
+    require_capability(request, "gestionar_ordenes")
     productos = Producto.objects.filter(owner=request.user)
     if q:
         productos = productos.filter(Q(codigo__icontains=q) | Q(nombre__icontains=q))
@@ -1009,6 +1108,7 @@ def listar_productos(request, q: Optional[str] = None):
 
 @api.post("/productos/", response={201: ProductoOut, 400: ErrorSchema}, tags=["Inventario"])
 def crear_producto(request, payload: ProductoIn):
+    require_capability(request, "gestionar_ordenes")
     codigo = payload.codigo.strip().upper()
     if Producto.objects.filter(owner=request.user, codigo=codigo).exists():
         return 400, {"message": "Ya existe un producto con ese código en tu taller."}
@@ -1066,7 +1166,12 @@ def obtener_historial_vehiculo(request, vehiculo_id: int):
     require_capability(request, "operar")
     vehiculo = get_object_or_404(Vehiculo.objects.select_related("cliente"), id=vehiculo_id, owner=request.user)
     include_amounts = _puede_ver_importes_operativos(request)
-    trabajos = Trabajo.objects.filter(owner=request.user, vehiculo=vehiculo, activo=True).order_by("-fecha_ingreso")
+    trabajos = (
+        Trabajo.objects.filter(owner=request.user, vehiculo=vehiculo, activo=True)
+        .select_related("responsable")
+        .prefetch_related("items")
+        .order_by("-fecha_ingreso")
+    )
     presupuestos = Presupuesto.objects.filter(owner=request.user, vehiculo=vehiculo, activo=True).order_by("-fecha_creacion")
     return {
         "vehiculo": vehiculo,
@@ -1078,6 +1183,22 @@ def obtener_historial_vehiculo(request, vehiculo_id: int):
                 "resumen": trabajo.resumen_trabajos,
                 "kilometraje": trabajo.kilometraje,
                 "total": float(trabajo.total) if include_amounts else 0,
+                "fecha_realizado": trabajo.fecha_egreso_real or trabajo.finalizado_en,
+                # Lo que se le hizo al auto: es lo que se busca en el historial.
+                "items": [
+                    {
+                        "descripcion": item.descripcion,
+                        "tipo": item.tipo,
+                        "cantidad": float(item.cantidad),
+                        "completado": item.completado,
+                    }
+                    for item in trabajo.items.all()
+                ],
+                "responsable_nombre": (
+                    trabajo.responsable.get_full_name() or trabajo.responsable.email or trabajo.responsable.username
+                ) if trabajo.responsable else "",
+                "recomendaciones_proximo_service": trabajo.recomendaciones_proximo_service or "",
+                "proximo_control_km": trabajo.proximo_control_km,
             }
             for trabajo in trabajos
         ],
@@ -1202,6 +1323,15 @@ def api_tablero_trabajos(request):
 
     for t in qs:
         dias = (ahora - t.fecha_ingreso).days
+        # Días en la etapa actual: dice más que los días desde el ingreso
+        # ("3 días en trabajo" vs. "59 días"). Si falta la marca de la etapa
+        # (órdenes viejas), se usa la del ingreso.
+        inicio_etapa = {
+            Trabajo.ESTADO_EN_PROCESO: t.iniciado_en,
+            Trabajo.ESTADO_FINALIZADO: t.finalizado_en,
+            Trabajo.ESTADO_ENTREGADO: t.fecha_egreso_real,
+        }.get(t.estado) or t.fecha_ingreso
+        items_orden = list(t.items.all())
         resumen = (t.resumen_trabajos[:45] + '...') if len(t.resumen_trabajos) > 45 else t.resumen_trabajos
         if not resumen: resumen = "Sin diagnóstico inicial."
 
@@ -1215,8 +1345,16 @@ def api_tablero_trabajos(request):
             "fecha_ingreso": t.fecha_ingreso,
             "resumen_corto": resumen,
             "dias_en_taller": dias,
-            "items_total": len(t.items.all()),
-            "items_completados": sum(1 for item in t.items.all() if item.completado),
+            "items_total": len(items_orden),
+            "items_completados": sum(1 for item in items_orden if item.completado),
+            "items": [
+                {"id": item.id, "descripcion": item.descripcion, "completado": item.completado}
+                for item in items_orden
+            ],
+            "dias_en_etapa": max(0, (ahora - inicio_etapa).days),
+            "cliente_id": t.cliente_id,
+            "cliente_telefono": t.cliente.telefono or "",
+            "responsable_id": t.responsable_id,
             "responsable_nombre": (
                 t.responsable.get_full_name()
                 or t.responsable.email
@@ -1298,17 +1436,27 @@ def api_editar_trabajo(request, trabajo_id: int, payload: TrabajoIn):
             trabajo.proximo_control_km = payload.proximo_control_km
             trabajo.descuento = Decimal(str(payload.descuento))
 
+            # Los ítems se recrean: antes de borrarlos se recuerda cuáles estaban
+            # tildados para no perder el avance del mecánico al editar la orden.
+            tildados = {
+                (i.tipo, i.descripcion.strip().lower()): (i.completado_en, i.completado_por_id)
+                for i in trabajo.items.filter(completado=True)
+            }
             trabajo.items.all().delete()
             total_mo, total_rep = Decimal("0.00"), Decimal("0.00")
             nuevos_items = []
-            
+
             for item in payload.items:
                 cant = Decimal(str(item.cantidad))
                 prec = Decimal(str(item.precio_unitario))
                 subt = cant * prec
+                previo = tildados.pop((item.tipo, item.descripcion.strip().lower()), None)
                 nuevos_items.append(TrabajoItem(
-                    trabajo=trabajo, tipo=item.tipo, descripcion=item.descripcion, 
-                    cantidad=cant, precio_unitario=prec, subtotal=subt
+                    trabajo=trabajo, tipo=item.tipo, descripcion=item.descripcion,
+                    cantidad=cant, precio_unitario=prec, subtotal=subt,
+                    completado=previo is not None,
+                    completado_en=previo[0] if previo else None,
+                    completado_por_id=previo[1] if previo else None,
                 ))
                 if item.tipo == "MANO_OBRA": total_mo += subt
                 else: total_rep += subt
@@ -1316,9 +1464,11 @@ def api_editar_trabajo(request, trabajo_id: int, payload: TrabajoIn):
             TrabajoItem.objects.bulk_create(nuevos_items)
             trabajo.total_mano_obra = total_mo
             trabajo.total_repuestos = total_rep
-            trabajo.total = (total_mo + total_rep) - trabajo.descuento
+            trabajo.total = total_con_descuento(total_mo + total_rep, trabajo.descuento)
             trabajo.save()
             return 200, trabajo
+    except DjangoValidationError as e:
+        return 400, {"message": e.messages[0]}
     except Exception as error:
         return _internal_error("Error al actualizar trabajo", error)
 
@@ -1383,7 +1533,7 @@ def api_actualizar_estado_trabajo(request, trabajo_id: int, payload: EstadoRapid
             taller=membership.taller,
             actor=getattr(request, "actor", None),
             accion="TRABAJO_ESTADO",
-            detalle=f"OT-{trabajo.id}: {estado_anterior} → {trabajo.estado}",
+            detalle=f"OT-{trabajo.id:05d}: {estado_anterior} → {trabajo.estado}",
         )
     return 200, {"message": "Estado actualizado", "nuevo_estado": trabajo.estado}
 
@@ -1407,7 +1557,7 @@ def api_actualizar_item_trabajo(request, trabajo_id: int, item_id: int, payload:
             taller=membership.taller,
             actor=getattr(request, "actor", None),
             accion="CHECKLIST_TRABAJO",
-            detalle=f"OT-{trabajo.id}: {'completó' if payload.completado else 'reabrió'} {item.descripcion[:120]}",
+            detalle=f"OT-{trabajo.id:05d}: {'completó' if payload.completado else 'reabrió'} {item.descripcion[:120]}",
         )
     return 200, {
         "id": item.id,
@@ -1418,44 +1568,123 @@ def api_actualizar_item_trabajo(request, trabajo_id: int, item_id: int, payload:
     }
 
 
+def _recalcular_totales_trabajo(trabajo: Trabajo) -> None:
+    total_mo, total_rep = Decimal("0.00"), Decimal("0.00")
+    for item in trabajo.items.all():
+        if item.tipo == TrabajoItem.TIPO_MANO_OBRA:
+            total_mo += item.subtotal
+        else:
+            total_rep += item.subtotal
+    trabajo.total_mano_obra = total_mo
+    trabajo.total_repuestos = total_rep
+    # Si el descuento ya no entra (se sacó algo), se ajusta al subtotal.
+    trabajo.descuento = min(trabajo.descuento or Decimal("0.00"), total_mo + total_rep)
+    trabajo.total = total_con_descuento(total_mo + total_rep, trabajo.descuento)
+    trabajo.save(update_fields=["total_mano_obra", "total_repuestos", "descuento", "total"])
+
+
+@api.post("/trabajos/{trabajo_id}/items", response={201: TrabajoItemOut, 400: ErrorSchema}, tags=["Operaciones"])
+def api_agregar_item_trabajo(request, trabajo_id: int, payload: ItemRapidoIn):
+    """Agrega algo que se hizo sin pasar por la edición completa de la orden."""
+    require_capability(request, "operar")
+    trabajo = get_object_or_404(Trabajo, id=trabajo_id, activo=True, owner=request.user)
+    if trabajo.estado in {Trabajo.ESTADO_ENTREGADO, Trabajo.ESTADO_ANULADO}:
+        return 400, {"message": "La orden está cerrada: no se le pueden sumar ítems."}
+    descripcion = payload.descripcion.strip()
+    if len(descripcion) < 2:
+        return 400, {"message": "Escribí qué se hizo."}
+    if payload.tipo not in dict(TrabajoItem.TIPO_CHOICES):
+        return 400, {"message": "Tipo de ítem inválido."}
+    if payload.cantidad <= 0 or payload.precio_unitario < 0:
+        return 400, {"message": "Cantidad o precio inválidos."}
+    with transaction.atomic():
+        item = TrabajoItem.objects.create(
+            trabajo=trabajo,
+            tipo=payload.tipo,
+            descripcion=descripcion[:255],
+            cantidad=Decimal(str(payload.cantidad)),
+            precio_unitario=Decimal(str(payload.precio_unitario)),
+            completado=payload.completado,
+            completado_en=timezone.now() if payload.completado else None,
+            completado_por=getattr(request, "actor", None) if payload.completado else None,
+        )
+        _recalcular_totales_trabajo(trabajo)
+    return 201, item
+
+
+@api.patch("/trabajos/{trabajo_id}/items/{item_id}", response={200: TrabajoItemOut, 400: ErrorSchema}, tags=["Operaciones"])
+def api_precio_item_trabajo(request, trabajo_id: int, item_id: int, payload: ItemPrecioIn):
+    """Pone o corrige el precio de un ítem (lo cargado de apuro en el taller)."""
+    require_capability(request, "gestionar_ordenes")
+    trabajo = get_object_or_404(Trabajo, id=trabajo_id, activo=True, owner=request.user)
+    if trabajo.estado in {Trabajo.ESTADO_ENTREGADO, Trabajo.ESTADO_ANULADO}:
+        return 400, {"message": "La orden está cerrada: no se pueden cambiar precios."}
+    item = get_object_or_404(TrabajoItem, id=item_id, trabajo=trabajo)
+    if payload.precio_unitario is not None:
+        if payload.precio_unitario < 0:
+            return 400, {"message": "El precio no puede ser negativo."}
+        item.precio_unitario = Decimal(str(payload.precio_unitario))
+    if payload.cantidad is not None:
+        if payload.cantidad <= 0:
+            return 400, {"message": "La cantidad tiene que ser mayor a cero."}
+        item.cantidad = Decimal(str(payload.cantidad))
+    with transaction.atomic():
+        item.save()
+        _recalcular_totales_trabajo(trabajo)
+    return 200, item
+
+
+@api.delete("/trabajos/{trabajo_id}/items/{item_id}", response={200: dict, 400: ErrorSchema}, tags=["Operaciones"])
+def api_quitar_item_trabajo(request, trabajo_id: int, item_id: int):
+    require_capability(request, "gestionar_ordenes")
+    trabajo = get_object_or_404(Trabajo, id=trabajo_id, activo=True, owner=request.user)
+    if trabajo.estado in {Trabajo.ESTADO_ENTREGADO, Trabajo.ESTADO_ANULADO}:
+        return 400, {"message": "La orden está cerrada: no se pueden quitar ítems."}
+    item = get_object_or_404(TrabajoItem, id=item_id, trabajo=trabajo)
+    with transaction.atomic():
+        item.delete()
+        _recalcular_totales_trabajo(trabajo)
+    return 200, {"message": "Ítem quitado."}
+
+
 # ==========================================
 # 6. ENDPOINTS DE AGENDA (TURNOS)
 # ==========================================
 
+def _turno_out(t: Turno) -> dict:
+    """Lo que la agenda necesita de un turno, incluido el contacto del cliente."""
+    return {
+        "id": t.id,
+        "fecha_hora": t.fecha_hora,
+        "motivo": t.motivo,
+        "notas": t.notas,
+        "estado": t.estado,
+        "cliente_nombre": t.cliente.nombre_completo if t.cliente else "Sin Cliente",
+        "vehiculo_desc": f"{t.vehiculo.marca} {t.vehiculo.modelo}" if t.vehiculo else "Sin Vehículo",
+        "patente": t.vehiculo.patente if t.vehiculo else "N/A",
+        "cliente_id": t.cliente_id,
+        "vehiculo_id": t.vehiculo_id,
+        "cliente_telefono": (t.cliente.telefono or "") if t.cliente else "",
+    }
+
+
 @api.get("/turnos/", response=List[TurnoOut], tags=["Agenda"])
 def listar_turnos(request, q: Optional[str] = None):
+    require_capability(request, "gestionar_ordenes")
     qs = Turno.objects.select_related('cliente', 'vehiculo').filter(owner=request.user).order_by('fecha_hora')
     if q:
         qs = qs.filter(Q(cliente__nombre__icontains=q) | Q(vehiculo__patente__icontains=q) | Q(motivo__icontains=q))
-    return [
-        {
-            "id": t.id,
-            "fecha_hora": t.fecha_hora,
-            "motivo": t.motivo,
-            "notas": t.notas,
-            "estado": t.estado,
-            "cliente_nombre": t.cliente.nombre_completo if t.cliente else "Sin Cliente",
-            "vehiculo_desc": f"{t.vehiculo.marca} {t.vehiculo.modelo}" if t.vehiculo else "Sin Vehículo",
-            "patente": t.vehiculo.patente if t.vehiculo else "N/A",
-        } for t in qs
-    ]
+    return [_turno_out(t) for t in qs]
 
 @api.get("/turnos/{turno_id}", response=TurnoOut, tags=["Agenda"])
 def obtener_turno(request, turno_id: int):
+    require_capability(request, "gestionar_ordenes")
     turno = get_object_or_404(Turno.objects.select_related('cliente', 'vehiculo'), id=turno_id, owner=request.user)
-    return {
-        "id": turno.id,
-        "fecha_hora": turno.fecha_hora,
-        "motivo": turno.motivo,
-        "notas": turno.notas,
-        "estado": turno.estado,
-        "cliente_nombre": turno.cliente.nombre_completo if turno.cliente else "Sin Cliente",
-        "vehiculo_desc": f"{turno.vehiculo.marca} {turno.vehiculo.modelo}" if turno.vehiculo else "Sin Vehículo",
-        "patente": turno.vehiculo.patente if turno.vehiculo else "N/A",
-    }
+    return _turno_out(turno)
 
 @api.post("/turnos/", response={201: TurnoOut, 400: ErrorSchema}, tags=["Agenda"])
 def crear_turno(request, payload: TurnoIn):
+    require_capability(request, "gestionar_ordenes")
     try:
         with transaction.atomic():
             cliente, vehiculo = _resolver_entidades_express(payload, user=request.user)
@@ -1469,41 +1698,33 @@ def crear_turno(request, payload: TurnoIn):
                 estado="PENDIENTE"
             )
             
-            return 201, {
-                "id": turno.id, "fecha_hora": turno.fecha_hora, "motivo": turno.motivo, 
-                "notas": turno.notas, "estado": turno.estado, 
-                "cliente_nombre": cliente.nombre_completo if cliente else "Sin Cliente", 
-                "vehiculo_desc": f"{vehiculo.marca} {vehiculo.modelo}" if vehiculo else "Sin Vehículo", 
-                "patente": vehiculo.patente if vehiculo else "N/A"
-            }
+            return 201, _turno_out(turno)
     except Exception as error:
         return _internal_error("Error al crear turno", error)
 
 @api.put("/turnos/{turno_id}", response={200: TurnoOut, 400: ErrorSchema}, tags=["Agenda"])
 def editar_turno(request, turno_id: int, payload: TurnoIn):
+    require_capability(request, "gestionar_ordenes")
     try:
         turno = get_object_or_404(Turno, id=turno_id, owner=request.user)
         turno.fecha_hora = payload.fecha_hora
         turno.motivo = payload.motivo
         turno.notas = payload.notas
         turno.save()
-        return 200, {
-            "id": turno.id, "fecha_hora": turno.fecha_hora, "motivo": turno.motivo, "notas": turno.notas, "estado": turno.estado,
-            "cliente_nombre": turno.cliente.nombre_completo if turno.cliente else "Sin Cliente",
-            "vehiculo_desc": f"{turno.vehiculo.marca} {turno.vehiculo.modelo}" if turno.vehiculo else "Sin Vehículo",
-            "patente": turno.vehiculo.patente if turno.vehiculo else "N/A"
-        }
+        return 200, _turno_out(turno)
     except Exception as error:
         return _internal_error("Error al actualizar turno", error)
 
 @api.delete("/turnos/{turno_id}", response={200: dict, 400: ErrorSchema}, tags=["Agenda"])
 def eliminar_turno(request, turno_id: int):
+    require_capability(request, "gestionar_ordenes")
     turno = get_object_or_404(Turno, id=turno_id, owner=request.user)
     turno.delete()
     return 200, {"message": "Turno eliminado permanentemente de la agenda."}
 
 @api.patch("/turnos/{turno_id}/estado", response={200: dict, 400: ErrorSchema}, tags=["Agenda"])
 def actualizar_estado_turno(request, turno_id: int, payload: EstadoRapidoIn):
+    require_capability(request, "gestionar_ordenes")
     turno = get_object_or_404(Turno, id=turno_id, owner=request.user)
     estados_validos = dict(Turno.ESTADO_CHOICES).keys()
     if payload.estado not in estados_validos: return 400, {"message": "Estado inválido."}
@@ -1528,6 +1749,8 @@ def listar_presupuestos(request, q: Optional[str] = None):
             "cliente_nombre": p.cliente.nombre_completo if p.cliente else "Sin Cliente",
             "vehiculo": f"{p.vehiculo.marca} {p.vehiculo.modelo}" if p.vehiculo else "Sin Vehículo",
             "patente": p.vehiculo.patente if p.vehiculo else "N/A",
+            "cliente_telefono": (p.cliente.telefono or "") if p.cliente else "",
+            "portal_activo": p.portal_activo,
         } for p in qs
     ]
 
@@ -1565,9 +1788,11 @@ def crear_presupuesto(request, payload: PresupuestoIn):
             
             presupuesto.total_mano_obra = total_mo
             presupuesto.total_repuestos = total_rep
-            presupuesto.total = (total_mo + total_rep) - presupuesto.descuento
+            presupuesto.total = total_con_descuento(total_mo + total_rep, presupuesto.descuento)
             presupuesto.save()
             return 201, presupuesto
+    except DjangoValidationError as e:
+        return 400, {"message": e.messages[0]}
     except Exception as error:
         return _internal_error("Error al crear presupuesto", error)
 
@@ -1595,9 +1820,11 @@ def editar_presupuesto(request, presupuesto_id: int, payload: PresupuestoIn):
             
             presupuesto.total_mano_obra = total_mo
             presupuesto.total_repuestos = total_rep
-            presupuesto.total = (total_mo + total_rep) - presupuesto.descuento
+            presupuesto.total = total_con_descuento(total_mo + total_rep, presupuesto.descuento)
             presupuesto.save()
             return 200, presupuesto
+    except DjangoValidationError as e:
+        return 400, {"message": e.messages[0]}
     except Exception as error:
         return _internal_error("Error al actualizar presupuesto", error)
 
@@ -1631,6 +1858,11 @@ def api_registrar_operacion_caja(request, payload: OperacionCajaIn):
             cliente, _ = _resolver_entidades_express(payload, user=request.user)
             if not cliente:
                 return 400, {"message": "Debe especificar un cliente o usar Alta Express."}
+
+            # El saldo se lee, se modifica en memoria y se guarda. Sin bloquear la
+            # fila, dos cobros simultáneos del mismo cliente leen el mismo saldo
+            # inicial y el segundo pisa al primero: la plata cobrada desaparece.
+            cliente = Cliente.objects.select_for_update().get(pk=cliente.pk)
 
             monto_total = Decimal(str(payload.monto_total_venta))
             monto_pagado = Decimal(str(payload.monto_pagado))
@@ -1670,6 +1902,51 @@ def api_registrar_operacion_caja(request, payload: OperacionCajaIn):
         return 404, {"message": "No encontramos el cliente solicitado."}
     except Exception as error:
         return _internal_error("Error al registrar operación de caja", error)
+
+@api.post("/compras/lote", response={201: dict, 400: ErrorSchema}, tags=["Finanzas"])
+def api_registrar_compra_lote(request, payload: CompraLoteIn):
+    """Carga varias líneas de una misma compra de una vez: o se guardan todas, o ninguna."""
+    require_capability(request, "finanzas")
+    tipos_validos = {choice[0] for choice in Gasto.TIPO_CHOICES}
+    metodos_validos = {choice[0] for choice in MovimientoCuenta.METODO_CHOICES}
+    if payload.metodo_pago not in metodos_validos:
+        return 400, {"message": "Seleccioná un medio de pago válido."}
+    if payload.fecha and payload.fecha > timezone.localdate():
+        return 400, {"message": "La fecha del gasto no puede estar en el futuro."}
+    if not payload.lineas:
+        return 400, {"message": "Agregá al menos una línea."}
+    if len(payload.lineas) > 50:
+        return 400, {"message": "Son demasiadas líneas para una sola compra."}
+    for numero, linea in enumerate(payload.lineas, start=1):
+        if linea.tipo not in tipos_validos:
+            return 400, {"message": f"Línea {numero}: categoría inválida."}
+        if not linea.descripcion.strip():
+            return 400, {"message": f"Línea {numero}: falta la descripción."}
+        if linea.monto <= 0:
+            return 400, {"message": f"Línea {numero}: el importe tiene que ser mayor a cero."}
+
+    fecha_gasto = timezone.now()
+    if payload.fecha:
+        fecha_gasto = fecha_gasto.replace(year=payload.fecha.year, month=payload.fecha.month, day=payload.fecha.day)
+    actor = getattr(request, "actor", request.user)
+    with transaction.atomic():
+        gastos = [
+            Gasto.objects.create(
+                owner=request.user, registrado_por=actor, fecha=fecha_gasto, tipo=linea.tipo,
+                metodo_pago=payload.metodo_pago, descripcion=linea.descripcion.strip()[:255],
+                monto=Decimal(str(linea.monto)), comprobante=payload.comprobante.strip()[:50],
+            )
+            for linea in payload.lineas
+        ]
+        total = sum((g.monto for g in gastos), Decimal("0.00"))
+        taller = getattr(getattr(request, "membership", None), "taller", None)
+        if taller:
+            AuditoriaTaller.objects.create(
+                taller=taller, actor=actor, accion="GASTO_REGISTRADO",
+                detalle=f"Compra de {len(gastos)} líneas por ${total}",
+            )
+    return 201, {"message": "Compra registrada.", "cantidad": len(gastos), "total": float(total)}
+
 
 @api.post("/compras/", response={201: RespuestaGenerica, 400: ErrorSchema}, tags=["Finanzas"])
 def api_registrar_compra(request, payload: GastoIn):
@@ -1753,9 +2030,14 @@ def _filtrar_gastos_financieros(
     if metodo:
         gastos = gastos.filter(metodo_pago=metodo)
     if buscar:
-        gastos = gastos.filter(
-            Q(descripcion__icontains=buscar) | Q(comprobante__icontains=buscar)
-        )
+        filtro = Q(descripcion__icontains=buscar) | Q(comprobante__icontains=buscar)
+        # "85.000" también busca por importe exacto.
+        numero = buscar.replace("$", "").replace(".", "").replace(",", ".").strip()
+        try:
+            filtro |= Q(monto=Decimal(numero))
+        except Exception:
+            pass
+        gastos = gastos.filter(filtro)
     return gastos
 
 
@@ -1797,6 +2079,9 @@ def obtener_resumen_gastos(
     request,
     fecha_desde: Optional[date] = None,
     fecha_hasta: Optional[date] = None,
+    tipo: Optional[str] = None,
+    metodo: Optional[str] = None,
+    buscar: Optional[str] = None,
 ):
     require_capability(request, "finanzas")
     hoy = timezone.localdate()
@@ -1816,13 +2101,16 @@ def obtener_resumen_gastos(
         fecha__date__lte=fin_mes_anterior,
     ).aggregate(total=Coalesce(Sum("monto"), Decimal("0.00")))["total"]
 
-    periodo = _filtrar_gastos_financieros(request, fecha_desde, fecha_hasta)
+    # El total sigue todos los filtros; el reparto por categoría no filtra por
+    # categoría, así siempre se ven todas para poder elegir.
+    periodo = _filtrar_gastos_financieros(request, fecha_desde, fecha_hasta, tipo, metodo, buscar)
+    sin_categoria = _filtrar_gastos_financieros(request, fecha_desde, fecha_hasta, None, metodo, buscar)
     agregado = periodo.aggregate(
         total=Coalesce(Sum("monto"), Decimal("0.00")),
         cantidad=Count("id"),
     )
     por_tipo = list(
-        periodo.values("tipo")
+        sin_categoria.values("tipo")
         .annotate(
             total=Coalesce(Sum("monto"), Decimal("0.00")),
             cantidad=Count("id"),
@@ -1845,15 +2133,131 @@ def obtener_resumen_gastos(
     }
 
 
-@api.get("/finanzas/caja", response=List[MovimientoCajaOut], tags=["Finanzas"])
-def obtener_movimientos_caja(
-    request,
-    fecha_desde: Optional[date] = None,
-    fecha_hasta: Optional[date] = None,
-    metodo: Optional[str] = None,
-):
+@api.delete("/finanzas/gastos/{gasto_id}", response={200: dict}, tags=["Finanzas"])
+def eliminar_gasto(request, gasto_id: int):
+    """Borra un gasto cargado por error (sale también de la Caja)."""
     require_capability(request, "finanzas")
-    movimientos = []
+    gasto = get_object_or_404(Gasto, id=gasto_id, owner=request.user)
+    gasto.delete()
+    return 200, {"message": "Gasto eliminado."}
+
+
+@api.get("/finanzas/exportar-contador", tags=["Finanzas"])
+def exportar_para_contador(request, fecha_desde: date, fecha_hasta: date):
+    """Planilla del período para el contador: ventas, cobros y compras.
+
+    Las órdenes de trabajo son comprobantes internos, no facturas: el contador
+    usa esta planilla para emitir/registrar en ARCA.
+    """
+    from django.http import HttpResponse
+    from taller.planilla import TITULO, armar_xlsx
+
+    require_capability(request, "finanzas")
+    if fecha_hasta < fecha_desde:
+        raise HttpError(400, "La fecha final no puede ser anterior a la inicial.")
+    perfil = getattr(request.user, "perfil", None)
+    condicion = perfil.condicion_iva if perfil else ""
+    discrimina_iva = condicion == "RESPONSABLE_INSCRIPTO"
+
+    def doc(cliente):
+        return (cliente.dni or "").strip() if cliente else ""
+
+    # Ventas: órdenes entregadas en el período (por fecha de entrega).
+    ordenes = (
+        Trabajo.objects.select_related("cliente", "vehiculo")
+        .filter(owner=request.user, activo=True, estado=Trabajo.ESTADO_ENTREGADO)
+        .filter(
+            Q(fecha_egreso_real__date__gte=fecha_desde, fecha_egreso_real__date__lte=fecha_hasta)
+            | Q(fecha_egreso_real__isnull=True, finalizado_en__date__gte=fecha_desde, finalizado_en__date__lte=fecha_hasta)
+            # Órdenes viejas sin fecha de entrega registrada: cuentan por la de ingreso.
+            | Q(fecha_egreso_real__isnull=True, finalizado_en__isnull=True, fecha_ingreso__date__gte=fecha_desde, fecha_ingreso__date__lte=fecha_hasta)
+        )
+        .order_by("fecha_egreso_real", "id")
+    )
+    encabezado_ventas = ["Fecha", "Comprobante interno", "Cliente", "DNI / CUIT", "Vehículo", "Detalle", "Mano de obra", "Repuestos", "Descuento", "Total"]
+    if discrimina_iva:
+        encabezado_ventas += ["Neto gravado", "IVA 21%"]
+    filas_ventas = [encabezado_ventas]
+    total_ventas = Decimal("0.00")
+    for t in ordenes:
+        total = t.total or Decimal("0.00")
+        total_ventas += total
+        fila = [
+            t.fecha_egreso_real or t.finalizado_en or t.fecha_ingreso, f"OT-{t.id:05d}", t.cliente.nombre_completo if t.cliente else "",
+            doc(t.cliente), f"{t.vehiculo.marca} {t.vehiculo.modelo} ({t.vehiculo.patente})" if t.vehiculo else "",
+            t.resumen_trabajos or "", t.total_mano_obra, t.total_repuestos, t.descuento, total,
+        ]
+        if discrimina_iva:
+            neto = (total / Decimal("1.21")).quantize(Decimal("0.01"))
+            fila += [neto, total - neto]
+        filas_ventas.append(fila)
+
+    pagos = (
+        MovimientoCuenta.objects.select_related("cliente")
+        .filter(owner=request.user, tipo=MovimientoCuenta.TIPO_PAGO, fecha__date__gte=fecha_desde, fecha__date__lte=fecha_hasta)
+        .order_by("fecha")
+    )
+    medios = dict(MovimientoCuenta.METODO_CHOICES)
+    filas_cobros = [["Fecha", "Cliente", "DNI / CUIT", "Concepto", "Medio de pago", "Orden", "Importe"]]
+    total_cobros = Decimal("0.00")
+    for p in pagos:
+        total_cobros += p.monto
+        filas_cobros.append([
+            p.fecha, p.cliente.nombre_completo, doc(p.cliente), (p.descripcion or "").replace("Abono: ", "") or "Cobro",
+            medios.get(p.metodo_pago, p.metodo_pago), f"OT-{p.trabajo_id:05d}" if p.trabajo_id else "", p.monto,
+        ])
+
+    gastos = Gasto.objects.filter(owner=request.user, fecha__date__gte=fecha_desde, fecha__date__lte=fecha_hasta).order_by("fecha")
+    categorias = {"REPUESTOS": "Repuestos", "INSUMOS": "Insumos", "SERVICIOS": "Servicios", "OTROS": "Otros"}
+    filas_compras = [["Fecha", "Categoría", "Descripción", "Comprobante", "Medio de pago", "Importe"]]
+    total_compras = Decimal("0.00")
+    for g in gastos:
+        total_compras += g.monto
+        filas_compras.append([g.fecha, categorias.get(g.tipo, g.tipo), g.descripcion, g.comprobante or "", medios.get(g.metodo_pago, g.metodo_pago), g.monto])
+
+    condiciones = dict(PerfilTaller.CONDICION_IVA_CHOICES)
+    resumen = [
+        [(f"{perfil.taller_nombre if perfil else 'Taller'} · Resumen para el contador", TITULO)],
+        [],
+        ["Período", f"{fecha_desde:%d/%m/%Y} al {fecha_hasta:%d/%m/%Y}"],
+        ["Razón social", (perfil.razon_social or perfil.taller_nombre) if perfil else ""],
+        ["CUIT", perfil.taller_cuit if perfil else ""],
+        ["Condición frente al IVA", condiciones.get(condicion, "Sin cargar")],
+        ["Domicilio fiscal", perfil.domicilio_fiscal if perfil else ""],
+        ["Ingresos brutos", perfil.ingresos_brutos if perfil else ""],
+        [],
+        ["Ventas (órdenes entregadas)", len(filas_ventas) - 1, total_ventas],
+        ["Cobros recibidos", len(filas_cobros) - 1, total_cobros],
+        ["Compras y gastos", len(filas_compras) - 1, total_compras],
+        [],
+        ["Notas"],
+        ["Las órdenes de trabajo (OT) son comprobantes internos del taller, no facturas."],
+        ["Los importes de las órdenes son precios finales (con IVA incluido)."
+         + (" El neto y el IVA 21% están calculados a partir del total." if discrimina_iva else "")],
+        ["Generado con Tallerista el " + timezone.localtime().strftime("%d/%m/%Y %H:%M") + "."],
+    ]
+    contenido = armar_xlsx([
+        {"nombre": "Resumen", "filas": resumen, "anchos": [34, 30, 18], "encabezado": False},
+        {"nombre": "Ventas", "filas": filas_ventas, "anchos": [12, 18, 26, 16, 30, 36, 14, 14, 12, 14, 14, 12]},
+        {"nombre": "Cobros", "filas": filas_cobros, "anchos": [12, 26, 16, 34, 16, 12, 14]},
+        {"nombre": "Compras y gastos", "filas": filas_compras, "anchos": [12, 28, 40, 22, 16, 14]},
+    ])
+    nombre = f"contador-{fecha_desde:%Y-%m-%d}-al-{fecha_hasta:%Y-%m-%d}.xlsx"
+    respuesta = HttpResponse(contenido, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    respuesta["Content-Disposition"] = f'attachment; filename="{nombre}"'
+    return respuesta
+
+
+def _filtrar_caja(
+    request,
+    fecha_desde: Optional[date],
+    fecha_hasta: Optional[date],
+    metodo: Optional[str],
+    q: Optional[str],
+    cliente_id: Optional[int],
+    tipo: Optional[str],
+):
+    """Cobros y gastos del período con los mismos filtros para la lista y los totales."""
     pagos = MovimientoCuenta.objects.select_related("cliente").filter(
         tipo=MovimientoCuenta.TIPO_PAGO, owner=request.user
     )
@@ -1867,16 +2271,65 @@ def obtener_movimientos_caja(
     if metodo:
         pagos = pagos.filter(metodo_pago=metodo)
         gastos = gastos.filter(metodo_pago=metodo)
+    if cliente_id:
+        # Los gastos no tienen cliente: filtrando por cliente sólo quedan sus cobros.
+        pagos = pagos.filter(cliente_id=cliente_id)
+        gastos = gastos.none()
+    if tipo == "INGRESO":
+        gastos = gastos.none()
+    elif tipo == "EGRESO":
+        pagos = pagos.none()
+    texto = (q or "").strip()
+    if texto:
+        filtro_pagos = Q(cliente__nombre__icontains=texto) | Q(cliente__apellido__icontains=texto) | Q(descripcion__icontains=texto)
+        filtro_gastos = Q(descripcion__icontains=texto) | Q(comprobante__icontains=texto)
+        # "128000" o "128.000" también busca por importe exacto.
+        numero = texto.replace("$", "").replace(".", "").replace(",", ".").strip()
+        try:
+            monto = Decimal(numero)
+            filtro_pagos |= Q(monto=monto)
+            filtro_gastos |= Q(monto=monto)
+        except Exception:
+            pass
+        # Nombre y apellido juntos ("diego sosa").
+        partes = texto.split()
+        if len(partes) > 1:
+            filtro_pagos |= Q(cliente__nombre__icontains=partes[0], cliente__apellido__icontains=" ".join(partes[1:]))
+        pagos = pagos.filter(filtro_pagos)
+        gastos = gastos.filter(filtro_gastos)
+    return pagos, gastos
 
-    for pago in pagos.order_by("-fecha")[:200]:
-        desc_clean = pago.descripcion.replace('Abono: ', '') if pago.descripcion else ''
-        movimientos.append({"id": f"PAGO-{pago.id}", "fecha": pago.fecha, "tipo": "INGRESO", "concepto": f"Cobro a {pago.cliente.nombre_completo} {desc_clean and f'({desc_clean})'}", "monto": float(pago.monto), "metodo": pago.metodo_pago})
 
-    for gasto in gastos.order_by("-fecha")[:200]:
-        movimientos.append({"id": f"GASTO-{gasto.id}", "fecha": gasto.fecha, "tipo": "EGRESO", "concepto": f"Compra/Gasto: {gasto.descripcion}", "monto": float(gasto.monto), "metodo": gasto.metodo_pago})
-    
+@api.get("/finanzas/caja", response=List[MovimientoCajaOut], tags=["Finanzas"])
+def obtener_movimientos_caja(
+    request,
+    fecha_desde: Optional[date] = None,
+    fecha_hasta: Optional[date] = None,
+    metodo: Optional[str] = None,
+    q: Optional[str] = None,
+    cliente_id: Optional[int] = None,
+    tipo: Optional[str] = None,
+):
+    require_capability(request, "finanzas")
+    pagos, gastos = _filtrar_caja(request, fecha_desde, fecha_hasta, metodo, q, cliente_id, tipo)
+    categorias = dict(Gasto.TIPO_CHOICES)
+    movimientos = []
+    for pago in pagos.order_by("-fecha")[:500]:
+        detalle = pago.descripcion.replace("Abono: ", "") if pago.descripcion else ""
+        movimientos.append({
+            "id": f"PAGO-{pago.id}", "fecha": pago.fecha, "tipo": "INGRESO",
+            "concepto": f"Cobro a {pago.cliente.nombre_completo}" + (f" ({detalle})" if detalle else ""),
+            "monto": float(pago.monto), "metodo": pago.metodo_pago,
+            "cliente_id": pago.cliente_id, "cliente_nombre": pago.cliente.nombre_completo, "detalle": detalle,
+        })
+    for gasto in gastos.order_by("-fecha")[:500]:
+        movimientos.append({
+            "id": f"GASTO-{gasto.id}", "fecha": gasto.fecha, "tipo": "EGRESO",
+            "concepto": f"Compra/Gasto: {gasto.descripcion}", "monto": float(gasto.monto), "metodo": gasto.metodo_pago,
+            "detalle": gasto.descripcion, "categoria": categorias.get(gasto.tipo, gasto.tipo),
+        })
     movimientos.sort(key=lambda x: x["fecha"], reverse=True)
-    return movimientos[:200]
+    return movimientos[:500]
 
 
 @api.get("/finanzas/caja/resumen", response=CajaResumenOut, tags=["Finanzas"])
@@ -1885,35 +2338,34 @@ def obtener_resumen_caja(
     fecha_desde: Optional[date] = None,
     fecha_hasta: Optional[date] = None,
     metodo: Optional[str] = None,
+    q: Optional[str] = None,
+    cliente_id: Optional[int] = None,
+    tipo: Optional[str] = None,
 ):
     require_capability(request, "finanzas")
-    pagos = MovimientoCuenta.objects.filter(
-        tipo=MovimientoCuenta.TIPO_PAGO, owner=request.user
-    )
-    gastos = Gasto.objects.filter(owner=request.user)
-    if fecha_desde:
-        pagos = pagos.filter(fecha__date__gte=fecha_desde)
-        gastos = gastos.filter(fecha__date__gte=fecha_desde)
-    if fecha_hasta:
-        pagos = pagos.filter(fecha__date__lte=fecha_hasta)
-        gastos = gastos.filter(fecha__date__lte=fecha_hasta)
-    if metodo:
-        pagos = pagos.filter(metodo_pago=metodo)
-        gastos = gastos.filter(metodo_pago=metodo)
-
-    ingresos_data = pagos.aggregate(
-        total=Coalesce(Sum("monto"), Decimal("0.00")), cantidad=Count("id")
-    )
-    egresos_data = gastos.aggregate(
-        total=Coalesce(Sum("monto"), Decimal("0.00")), cantidad=Count("id")
-    )
+    pagos, gastos = _filtrar_caja(request, fecha_desde, fecha_hasta, metodo, q, cliente_id, tipo)
+    ingresos_data = pagos.aggregate(total=Coalesce(Sum("monto"), Decimal("0.00")), cantidad=Count("id"))
+    egresos_data = gastos.aggregate(total=Coalesce(Sum("monto"), Decimal("0.00")), cantidad=Count("id"))
     ingresos = ingresos_data["total"]
     egresos = egresos_data["total"]
+
+    por_medio: dict = {}
+    for fila in pagos.values("metodo_pago").annotate(total=Sum("monto")):
+        por_medio.setdefault(fila["metodo_pago"] or "OTRO", {"ingresos": 0.0, "egresos": 0.0})["ingresos"] += float(fila["total"] or 0)
+    for fila in gastos.values("metodo_pago").annotate(total=Sum("monto")):
+        por_medio.setdefault(fila["metodo_pago"] or "OTRO", {"ingresos": 0.0, "egresos": 0.0})["egresos"] += float(fila["total"] or 0)
+
     return {
         "ingresos": float(ingresos),
         "egresos": float(egresos),
         "resultado": float(ingresos - egresos),
         "cantidad_movimientos": ingresos_data["cantidad"] + egresos_data["cantidad"],
+        "cantidad_ingresos": ingresos_data["cantidad"],
+        "cantidad_egresos": egresos_data["cantidad"],
+        "por_medio": [
+            {"metodo": metodo_pago, **valores}
+            for metodo_pago, valores in sorted(por_medio.items(), key=lambda item: -(item[1]["ingresos"] + item[1]["egresos"]))
+        ],
     }
 
 
@@ -1945,7 +2397,9 @@ def actualizar_estado_presupuesto_publico(request, token: str, payload: EstadoRa
         portal_expires_at__gt=timezone.now(),
     )
 
-    if presupuesto.estado != "ENVIADO":
+    # Un borrador también se puede responder: si el link le llegó al cliente,
+    # en la práctica ya fue enviado.
+    if presupuesto.estado not in {"BORRADOR", "ENVIADO"}:
         raise HttpError(400, "Este presupuesto ya no admite cambios desde el portal.")
 
     if payload.estado not in {"APROBADO", "RECHAZADO"}:
@@ -1979,6 +2433,34 @@ def administrar_portal_presupuesto(request, presupuesto_id: int, payload: Portal
         presupuesto.portal_expires_at = timezone.now() + timedelta(days=90)
     presupuesto.save(update_fields=["portal_activo", "token", "portal_expires_at"])
     return presupuesto
+
+
+def _renovar_portal(documento):
+    """Extiende la vigencia del link público al compartirlo, sin cambiar el token.
+
+    Los links vencen a los 90 días y la app los seguía compartiendo igual: el
+    cliente abría un WhatsApp del taller y recibía "no encontrado". Al
+    compartir se renueva; como el token no cambia, el link enviado es el mismo
+    y los anteriores siguen andando. Un link desactivado a propósito por un
+    administrador no se reactiva por esta vía.
+    """
+    if not documento.portal_activo:
+        return 409, {"message": "El link público está desactivado. Un administrador puede volver a activarlo."}
+    documento.portal_expires_at = max(documento.portal_expires_at, _portal_expiry_default())
+    documento.save(update_fields=["portal_expires_at"])
+    return 200, {"portal_expires_at": documento.portal_expires_at}
+
+
+@api.post("/vehiculos/{vehiculo_id}/portal/renovar", response={200: PortalVigenciaOut, 409: ErrorSchema}, tags=["Directorio"])
+def renovar_portal_vehiculo(request, vehiculo_id: int):
+    require_capability(request, "gestionar_ordenes")
+    return _renovar_portal(get_object_or_404(Vehiculo, id=vehiculo_id, owner=request.user))
+
+
+@api.post("/presupuestos/{presupuesto_id}/portal/renovar", response={200: PortalVigenciaOut, 409: ErrorSchema}, tags=["Presupuestos"])
+def renovar_portal_presupuesto(request, presupuesto_id: int):
+    require_capability(request, "gestionar_ordenes")
+    return _renovar_portal(get_object_or_404(Presupuesto, id=presupuesto_id, activo=True, owner=request.user))
 
 
 @api.patch("/vehiculos/{vehiculo_id}/portal", response=VehiculoSchema, tags=["Directorio"])
@@ -2100,6 +2582,15 @@ class PerfilOut(Schema):
     taller_tel: str = ""
     taller_cuit: str = ""
     logo_url: Optional[str] = None
+    razon_social: str = ""
+    condicion_iva: str = ""
+    domicilio_fiscal: str = ""
+    ingresos_brutos: str = ""
+    inicio_actividades: Optional[date] = None
+    taller_email: str = ""
+    email_contador: str = ""
+    telefono_contador: str = ""
+    mostrar_iva: bool = False
 
 
 class PerfilIn(Schema):
@@ -2108,6 +2599,35 @@ class PerfilIn(Schema):
     taller_ciudad: str = ""
     taller_tel: str = ""
     taller_cuit: str = ""
+    # Opcionales: si no vienen, no se tocan (compatibilidad con clientes viejos).
+    razon_social: Optional[str] = None
+    condicion_iva: Optional[str] = None
+    domicilio_fiscal: Optional[str] = None
+    ingresos_brutos: Optional[str] = None
+    inicio_actividades: Optional[date] = None
+    taller_email: Optional[str] = None
+    email_contador: Optional[str] = None
+    telefono_contador: Optional[str] = None
+    mostrar_iva: Optional[bool] = None
+
+
+def normalizar_cuit(valor: str) -> str:
+    """Devuelve el CUIT como XX-XXXXXXXX-X, o lanza HttpError si no es válido.
+
+    Verifica el dígito verificador con el algoritmo de ARCA (módulo 11), así un
+    número mal tipeado no llega a las facturas del contador.
+    """
+    digitos = "".join(ch for ch in (valor or "") if ch.isdigit())
+    if not digitos:
+        return ""
+    if len(digitos) != 11:
+        raise HttpError(400, "El CUIT tiene que tener 11 números.")
+    pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+    resto = sum(int(d) * p for d, p in zip(digitos[:10], pesos)) % 11
+    verificador = 0 if resto == 0 else 9 if resto == 1 else 11 - resto
+    if verificador != int(digitos[10]):
+        raise HttpError(400, "El CUIT no es válido: revisá que los números estén bien.")
+    return f"{digitos[:2]}-{digitos[2:10]}-{digitos[10]}"
 
 
 class MessageOut(Schema):
@@ -2119,13 +2639,17 @@ class MiembroOut(Schema):
     user_id: int
     nombre: str
     email: str
+    usuario: str = ""
     rol: str
     activo: bool
+    es_dueno: bool = False
 
 
 class MiembroIn(Schema):
+    """El dueño crea el acceso: no hace falta que la persona tenga email."""
     nombre: str = Field(..., min_length=2, max_length=100)
-    email: str
+    usuario: Optional[str] = None
+    email: Optional[str] = None
     password: str = Field(..., min_length=8)
     rol: str
 
@@ -2133,6 +2657,20 @@ class MiembroIn(Schema):
 class MiembroUpdateIn(Schema):
     rol: Optional[str] = None
     activo: Optional[bool] = None
+    password: Optional[str] = Field(None, min_length=8)
+
+
+USUARIO_VALIDO = re.compile(r"^[a-z0-9][a-z0-9._-]{2,39}$")
+
+
+def _slug(texto: str) -> str:
+    import unicodedata
+    plano = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "", plano)
+
+
+def _usuario_libre(usuario: str) -> bool:
+    return not User.objects.filter(Q(username__iexact=usuario) | Q(email__iexact=usuario)).exists()
 
 class InvitacionIn(Schema):
     email: str
@@ -2148,9 +2686,11 @@ def _serializar_miembro(miembro: MembresiaTaller) -> MiembroOut:
         id=miembro.id,
         user_id=miembro.user_id,
         nombre=miembro.user.get_full_name() or miembro.user.username,
-        email=miembro.user.email or miembro.user.username,
+        email=miembro.user.email or "",
+        usuario=miembro.user.username,
         rol=miembro.rol,
         activo=miembro.activo,
+        es_dueno=miembro.user_id == miembro.taller.owner_id,
     )
 
 
@@ -2164,7 +2704,7 @@ def listar_equipo(request):
     taller = getattr(getattr(request, "membership", None), "taller", None)
     if taller is None:
         taller = get_object_or_404(Taller, owner=request.user)
-    miembros = MembresiaTaller.objects.select_related("user").filter(taller=taller).order_by("-activo", "user__first_name")
+    miembros = MembresiaTaller.objects.select_related("user", "taller").filter(taller=taller).order_by("-activo", "user__first_name")
     return [_serializar_miembro(miembro) for miembro in miembros]
 
 
@@ -2173,14 +2713,40 @@ def crear_miembro(request, payload: MiembroIn):
     require_capability(request, "equipo")
     if payload.rol not in dict(MembresiaTaller.ROL_CHOICES):
         return 400, {"message": "Rol inválido."}
-    email = payload.email.strip().lower()
-    if User.objects.filter(email__iexact=email).exists() or User.objects.filter(username__iexact=email).exists():
-        return 400, {"message": "Ya existe una cuenta con ese email."}
+    email = (payload.email or "").strip().lower()
+    usuario = (payload.usuario or email).strip().lower()
+    if email and ("@" not in email or "." not in email.split("@")[-1]):
+        return 400, {"message": "Revisá el email."}
+    if not email and not USUARIO_VALIDO.match(usuario):
+        return 400, {"message": "El usuario tiene que tener entre 3 y 40 letras o números, sin espacios (puede llevar . - _)."}
+    if not _usuario_libre(usuario) or (email and not _usuario_libre(email)):
+        return 400, {"message": "Ese usuario ya está en uso. Probá con otro."}
     taller = getattr(getattr(request, "membership", None), "taller", None) or get_object_or_404(Taller, owner=request.user)
-    user = User.objects.create_user(username=email, email=email, password=payload.password, first_name=payload.nombre.strip())
+    nombre = payload.nombre.strip()
+    partes = nombre.split(" ", 1)
+    user = User.objects.create_user(
+        username=usuario, email=email, password=payload.password,
+        first_name=partes[0], last_name=partes[1] if len(partes) > 1 else "",
+    )
     miembro = MembresiaTaller.objects.create(taller=taller, user=user, rol=payload.rol)
-    _auditar_equipo(request, taller, "EQUIPO_MIEMBRO_CREADO", f"Se creó el acceso de {email} como {payload.rol}.")
+    _auditar_equipo(request, taller, "EQUIPO_MIEMBRO_CREADO", f"Se creó el acceso de {usuario} como {payload.rol}.")
     return 201, _serializar_miembro(miembro)
+
+
+@api.get("/equipo/sugerir-usuario", response=dict, tags=["Equipo"])
+def sugerir_usuario(request, nombre: str):
+    """Propone un usuario libre a partir del nombre y del taller ("juan.sanmartin")."""
+    require_capability(request, "equipo")
+    taller = getattr(getattr(request, "membership", None), "taller", None) or get_object_or_404(Taller, owner=request.user)
+    base = _slug(nombre.split()[0] if nombre.split() else "") or "usuario"
+    # "Taller Mecánico San Martín" -> "sanmartin": se sacan las palabras genéricas.
+    genericas = {"taller", "talleres", "mecanico", "mecanica", "mecanicos", "el", "la", "los", "las", "de", "del", "y", "service"}
+    palabras = [_slug(p) for p in taller.nombre.split() if _slug(p) and _slug(p) not in genericas]
+    sufijo = ("".join(palabras) or _slug(taller.nombre) or "taller")[:20]
+    for candidato in [f"{base}.{sufijo}"] + [f"{base}{n}.{sufijo}" for n in range(2, 50)]:
+        if _usuario_libre(candidato):
+            return {"usuario": candidato}
+    return {"usuario": f"{base}.{secrets.token_hex(3)}"}
 
 @api.post("/equipo/invitaciones/", response=MessageOut, tags=["Equipo"])
 def crear_invitacion(request, payload: InvitacionIn):
@@ -2224,8 +2790,22 @@ def actualizar_miembro(request, miembro_id: int, payload: MiembroUpdateIn):
         miembro.rol = payload.rol
     if payload.activo is not None:
         miembro.activo = payload.activo
+        if payload.activo is False:
+            ApiToken.objects.filter(user=miembro.user).delete()
+    if miembro.user_id == taller.owner_id and payload.rol is not None and payload.rol != MembresiaTaller.ROL_ADMIN:
+        raise HttpError(400, "El dueño del taller siempre es administrador.")
+    if payload.password:
+        if miembro.user_id == taller.owner_id:
+            raise HttpError(400, "La contraseña del dueño se cambia desde 'Olvidé mi contraseña'.")
+        miembro.user.set_password(payload.password)
+        miembro.user.save(update_fields=["password"])
+        # Cierra las sesiones abiertas con la contraseña vieja.
+        ApiToken.objects.filter(user=miembro.user).delete()
     miembro.save(update_fields=["rol", "activo"])
-    _auditar_equipo(request, taller, "EQUIPO_MIEMBRO_ACTUALIZADO", f"Se actualizó {miembro.user.email}: rol={miembro.rol}, activo={miembro.activo}.")
+    _auditar_equipo(
+        request, taller, "EQUIPO_MIEMBRO_ACTUALIZADO",
+        f"Se actualizó {miembro.user.username}: rol={miembro.rol}, activo={miembro.activo}" + (", contraseña nueva" if payload.password else "") + ".",
+    )
     return _serializar_miembro(miembro)
 
 
@@ -2567,10 +3147,15 @@ def _logo_url(request, perfil: PerfilTaller) -> Optional[str]:
     if not perfil.logo:
         return None
     try:
-        return request.build_absolute_uri(perfil.logo.url)
+        url = perfil.logo.url
     except ValueError:
         # El archivo referenciado por el campo no existe físicamente en disco.
         return None
+    # Ruta relativa ("/media/taller/logos/..."): el frontend la sirve desde su
+    # propio dominio (app/media/... reenvía al backend). Con la dirección
+    # absoluta del backend el logo se rompía al entrar desde otra compu o el
+    # celular, y el PDF no lo podía capturar por ser de otro dominio.
+    return url
 
 
 def _perfil_out(request, perfil: PerfilTaller) -> PerfilOut:
@@ -2581,6 +3166,15 @@ def _perfil_out(request, perfil: PerfilTaller) -> PerfilOut:
         taller_tel=perfil.taller_tel,
         taller_cuit=perfil.taller_cuit,
         logo_url=_logo_url(request, perfil),
+        razon_social=perfil.razon_social,
+        condicion_iva=perfil.condicion_iva,
+        domicilio_fiscal=perfil.domicilio_fiscal,
+        ingresos_brutos=perfil.ingresos_brutos,
+        inicio_actividades=perfil.inicio_actividades,
+        taller_email=perfil.taller_email,
+        email_contador=perfil.email_contador,
+        telefono_contador=perfil.telefono_contador,
+        mostrar_iva=perfil.mostrar_iva,
     )
 
 
@@ -2598,23 +3192,36 @@ def get_perfil(request):
 def update_perfil(request, payload: PerfilIn):
     """Actualiza (o crea) el perfil del taller del usuario autenticado."""
     require_capability(request, "configuracion")
-    try:
-        perfil = request.user.perfil
-        perfil.nombre        = payload.nombre
-        perfil.taller_nombre = payload.taller_nombre
-        perfil.taller_ciudad = payload.taller_ciudad
-        perfil.taller_tel    = payload.taller_tel
-        perfil.taller_cuit   = payload.taller_cuit
-        perfil.save()
-    except PerfilTaller.DoesNotExist:
-        perfil = PerfilTaller.objects.create(
-            user=request.user,
-            nombre=payload.nombre,
-            taller_nombre=payload.taller_nombre,
-            taller_ciudad=payload.taller_ciudad,
-            taller_tel=payload.taller_tel,
-            taller_cuit=payload.taller_cuit,
-        )
+    if not payload.taller_nombre.strip():
+        raise HttpError(400, "El nombre del taller es obligatorio.")
+    cuit = normalizar_cuit(payload.taller_cuit)
+    if payload.condicion_iva and payload.condicion_iva not in dict(PerfilTaller.CONDICION_IVA_CHOICES):
+        raise HttpError(400, "Condición frente al IVA inválida.")
+    for campo in ("taller_email", "email_contador"):
+        correo = (getattr(payload, campo) or "").strip()
+        if correo and ("@" not in correo or "." not in correo.split("@")[-1]):
+            raise HttpError(400, "Revisá el email del contador." if campo == "email_contador" else "Revisá el email del taller.")
+    if payload.inicio_actividades and payload.inicio_actividades > timezone.localdate():
+        raise HttpError(400, "El inicio de actividades no puede ser una fecha futura.")
+
+    perfil, _ = PerfilTaller.objects.get_or_create(
+        user=request.user,
+        defaults={"nombre": payload.nombre, "taller_nombre": payload.taller_nombre},
+    )
+    perfil.nombre = payload.nombre.strip()
+    perfil.taller_nombre = payload.taller_nombre.strip()
+    perfil.taller_ciudad = payload.taller_ciudad.strip()
+    perfil.taller_tel = payload.taller_tel.strip()
+    perfil.taller_cuit = cuit
+    for campo in ("razon_social", "condicion_iva", "domicilio_fiscal", "ingresos_brutos", "taller_email", "email_contador", "telefono_contador"):
+        valor = getattr(payload, campo)
+        if valor is not None:
+            setattr(perfil, campo, valor.strip())
+    if payload.mostrar_iva is not None:
+        perfil.mostrar_iva = payload.mostrar_iva
+    if "inicio_actividades" in payload.model_fields_set:
+        perfil.inicio_actividades = payload.inicio_actividades
+    perfil.save()
     return _perfil_out(request, perfil)
 
 

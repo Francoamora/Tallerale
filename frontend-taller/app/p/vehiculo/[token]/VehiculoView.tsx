@@ -14,6 +14,7 @@
 import type { PublicVehiculo, PublicOTResumen } from "@/lib/api-public";
 import { CarIcon } from "@/components/icons";
 import { PublicTallerBrand } from "@/components/public-taller-brand";
+import { ESTADO_TRABAJO_LABEL, numeroOrden } from "@/lib/documentos";
 
 // ─── Formateo ─────────────────────────────────────────────────────────────────
 const ARS = new Intl.NumberFormat("es-AR", {
@@ -36,11 +37,11 @@ function formatDate(iso: string) {
 
 // ─── Badge de estado OT ───────────────────────────────────────────────────────
 const OT_ESTADO: Record<string, { label: string; dot: string; text: string }> = {
-  INGRESADO:  { label: "Ingresado",  dot: "bg-slate-400",   text: "text-slate-500"   },
-  EN_PROCESO: { label: "En Proceso", dot: "bg-amber-400",   text: "text-amber-600"   },
-  FINALIZADO: { label: "Finalizado", dot: "bg-emerald-400", text: "text-emerald-600" },
-  ENTREGADO:  { label: "Entregado",  dot: "bg-blue-400",    text: "text-blue-600"    },
-  ANULADO:    { label: "Anulado",    dot: "bg-red-300",     text: "text-red-400"     },
+  INGRESADO:  { label: ESTADO_TRABAJO_LABEL.INGRESADO,  dot: "bg-slate-400",   text: "text-slate-500"   },
+  EN_PROCESO: { label: ESTADO_TRABAJO_LABEL.EN_PROCESO, dot: "bg-amber-400",   text: "text-amber-600"   },
+  FINALIZADO: { label: ESTADO_TRABAJO_LABEL.FINALIZADO, dot: "bg-emerald-400", text: "text-emerald-600" },
+  ENTREGADO:  { label: ESTADO_TRABAJO_LABEL.ENTREGADO,  dot: "bg-blue-400",    text: "text-blue-600"    },
+  ANULADO:    { label: ESTADO_TRABAJO_LABEL.ANULADO,    dot: "bg-red-300",     text: "text-red-400"     },
 };
 
 // ─── Barra de Service ─────────────────────────────────────────────────────────
@@ -109,7 +110,7 @@ function OTItem({ ot, isLast }: { ot: PublicOTResumen; isLast: boolean }) {
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-xs font-bold text-slate-900">
-              OT-{String(ot.id).padStart(5, "0")}
+              {numeroOrden(ot.id)}
               {" · "}
               <span className="font-mono">{ot.kilometraje.toLocaleString("es-AR")} km</span>
             </p>

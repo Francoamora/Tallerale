@@ -8,7 +8,8 @@ import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { getPublicPresupuesto, PublicApiNotFoundError } from "@/lib/api-public";
 import type { PublicPresupuesto } from "@/lib/api-public";
-import { PresupuestoView } from "./PresupuestoView";
+import { PresupuestoRecibo } from "./PresupuestoRecibo";
+import { numeroPresupuesto } from "@/lib/documentos";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -36,7 +37,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const p = await fetchPresupuesto(token);
     if (!p) return { title: "Presupuesto" };
 
-    const num     = `P-${String(p.id).padStart(4, "0")}`;
+    const num     = numeroPresupuesto(p.id);
     const vehiculo = p.vehiculo
       ? `${p.vehiculo.marca} ${p.vehiculo.modelo} ${p.vehiculo.patente}`
       : "tu vehículo";
@@ -56,9 +57,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title: `Presupuesto ${num}`,
       description: `${p.resumen_corto || "Presupuesto de reparación"} · ${vehiculo} · Total: ${total}`,
       openGraph: {
-        title: `Presupuesto ${num} · Tallerista`,
+        // En la vista previa de WhatsApp el cliente reconoce a su taller, no a Tallerista.
+        title: `Presupuesto ${num} · ${p.taller_nombre || "Tu taller"}`,
         description: `${p.resumen_corto || "Presupuesto de reparación"} — ${vehiculo}\nTotal: ${total}`,
-        siteName: "Tallerista",
+        siteName: p.taller_nombre || "Tallerista",
         images: imageUrl ? [{ url: imageUrl, width: 1104, height: 720, alt: "Tallerista" }] : undefined,
       },
     };
@@ -74,5 +76,5 @@ export default async function PresupuestoPortalPage({ params }: PageProps) {
   const presupuesto = await fetchPresupuesto(token);
   if (!presupuesto) notFound();
 
-  return <PresupuestoView presupuesto={presupuesto} />;
+  return <PresupuestoRecibo presupuesto={presupuesto} />;
 }

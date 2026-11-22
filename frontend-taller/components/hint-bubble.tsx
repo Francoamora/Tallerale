@@ -23,7 +23,6 @@ interface HintAction {
 
 interface HintBubbleProps {
   id: string;           // Clave única — se guarda en localStorage
-  emoji?: string;
   title: string;
   desc: string;
   action?: HintAction;
@@ -51,10 +50,15 @@ function dismiss(id: string) {
   } catch { /* noop */ }
 }
 
+const IconoAyuda = (
+  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" />
+  </svg>
+);
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 export function HintBubble({
   id,
-  emoji = "💡",
   title,
   desc,
   action,
@@ -81,7 +85,7 @@ export function HintBubble({
     return (
       <div className="animate-in slide-in-from-top-2 mb-4 flex items-start justify-between gap-4 rounded-2xl border border-orange-200 bg-orange-50 px-5 py-4 dark:border-orange-900/40 dark:bg-orange-900/10">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 text-xl">{emoji}</span>
+          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300">{IconoAyuda}</span>
           <div>
             <p className="text-sm font-bold text-orange-800 dark:text-orange-300">{title}</p>
             <p className="mt-0.5 text-xs leading-relaxed text-orange-700 dark:text-orange-400">{desc}</p>
@@ -129,7 +133,7 @@ export function HintBubble({
 
       <div className="flex items-start justify-between gap-3 pl-2">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 text-2xl">{emoji}</span>
+          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300">{IconoAyuda}</span>
           <div>
             <p className="font-bold text-slate-800 dark:text-white">{title}</p>
             <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{desc}</p>
@@ -169,47 +173,6 @@ export function HintBubble({
           </svg>
         </button>
       </div>
-    </div>
-  );
-}
-
-// ─── Componente de estado vacío con hint integrado ────────────────────────────
-export function EmptyWithHint({
-  emoji = "📭",
-  title,
-  desc,
-  hintId,
-  hintTitle,
-  hintDesc,
-  actionLabel,
-  actionHref,
-}: {
-  emoji?: string;
-  title: string;
-  desc: string;
-  hintId: string;
-  hintTitle: string;
-  hintDesc: string;
-  actionLabel: string;
-  actionHref: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-6 py-16 text-center">
-      <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-100 text-4xl dark:bg-slate-800">
-        {emoji}
-      </div>
-      <div>
-        <p className="text-lg font-black text-slate-800 dark:text-white">{title}</p>
-        <p className="mt-2 max-w-sm text-sm text-slate-500 dark:text-slate-400">{desc}</p>
-      </div>
-      <HintBubble
-        id={hintId}
-        emoji="👆"
-        title={hintTitle}
-        desc={hintDesc}
-        action={{ label: actionLabel, href: actionHref }}
-        variant="inline"
-      />
     </div>
   );
 }

@@ -23,9 +23,13 @@ export default function Image() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <div style={{ display: "flex", width: 64, height: 64, borderRadius: 18, background: "#fe6e00", color: "#ffffff", fontSize: 34, fontWeight: 800, alignItems: "center", justifyContent: "center" }}>
-            T
-          </div>
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <rect width="64" height="64" rx="15" fill="#EA580C" />
+            <rect x="12" y="14" width="40" height="10" rx="5" fill="#fff" />
+            <rect x="27" y="16" width="10" height="24" fill="#fff" />
+            <circle cx="32" cy="44" r="9" fill="#fff" />
+            <polygon points="35.98,46.3 32,48.6 28.02,46.3 28.02,41.7 32,39.4 35.98,41.7" fill="#EA580C" />
+          </svg>
           <div style={{ display: "flex", fontSize: 40, fontWeight: 800 }}>Tallerista</div>
         </div>
 
@@ -40,7 +44,7 @@ export default function Image() {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", fontSize: 26, color: "rgba(255,255,255,.6)" }}>tallerista.famdesarrollos.com.ar</div>
-          <div style={{ display: "flex", padding: "14px 30px", borderRadius: 999, background: "#fe6e00", color: "#ffffff", fontSize: 28, fontWeight: 800 }}>
+          <div style={{ display: "flex", padding: "14px 30px", borderRadius: 999, background: "#EA580C", color: "#ffffff", fontSize: 28, fontWeight: 800 }}>
             7 días gratis
           </div>
         </div>

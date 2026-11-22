@@ -4,13 +4,15 @@
  * 404 para el Client Portal — se muestra cuando el token es inválido o expiró.
  */
 import Link from "next/link";
+import { MarcoPortal } from "@/components/marco-portal";
 
 export default function PortalNotFound() {
   return (
+    <MarcoPortal>
     <div className="flex flex-col items-center justify-center py-16 text-center">
       {/* Icono */}
-      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 text-4xl">
-        🔍
+      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+        <svg className="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" /></svg>
       </div>
 
       {/* Título */}
@@ -43,5 +45,6 @@ export default function PortalNotFound() {
         </p>
       </div>
     </div>
+    </MarcoPortal>
   );
 }

@@ -1,343 +1,449 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import {
-  getMovimientosCaja,
-  getResumenCaja,
-  type CajaResumen,
-  type MovimientoCaja,
-} from "@/lib/api";
+import { ExportarContador } from "@/components/exportar-contador";
 import { HintBubble } from "@/components/hint-bubble";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { getMovimientosCaja, getPerfilTaller, getResumenCaja, type CajaResumen, type FiltrosCaja, type MovimientoCaja } from "@/lib/api";
+import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const METODOS = [
-  { value: "", label: "Todos los medios" },
-  { value: "EFECTIVO", label: "Efectivo" },
-  { value: "TRANSFERENCIA", label: "Transferencia" },
-  { value: "TARJETA", label: "Tarjeta" },
-  { value: "CHEQUE", label: "Cheque" },
-];
-
-const resumenVacio: CajaResumen = {
-  ingresos: 0,
-  egresos: 0,
-  resultado: 0,
-  cantidad_movimientos: 0,
+const MEDIOS: Record<string, string> = {
+  EFECTIVO: "Efectivo",
+  TRANSFERENCIA: "Transferencia",
+  TARJETA: "Tarjeta",
+  CHEQUE: "Cheque",
+  CONTADO: "Contado",
+  OTRO: "Otro",
 };
 
+const PERIODOS = [
+  { value: "hoy", label: "Hoy" },
+  { value: "ayer", label: "Ayer" },
+  { value: "semana", label: "Esta semana" },
+  { value: "mes", label: "Este mes" },
+  { value: "mes_pasado", label: "Mes pasado" },
+  { value: "personalizado", label: "Elegir fechas" },
+] as const;
+type Periodo = (typeof PERIODOS)[number]["value"];
+
+const TIPOS = [
+  { value: "", label: "Todo" },
+  { value: "INGRESO", label: "Entradas" },
+  { value: "EGRESO", label: "Salidas" },
+] as const;
+type Tipo = (typeof TIPOS)[number]["value"];
+
+const resumenVacio: CajaResumen = { ingresos: 0, egresos: 0, resultado: 0, cantidad_movimientos: 0 };
+
 function fechaLocal(fecha = new Date()) {
-  const offset = fecha.getTimezoneOffset();
-  return new Date(fecha.getTime() - offset * 60_000).toISOString().slice(0, 10);
+  return new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 }
 
-function inicioMesActual() {
+function rangoDe(periodo: Periodo, desde: string, hasta: string) {
   const hoy = new Date();
-  return fechaLocal(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+  const d = (y: number, m: number, dia: number) => fechaLocal(new Date(y, m, dia));
+  switch (periodo) {
+    case "hoy":
+      return { desde: fechaLocal(hoy), hasta: fechaLocal(hoy) };
+    case "ayer": {
+      const ayer = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 1);
+      return { desde: fechaLocal(ayer), hasta: fechaLocal(ayer) };
+    }
+    case "semana": {
+      // De lunes a hoy.
+      const lunes = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - ((hoy.getDay() + 6) % 7));
+      return { desde: fechaLocal(lunes), hasta: fechaLocal(hoy) };
+    }
+    case "mes":
+      return { desde: d(hoy.getFullYear(), hoy.getMonth(), 1), hasta: fechaLocal(hoy) };
+    case "mes_pasado":
+      return { desde: d(hoy.getFullYear(), hoy.getMonth() - 1, 1), hasta: d(hoy.getFullYear(), hoy.getMonth(), 0) };
+    default:
+      return { desde, hasta };
+  }
 }
 
-export default function CajaDiaria() {
-  const [vista, setVista] = useState<"hoy" | "historial">("hoy");
+function etiquetaDia(clave: string) {
+  const [y, m, dia] = clave.split("-").map(Number);
+  const fecha = new Date(y, m - 1, dia);
+  const hoy = new Date();
+  const diff = Math.round((new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).getTime() - fecha.getTime()) / 86_400_000);
+  if (diff === 0) return "Hoy";
+  if (diff === 1) return "Ayer";
+  const texto = fecha.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" }).replace(",", "");
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+function hora(valor: string) {
+  const f = new Date(valor);
+  return `${String(f.getHours()).padStart(2, "0")}:${String(f.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Descarga lo que se está viendo como planilla (se abre en Excel). */
+function descargarCSV(movimientos: MovimientoCaja[], nombre: string) {
+  const filas = [
+    ["Fecha", "Hora", "Tipo", "Concepto", "Cliente", "Medio", "Importe"],
+    ...movimientos.map((m) => [
+      fechaLocal(new Date(m.fecha)),
+      hora(m.fecha),
+      m.tipo === "INGRESO" ? "Entrada" : "Salida",
+      m.detalle || m.concepto,
+      m.cliente_nombre || "",
+      MEDIOS[m.metodo] ?? m.metodo,
+      String(m.tipo === "INGRESO" ? m.monto : -m.monto).replace(".", ","),
+    ]),
+  ];
+  const csv = filas.map((f) => f.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(";")).join("\n");
+  const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${nombre}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function CajaDiaria() {
+  const params = useSearchParams();
+  const clienteInicial = params.get("cliente");
+
+  const [periodo, setPeriodo] = useState<Periodo>(clienteInicial ? "mes" : "hoy");
+  const [desde, setDesde] = useState(() => rangoDe("mes", "", "").desde);
+  const [hasta, setHasta] = useState(() => fechaLocal());
+  const [tipo, setTipo] = useState<Tipo>("");
+  const [metodo, setMetodo] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [busquedaActiva, setBusquedaActiva] = useState("");
+  const [cliente, setCliente] = useState<{ id: number; nombre: string } | null>(clienteInicial ? { id: Number(clienteInicial), nombre: "" } : null);
+
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
   const [resumen, setResumen] = useState<CajaResumen>(resumenVacio);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [desde, setDesde] = useState(inicioMesActual);
-  const [hasta, setHasta] = useState(() => fechaLocal());
-  const [metodo, setMetodo] = useState("");
+  const [paraContador, setParaContador] = useState(false);
+  const [contador, setContador] = useState({ telefono: "", taller: "" });
 
-  const periodo = useMemo(() => {
-    if (vista === "hoy") {
-      const hoy = fechaLocal();
-      return { fecha_desde: hoy, fecha_hasta: hoy, metodo };
-    }
-    return { fecha_desde: desde, fecha_hasta: hasta, metodo };
-  }, [desde, hasta, metodo, vista]);
+  useEffect(() => {
+    getPerfilTaller()
+      .then((p) => setContador({ telefono: p.telefono_contador ?? "", taller: p.taller_nombre }))
+      .catch(() => {});
+  }, []);
 
-  const cargarCaja = useCallback(async () => {
+  // La búsqueda se manda al dejar de tipear un momento.
+  useEffect(() => {
+    const t = window.setTimeout(() => setBusquedaActiva(busqueda.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [busqueda]);
+
+  const rango = rangoDe(periodo, desde, hasta);
+  const filtros: FiltrosCaja = useMemo(
+    () => ({
+      fecha_desde: rango.desde,
+      fecha_hasta: rango.hasta,
+      metodo: metodo || undefined,
+      tipo: tipo || undefined,
+      q: busquedaActiva || undefined,
+      cliente_id: cliente?.id,
+    }),
+    [rango.desde, rango.hasta, metodo, tipo, busquedaActiva, cliente?.id],
+  );
+
+  const cargar = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [lista, totales] = await Promise.all([
-        getMovimientosCaja(periodo),
-        getResumenCaja(periodo),
-      ]);
+      const [lista, totales] = await Promise.all([getMovimientosCaja(filtros), getResumenCaja(filtros)]);
       setMovimientos(lista);
       setResumen(totales);
+      // Si se llegó con ?cliente=, se completa el nombre del filtro.
+      setCliente((actual) => (actual && !actual.nombre ? { ...actual, nombre: lista.find((m) => m.cliente_id === actual.id)?.cliente_nombre || "Cliente" } : actual));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar los movimientos.");
     } finally {
       setLoading(false);
     }
-  }, [periodo]);
+  }, [filtros]);
 
   useEffect(() => {
-    cargarCaja();
-  }, [cargarCaja]);
+    void cargar();
+  }, [cargar]);
+
+  const grupos = useMemo(() => {
+    const mapa = new Map<string, MovimientoCaja[]>();
+    for (const m of movimientos) {
+      const clave = fechaLocal(new Date(m.fecha));
+      mapa.set(clave, [...(mapa.get(clave) ?? []), m]);
+    }
+    return [...mapa.entries()];
+  }, [movimientos]);
+
+  const hayFiltros = Boolean(tipo || metodo || busquedaActiva || cliente);
+  const unSoloDia = rango.desde === rango.hasta;
+  const textoPeriodo = periodo === "personalizado"
+    ? `Del ${new Date(`${rango.desde}T00:00`).toLocaleDateString("es-AR")} al ${new Date(`${rango.hasta}T00:00`).toLocaleDateString("es-AR")}`
+    : PERIODOS.find((p) => p.value === periodo)?.label;
+
+  function limpiarFiltros() {
+    setTipo("");
+    setMetodo("");
+    setBusqueda("");
+    setCliente(null);
+  }
 
   return (
     <AppShell
       currentPath="/caja"
+      compact
       badge="Tesorería"
-      title="Caja y movimientos"
-      description="Entradas y salidas reales, separadas por período y medio de pago."
+      title="Caja"
+      description="Lo que entró y salió, por período, cliente y medio de pago."
       actions={
-        <div className="flex items-center gap-2">
-          <Link
-            href="/gastos?nuevo=1"
-            className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          >
-            − Nuevo gasto
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setParaContador(true)} className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-sm font-semibold text-slate-700 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0-4-4m4 4 4-4M5 20h14" /></svg>
+            Para el contador
+          </button>
+          <Link href="/gastos?nuevo=1" className="inline-flex h-9 items-center rounded-xl px-3.5 text-sm font-semibold text-slate-700 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800">
+            − Registrar gasto
           </Link>
-          <Link
-            href="/pagos/registrar"
-            className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
-          >
-            ＋ Registrar cobro
+          <Link href="/pagos/registrar" className="inline-flex h-9 items-center rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700">
+            + Registrar cobro
           </Link>
         </div>
       }
     >
-      <div className="space-y-4">
-        <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 lg:flex-row lg:items-center lg:justify-between">
-          <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-900">
+      {/* Período */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 pb-1 lg:pb-0" role="toolbar" aria-label="Período">
+          {PERIODOS.map((p) => (
             <button
-              onClick={() => setVista("hoy")}
+              key={p.value}
+              type="button"
+              onClick={() => setPeriodo(p.value)}
+              aria-pressed={periodo === p.value}
               className={cn(
-                "rounded-lg px-5 py-2 text-sm font-bold transition",
-                vista === "hoy"
-                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
-                  : "text-slate-500 dark:text-slate-400",
+                "inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-sm font-semibold transition",
+                periodo === p.value ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800",
               )}
             >
-              Caja de hoy
+              {p.label}
             </button>
-            <button
-              onClick={() => setVista("historial")}
-              className={cn(
-                "rounded-lg px-5 py-2 text-sm font-bold transition",
-                vista === "historial"
-                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
-                  : "text-slate-500 dark:text-slate-400",
-              )}
-            >
-              Historial
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {vista === "historial" && (
-              <>
-                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Desde</span>
-                  <input type="date" value={desde} max={hasta} onChange={(event) => setDesde(event.target.value)} className="bg-transparent text-xs font-semibold text-slate-700 outline-none dark:text-slate-200" />
-                </label>
-                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Hasta</span>
-                  <input type="date" value={hasta} min={desde} onChange={(event) => setHasta(event.target.value)} className="bg-transparent text-xs font-semibold text-slate-700 outline-none dark:text-slate-200" />
-                </label>
-              </>
-            )}
-            <select
-              value={metodo}
-              onChange={(event) => setMetodo(event.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-              aria-label="Filtrar medio de pago"
-            >
-              {METODOS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-            <button onClick={cargarCaja} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900" aria-label="Actualizar movimientos">
-              ↻
-            </button>
-          </div>
-        </section>
-
-        {error && (
-          <div role="alert" className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
-            <span>{error}</span>
-            <button onClick={cargarCaja} className="underline">Reintentar</button>
+          ))}
+        </div>
+        {periodo === "personalizado" && (
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input type="date" value={desde} max={hasta} onChange={(e) => setDesde(e.target.value)} aria-label="Desde" className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:[color-scheme:dark]" />
+            <span>a</span>
+            <input type="date" value={hasta} min={desde} onChange={(e) => setHasta(e.target.value)} aria-label="Hasta" className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:[color-scheme:dark]" />
           </div>
         )}
+      </div>
 
-        {!loading && !error && movimientos.length === 0 && vista === "hoy" && (
+      {/* Números del período */}
+      <div className="mt-3 grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800 xl:grid-cols-4">
+        <Cifra label="Entró" value={formatCurrency(resumen.ingresos)} helper={`${resumen.cantidad_ingresos ?? 0} ${resumen.cantidad_ingresos === 1 ? "cobro" : "cobros"}`} tono="verde" onClick={() => setTipo(tipo === "INGRESO" ? "" : "INGRESO")} activo={tipo === "INGRESO"} />
+        <Cifra label="Salió" value={formatCurrency(resumen.egresos)} helper={`${resumen.cantidad_egresos ?? 0} ${resumen.cantidad_egresos === 1 ? "gasto" : "gastos"}`} tono="rojo" onClick={() => setTipo(tipo === "EGRESO" ? "" : "EGRESO")} activo={tipo === "EGRESO"} />
+        <Cifra label="Resultado" value={formatCurrency(resumen.resultado)} helper={resumen.resultado >= 0 ? "Entró más de lo que salió" : "Salió más de lo que entró"} tono={resumen.resultado < 0 ? "rojo" : undefined} />
+        <div className="border-slate-100 px-5 py-4 dark:border-slate-700 max-xl:border-t xl:border-l">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Por medio de pago</p>
+          {resumen.por_medio?.length ? (
+            <ul className="mt-1.5 space-y-1">
+              {resumen.por_medio.slice(0, 3).map((m) => (
+                <li key={m.metodo}>
+                  <button type="button" onClick={() => setMetodo(metodo === m.metodo ? "" : m.metodo)} className={cn("flex w-full items-baseline justify-between gap-2 rounded text-left text-sm transition hover:text-slate-900 dark:hover:text-white", metodo === m.metodo ? "font-semibold text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-300")}>
+                    <span>{MEDIOS[m.metodo] ?? m.metodo}</span>
+                    <span className="tabular-nums">{formatCurrency(m.ingresos - m.egresos)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-sm text-slate-400">Sin movimientos</p>
+          )}
+        </div>
+      </div>
+
+      {/* Buscador y filtros */}
+      <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="relative w-full lg:max-w-sm">
+          <svg className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" /></svg>
+          <input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar cliente, concepto o importe…"
+            aria-label="Buscar movimientos"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-9 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          {busqueda && (
+            <button type="button" onClick={() => setBusqueda("")} aria-label="Borrar búsqueda" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white">×</button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl bg-slate-200/60 p-1 dark:bg-slate-800" role="group" aria-label="Tipo de movimiento">
+            {TIPOS.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setTipo(t.value)}
+                aria-pressed={tipo === t.value}
+                className={cn("h-8 rounded-lg px-3 text-sm font-semibold transition", tipo === t.value ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:text-slate-400")}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <select value={metodo} onChange={(e) => setMetodo(e.target.value)} aria-label="Medio de pago" className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <option value="">Todos los medios</option>
+            {["EFECTIVO", "TRANSFERENCIA", "TARJETA", "CHEQUE"].map((m) => <option key={m} value={m}>{MEDIOS[m]}</option>)}
+          </select>
+          {cliente && (
+            <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-50 pl-3 pr-1.5 text-sm font-semibold text-brand-800 ring-1 ring-inset ring-brand-200 dark:bg-brand-950/30 dark:text-brand-200 dark:ring-brand-900">
+              Cliente: {cliente.nombre || "…"}
+              <button type="button" onClick={() => setCliente(null)} aria-label="Quitar filtro de cliente" className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-brand-100 dark:hover:bg-brand-900/50">×</button>
+            </span>
+          )}
+          {hayFiltros && (
+            <button type="button" onClick={limpiarFiltros} className="h-9 rounded-lg px-2.5 text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+          {error}
+          <button type="button" onClick={() => void cargar()} className="font-semibold underline">Reintentar</button>
+        </div>
+      )}
+
+      {!loading && !error && movimientos.length === 0 && periodo === "hoy" && !hayFiltros && (
+        <div className="mt-4">
           <HintBubble
             id="hint-caja-v2"
             variant="banner"
-            emoji="💰"
             title="Empezá a mover la caja de hoy"
-            desc="Registrá un cobro o un gasto. El resultado del día se actualizará automáticamente."
+            desc="Registrá un cobro o un gasto. El resultado del día se actualiza solo."
             action={{ label: "Registrar cobro", href: "/pagos/registrar" }}
           />
-        )}
+        </div>
+      )}
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Ingresos" value={formatCurrency(resumen.ingresos)} detail={vista === "hoy" ? "Cobros recibidos hoy" : "Cobros del período"} tone="green" />
-          <Kpi label="Egresos" value={formatCurrency(resumen.egresos)} detail={vista === "hoy" ? "Gastos registrados hoy" : "Gastos del período"} tone="red" />
-          <Kpi
-            label="Resultado"
-            value={formatCurrency(resumen.resultado)}
-            detail={resumen.resultado >= 0 ? "Entradas menos salidas" : "Las salidas superan las entradas"}
-            tone={resumen.resultado >= 0 ? "dark" : "red"}
-          />
-          <Kpi label="Movimientos" value={String(resumen.cantidad_movimientos)} detail={metodo ? METODOS.find((item) => item.value === metodo)?.label ?? metodo : "Todos los medios de pago"} />
-        </section>
-
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-bold text-slate-900 dark:text-white">
-                {vista === "hoy" ? "Movimientos de hoy" : "Libro de movimientos"}
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {vista === "hoy" ? "Actividad financiera de la jornada." : `${desde} — ${hasta}`}
-              </p>
-            </div>
-            <div className="flex items-center gap-4 text-[11px] font-semibold text-slate-400">
-              <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-emerald-500" /> Ingreso</span>
-              <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-red-500" /> Egreso</span>
-            </div>
-          </div>
-
-          {/* Tabla — desktop/tablet. En mobile 4 columnas no entran y obligaba
-              a scrollear horizontal para leer cada movimiento. */}
-          <div className="hidden overflow-x-auto sm:block">
-            <table className="min-w-[720px] w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:border-slate-700">
-                  <th className="px-5 py-3">Fecha y hora</th>
-                  <th className="py-3">Movimiento</th>
-                  <th className="py-3">Medio</th>
-                  <th className="px-5 py-3 text-right">Importe</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/70">
-                {loading ? (
-                  Array.from({ length: 4 }).map((_, index) => (
-                    <tr key={index} className="animate-pulse">
-                      <td colSpan={4} className="px-5 py-4"><div className="h-5 rounded bg-slate-100 dark:bg-slate-700" /></td>
-                    </tr>
-                  ))
-                ) : movimientos.length ? (
-                  movimientos.map((movimiento) => (
-                    <tr key={movimiento.id} className="transition hover:bg-slate-50/80 dark:hover:bg-slate-900/30">
-                      <td className="whitespace-nowrap px-5 py-3 text-xs text-slate-500 dark:text-slate-400">{formatDateTime(movimiento.fecha)}</td>
-                      <td className="py-3">
-                        <div className="flex items-center gap-3">
-                          <span className={cn("grid h-8 w-8 place-items-center rounded-lg text-sm font-black", movimiento.tipo === "INGRESO" ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30" : "bg-red-50 text-red-600 dark:bg-red-950/30")}>
-                            {movimiento.tipo === "INGRESO" ? "↘" : "↗"}
-                          </span>
-                          <div>
-                            <p className="font-semibold text-slate-800 dark:text-slate-100">{movimiento.concepto}</p>
-                            <p className="text-[10px] uppercase tracking-wider text-slate-400">{movimiento.id}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3">
-                        <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-700 dark:text-slate-300">{movimiento.metodo}</span>
-                      </td>
-                      <td className={cn("px-5 py-3 text-right font-mono font-black", movimiento.tipo === "INGRESO" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
-                        {movimiento.tipo === "INGRESO" ? "+" : "−"} {formatCurrency(movimiento.monto)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="px-5 py-14 text-center">
-                      <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-700">↕</div>
-                      <p className="font-semibold text-slate-700 dark:text-slate-200">No hay movimientos en este período</p>
-                      <p className="mt-1 text-xs text-slate-400">Cambiá las fechas o registrá una nueva operación.</p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Tarjetas — mobile */}
-          <div className="divide-y divide-slate-100 dark:divide-slate-700/70 sm:hidden">
-            {loading ? (
-              Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="animate-pulse px-5 py-4">
-                  <div className="h-5 rounded bg-slate-100 dark:bg-slate-700" />
-                </div>
-              ))
-            ) : movimientos.length ? (
-              movimientos.map((movimiento) => (
-                <div key={movimiento.id} className="flex items-center gap-3 px-5 py-3.5">
-                  <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-black", movimiento.tipo === "INGRESO" ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30" : "bg-red-50 text-red-600 dark:bg-red-950/30")}>
-                    {movimiento.tipo === "INGRESO" ? "↘" : "↗"}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{movimiento.concepto}</p>
-                    <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
-                      {formatDateTime(movimiento.fecha)}
-                      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-700 dark:text-slate-300">{movimiento.metodo}</span>
-                    </p>
-                  </div>
-                  <p className={cn("shrink-0 font-mono font-black", movimiento.tipo === "INGRESO" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
-                    {movimiento.tipo === "INGRESO" ? "+" : "−"} {formatCurrency(movimiento.monto)}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <div className="px-5 py-14 text-center">
-                <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-700">↕</div>
-                <p className="font-semibold text-slate-700 dark:text-slate-200">No hay movimientos en este período</p>
-                <p className="mt-1 text-xs text-slate-400">Cambiá las fechas o registrá una nueva operación.</p>
-              </div>
-            )}
-          </div>
-          {movimientos.length >= 200 && (
-            <p className="border-t border-slate-100 px-5 py-3 text-center text-xs text-amber-600 dark:border-slate-700 dark:text-amber-400">
-              Se muestran los 200 movimientos más recientes del período.
-            </p>
+      {/* Movimientos */}
+      <section className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3 dark:border-slate-700">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            <span className="font-semibold text-slate-900 dark:text-white">{textoPeriodo}</span>
+            {" · "}
+            {loading ? "Cargando…" : `${movimientos.length} ${movimientos.length === 1 ? "movimiento" : "movimientos"}`}
+          </p>
+          {movimientos.length > 0 && (
+            <button
+              type="button"
+              onClick={() => descargarCSV(movimientos, `caja-${rango.desde}${unSoloDia ? "" : `-a-${rango.hasta}`}`)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0-4-4m4 4 4-4M5 20h14" /></svg>
+              Descargar Excel
+            </button>
           )}
-        </section>
+        </header>
 
-        <p className="px-1 text-[11px] leading-5 text-slate-400">
-          El resultado representa ingresos menos egresos del período seleccionado. No equivale a una conciliación bancaria ni al dinero contado físicamente.
-        </p>
-      </div>
+        {loading ? (
+          <div className="space-y-2 p-4">{[1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-700/50" />)}</div>
+        ) : movimientos.length === 0 ? (
+          <div className="px-6 py-14 text-center">
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{hayFiltros ? "Nada coincide con esos filtros." : "No hubo movimientos en este período."}</p>
+            {hayFiltros && <button type="button" onClick={limpiarFiltros} className="mt-2 text-sm font-semibold text-brand-700 dark:text-brand-300">Limpiar filtros</button>}
+          </div>
+        ) : (
+          grupos.map(([clave, delDia]) => {
+            const neto = delDia.reduce((t, m) => t + (m.tipo === "INGRESO" ? m.monto : -m.monto), 0);
+            return (
+              <div key={clave}>
+                {!unSoloDia && (
+                  <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-5 py-2 dark:border-slate-700 dark:bg-slate-900/40">
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{etiquetaDia(clave)}</span>
+                    <span className={cn("text-xs font-semibold tabular-nums", neto >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{neto >= 0 ? "+ " : "− "}{formatCurrency(Math.abs(neto))}</span>
+                  </div>
+                )}
+                <ul className="divide-y divide-slate-100 dark:divide-slate-700/70">
+                  {delDia.map((m) => (
+                    <Fila key={m.id} m={m} onCliente={(id, nombre) => setCliente({ id, nombre })} />
+                  ))}
+                </ul>
+              </div>
+            );
+          })
+        )}
+        {movimientos.length >= 500 && (
+          <p className="border-t border-slate-100 px-5 py-2.5 text-xs text-slate-500 dark:border-slate-700">Se muestran los últimos 500. Achicá el período para ver el resto (los totales de arriba sí incluyen todo).</p>
+        )}
+      </section>
+
+      <p className="mt-3 text-xs text-slate-400">
+        El resultado es lo que entró menos lo que salió en el período. No reemplaza el arqueo de la plata física.
+      </p>
+
+      <ExportarContador abierto={paraContador} onCerrar={() => setParaContador(false)} telefonoContador={contador.telefono} nombreTaller={contador.taller} />
     </AppShell>
   );
 }
 
-function Kpi({
-  label,
-  value,
-  detail,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  tone?: "default" | "green" | "red" | "dark";
-}) {
+function Cifra({ label, value, helper, tono, onClick, activo = false }: { label: string; value: string; helper: string; tono?: "verde" | "rojo"; onClick?: () => void; activo?: boolean }) {
+  const cuerpo = (
+    <>
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+      <p className={cn("mt-1 font-display text-3xl font-extrabold leading-none tabular-nums", tono === "verde" ? "text-emerald-600 dark:text-emerald-400" : tono === "rojo" ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-white")}>{value}</p>
+      <p className="mt-1 truncate text-xs text-slate-400">{helper}</p>
+    </>
+  );
+  const clase = cn(
+    "block border-slate-100 px-5 py-4 text-left [&:not(:first-child)]:border-l dark:border-slate-700 max-xl:[&:nth-child(3)]:border-l-0 max-xl:[&:nth-child(n+3)]:border-t",
+    activo && "bg-slate-50 dark:bg-slate-700/30",
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} aria-pressed={activo} title="Tocá para ver sólo estos" className={cn(clase, "transition hover:bg-slate-50 dark:hover:bg-slate-700/30")}>{cuerpo}</button>
+  ) : (
+    <div className={clase}>{cuerpo}</div>
+  );
+}
+
+function Fila({ m, onCliente }: { m: MovimientoCaja; onCliente: (id: number, nombre: string) => void }) {
+  const entrada = m.tipo === "INGRESO";
   return (
-    <article
-      className={cn(
-        "rounded-2xl border px-5 py-4 shadow-sm",
-        tone === "green" && "border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20",
-        tone === "red" && "border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20",
-        tone === "dark" && "border-slate-900 bg-slate-900 dark:border-brand-600 dark:bg-brand-600",
-        tone === "default" && "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800",
-      )}
-    >
-      <p className={cn("text-[10px] font-black uppercase tracking-[0.16em]", tone === "dark" ? "text-white/60" : "text-slate-400")}>{label}</p>
-      <p
-        className={cn(
-          "mt-1.5 font-mono text-2xl font-black",
-          tone === "green" && "text-emerald-600 dark:text-emerald-400",
-          tone === "red" && "text-red-600 dark:text-red-400",
-          tone === "dark" && "text-white",
-          tone === "default" && "text-slate-900 dark:text-white",
+    <li className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-3 sm:grid-cols-[52px_minmax(0,1fr)_120px_130px]">
+      <span className="text-sm tabular-nums text-slate-500 dark:text-slate-400">{hora(m.fecha)}</span>
+      <div className="min-w-0">
+        {entrada && m.cliente_id ? (
+          <p className="truncate text-sm text-slate-900 dark:text-white">
+            Cobro a{" "}
+            <button type="button" onClick={() => onCliente(m.cliente_id!, m.cliente_nombre || "")} title="Ver sólo los movimientos de este cliente" className="font-semibold underline decoration-slate-300 underline-offset-2 hover:decoration-brand-500 dark:decoration-slate-600">
+              {m.cliente_nombre}
+            </button>
+          </p>
+        ) : (
+          <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{m.detalle || m.concepto}</p>
         )}
-      >
-        {value}
-      </p>
-      <p className={cn("mt-1 truncate text-[11px]", tone === "dark" ? "text-white/55" : "text-slate-400")}>{detail}</p>
-    </article>
+        <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+          {entrada ? (m.detalle || "Cobro") : (m.categoria || "Gasto")}
+          <span className="sm:hidden"> · {MEDIOS[m.metodo] ?? m.metodo}</span>
+        </p>
+      </div>
+      <span className="hidden text-sm text-slate-600 dark:text-slate-300 sm:block">{MEDIOS[m.metodo] ?? m.metodo}</span>
+      <span className={cn("text-right text-sm font-semibold tabular-nums", entrada ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+        {entrada ? "+ " : "− "}{formatCurrency(m.monto)}
+      </span>
+    </li>
+  );
+}
+
+export default function CajaPage() {
+  return (
+    <Suspense fallback={null}>
+      <CajaDiaria />
+    </Suspense>
   );
 }

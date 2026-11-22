@@ -11,7 +11,7 @@ import type { NextRequest } from "next/server";
 import { SEO_FILES } from "@/lib/seo";
 
 const AUTH_PATHS = ["/login", "/registro", "/landing", "/invitacion", "/recuperar"];
-const ALWAYS_PUBLIC = ["/p/", "/api/", "/_next/", "/images/", "/videos/", "/favicon", "/icons/", "/file.svg", "/globe.svg", "/next.svg", "/vercel.svg", "/window.svg"];
+const ALWAYS_PUBLIC = ["/p/", "/api/", "/_next/", "/images/", "/videos/", "/favicon", "/icons/", "/media/taller/logos/"];
 
 function isAlwaysPublic(pathname: string): boolean {
   // robots.txt, sitemap e imagen al compartir: antes caían en el redirect al

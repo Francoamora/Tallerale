@@ -5,13 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { A4PreviewScaler, suspenderEscalaA4 } from "@/components/a4-preview-scaler";
-import { getPresupuestoById, actualizarEstadoPresupuesto, eliminarPresupuesto, getPerfilTaller } from "@/lib/api";
-import { esperarRecursosDocumento } from "@/lib/document-export";
+import { getPresupuestoById, actualizarEstadoPresupuesto, eliminarPresupuesto, getPerfilTaller, renovarPortalPresupuesto } from "@/lib/api";
+import { esperarRecursosDocumento, fuenteArchivoEmbebida } from "@/lib/document-export";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { PresupuestoDetalle } from "@/lib/types";
+import { desgloseIva, datosFiscalesDe, ivaVisible, FISCAL_VACIO, lineaFiscal, pieFiscal, type DatosFiscales } from "@/lib/fiscal";
 import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/trial";
 import { buildWhatsAppUrl, normalizeWhatsAppPhone } from "@/lib/whatsapp";
+import { numeroPresupuesto } from "@/lib/documentos";
+import { copiarAlPortapapeles } from "@/lib/portapapeles";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -32,7 +35,7 @@ const BADGE: Record<string, string> = {
 };
 
 function buildWATexto(p: PresupuestoDetalle, tallerNombre: string, portalUrl?: string): string {
-  const num = `P-${String(p.id).padStart(4, "0")}`;
+  const num = numeroPresupuesto(p.id);
   const nombre = p.cliente?.nombre_completo?.split(" ")[0] ?? "cliente";
   const moneda = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
   const vehiculoDesc = p.vehiculo
@@ -71,7 +74,7 @@ const PDF_SVG = (
 );
 
 // Botón WA → <a> nativo: el navegador NUNCA lo bloquea como popup
-function BtnWA({ texto, telefono, variante }: { texto: string; telefono?: string | null; variante: "claro" | "oscuro" }) {
+function BtnWA({ texto, telefono, variante, onEnviar }: { texto: string; telefono?: string | null; variante: "claro" | "oscuro"; onEnviar?: () => void }) {
   const base = "flex items-center gap-2 px-4 py-2 text-sm font-bold transition active:scale-95";
   const estilos = variante === "oscuro"
     ? `${base} rounded-lg bg-[#25D366] text-white hover:bg-[#1ebe5d]`
@@ -94,6 +97,7 @@ function BtnWA({ texto, telefono, variante }: { texto: string; telefono?: string
   return (
     <a
       href={buildWhatsAppUrl(texto, telefonoNormalizado)}
+      onClick={onEnviar}
       className={estilos}
       title={`Enviar por WhatsApp a ${telefono}`}
       aria-label={`Enviar por WhatsApp a ${telefono}`}
@@ -104,56 +108,34 @@ function BtnWA({ texto, telefono, variante }: { texto: string; telefono?: string
   );
 }
 
-// Botón PDF → descarga independiente (no bloquea ni depende de WA)
-function BtnPDF({ onClick, cargando, variante }: { onClick: () => void; cargando: boolean; variante: "claro" | "oscuro" }) {
-  const base = "flex items-center gap-2 px-4 py-2 text-sm font-bold transition disabled:opacity-60 active:scale-95";
-  const estilos = variante === "oscuro"
-    ? `${base} rounded-lg border border-slate-500 text-white hover:bg-slate-700`
-    : `${base} rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700`;
-  return (
-    <button onClick={onClick} disabled={cargando} className={estilos}>
-      {cargando
-        ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-slate-700 dark:border-slate-600 dark:border-t-white" />
-        : PDF_SVG}
-      {cargando ? "Generando..." : "PDF"}
-    </button>
-  );
-}
-
 // ─── Documento A4 ────────────────────────────────────────────────────────────
-function DocumentoA4({ p, tallerNombre, tallerCiudad, tallerCuit, tallerLogoUrl }: { p: PresupuestoDetalle; tallerNombre: string; tallerCiudad: string; tallerCuit: string; tallerLogoUrl?: string | null }) {
-  const num = `P-${String(p.id).padStart(4, "0")}`;
-  const fecha = formatDate(p.fecha_creacion);
-  const iniciales = tallerNombre
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0].toUpperCase())
-    .join("")
-    .slice(0, 2);
+/**
+ * Misma línea visual que el link que recibe el cliente (formato recibo):
+ * la marca es el taller, el total va grande y se informa hasta cuándo vale.
+ * Estilos en línea: html-to-image captura el DOM tal cual para el PDF.
+ */
+const FUENTE = "'Archivo Variable', system-ui, -apple-system, 'Segoe UI', sans-serif";
+const ANGOSTA = { fontFamily: FUENTE, fontStretch: "72%", fontWeight: 800 } as const;
+const VALIDEZ_DIAS = 15;
 
-  const manoObra  = p.items.filter(i => i.tipo === "MANO_OBRA");
-  const repuestos = p.items.filter(i => i.tipo === "REPUESTO");
-  const insumos   = p.items.filter(i => i.tipo === "INSUMO");
-  const otros     = p.items.filter(i => i.tipo === "OTRO");
+function DocumentoA4({ p, tallerNombre, tallerCiudad, tallerCuit, tallerLogoUrl, tallerTel, fiscal = FISCAL_VACIO }: { p: PresupuestoDetalle; tallerNombre: string; tallerCiudad: string; tallerCuit: string; tallerLogoUrl?: string | null; tallerTel?: string; fiscal?: DatosFiscales }) {
+  const num = numeroPresupuesto(p.id);
+  const emitido = new Date(p.fecha_creacion);
+  const vence = new Date(emitido.getTime() + VALIDEZ_DIAS * 86_400_000);
+  const fechaLarga = (d: Date) => d.toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
+  const iniciales = (tallerNombre || "T").split(" ").filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("").slice(0, 2);
 
   const grupos = [
-    { label: "Mano de obra", items: manoObra },
-    { label: "Repuestos", items: repuestos },
-    { label: "Insumos", items: insumos },
-    { label: "Otros", items: otros },
-  ].filter(g => g.items.length > 0);
+    { label: "Trabajos", tipo: "MANO_OBRA", color: "#475569", fondo: "#f1f5f9" },
+    { label: "Repuestos", tipo: "REPUESTO", color: "#0369a1", fondo: "#f0f9ff" },
+    { label: "Insumos", tipo: "INSUMO", color: "#0369a1", fondo: "#f0f9ff" },
+    { label: "Otros", tipo: "OTRO", color: "#475569", fondo: "#f1f5f9" },
+  ].map(g => ({ ...g, items: p.items.filter(i => i.tipo === g.tipo) })).filter(g => g.items.length > 0);
 
-  const estadoLabel = ESTADOS.find(e => e.value === p.estado)?.label ?? p.estado;
   const cargaVisual = p.items.length + Math.ceil((p.resumen_corto?.length ?? 0) / 180);
-  const documentoCompacto = cargaVisual <= 7;
-  const labelStyle = {
-    fontSize: "8px",
-    fontWeight: 800,
-    textTransform: "uppercase" as const,
-    letterSpacing: "1.35px",
-    color: "#94a3b8",
-  };
+  const documentoCompacto = cargaVisual <= 8;
+  const etiqueta = { fontSize: "9px", color: "#64748b", fontWeight: 500 } as const;
+  const cantidad = (c: number) => (Number(c) % 1 === 0 ? Number(c) : c);
 
   return (
     <>
@@ -178,199 +160,144 @@ function DocumentoA4({ p, tallerNombre, tallerCiudad, tallerCuit, tallerLogoUrl 
         id="doc-a4"
         data-compact={documentoCompacto ? "true" : "false"}
         className="mx-auto bg-white text-slate-900"
-        style={{
-          width: "210mm",
-          minHeight: documentoCompacto ? "0" : "297mm",
-          display: "flex",
-          flexDirection: "column",
-          fontFamily: "'Inter', system-ui, sans-serif",
-        }}
+        style={{ width: "210mm", minHeight: documentoCompacto ? "0" : "297mm", display: "flex", flexDirection: "column", fontFamily: FUENTE, color: "#0f172a" }}
       >
-        <div style={{ height: "4px", flexShrink: 0, background: "#efd38f" }} />
-
-        <header style={{ padding: "11mm 16mm 7mm" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "24px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
-              {tallerLogoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- html-to-image captura el DOM directo, no funciona con next/image
-                <img
-                  src={tallerLogoUrl}
-                  alt={tallerNombre || "Logo del taller"}
-                  crossOrigin="anonymous"
-                  style={{
-                    width: "42px", height: "42px", borderRadius: "9px",
-                    border: "1px solid #dbe2ea", background: "#fff",
-                    objectFit: "contain", flexShrink: 0,
-                  }}
-                />
-              ) : (
-                <div style={{
-                  width: "42px", height: "42px", borderRadius: "9px",
-                  border: "1px solid #dbe2ea", background: "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "#92400e", fontWeight: 900, fontSize: "14px",
-                  letterSpacing: "1px", flexShrink: 0,
-                }}>
-                  {iniciales || "T"}
-                </div>
+        {/* ── Encabezado: el taller y el documento ── */}
+        <header style={{ padding: "14mm 16mm 0", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "24px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+            {tallerLogoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- html-to-image captura el DOM directo, no funciona con next/image
+              <img src={tallerLogoUrl} alt={tallerNombre || "Logo del taller"} crossOrigin="anonymous" style={{ width: "46px", height: "46px", borderRadius: "11px", objectFit: "cover", flexShrink: 0 }} />
+            ) : (
+              <div style={{ width: "46px", height: "46px", borderRadius: "11px", background: "#ea580c", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "15px", flexShrink: 0 }}>
+                {iniciales}
+              </div>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: "18px", fontWeight: 700, lineHeight: 1.15 }}>{tallerNombre || "Mi Taller"}</div>
+              <div style={{ marginTop: "3px", fontSize: "10px", color: "#64748b" }}>
+                {[tallerCiudad, tallerTel].filter(Boolean).join(" · ") || "Servicio automotor"}
+              </div>
+              {lineaFiscal(fiscal, tallerCuit, tallerNombre) && (
+                <div style={{ marginTop: "2px", fontSize: "9.5px", color: "#64748b" }}>{lineaFiscal(fiscal, tallerCuit, tallerNombre)}</div>
               )}
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: "18px", fontWeight: 900, color: "#0f172a", lineHeight: 1.15 }}>
-                  {tallerNombre || "Mi Taller"}
-                </div>
-                <div style={{ marginTop: "4px", fontSize: "10px", color: "#64748b" }}>
-                  {tallerCiudad || "Servicio automotor"}
-                  {tallerCuit && ` · CUIT ${tallerCuit}`}
-                </div>
-              </div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ ...labelStyle, color: "#a16207" }}>Cotización de servicio</div>
-              <div style={{ marginTop: "3px", fontSize: "24px", fontWeight: 900, color: "#0f172a", letterSpacing: "-0.7px", lineHeight: 1 }}>
-                PRESUPUESTO
-              </div>
-              <div style={{ marginTop: "4px", fontSize: "17px", fontWeight: 800, color: "#92400e", fontFamily: "monospace" }}>
-                {num}
-              </div>
-              <div style={{ marginTop: "6px", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px" }}>
-                <span style={{ fontSize: "10px", color: "#64748b" }}>{fecha}</span>
-                <span style={{
-                  borderRadius: "999px", padding: "3px 7px",
-                  border: "1px solid #cbd5e1", color: "#475569",
-                  fontSize: "8px", fontWeight: 900, letterSpacing: "1px",
-                  textTransform: "uppercase",
-                }}>
-                  {estadoLabel}
-                </span>
-              </div>
-            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ ...ANGOSTA, fontSize: "26px", lineHeight: 1, textTransform: "uppercase", letterSpacing: "-0.3px" }}>Presupuesto</div>
+            <div style={{ marginTop: "4px", fontSize: "12px", fontWeight: 600, color: "#ea580c" }}>{num}</div>
+            <div style={{ marginTop: "4px", fontSize: "9.5px", color: "#64748b" }}>Emitido el {fechaLarga(emitido)}</div>
           </div>
         </header>
 
-        <main style={{ flex: 1, padding: "0 16mm" }}>
-          <section style={{
-            display: "grid", gridTemplateColumns: "1.15fr 1fr .72fr",
-            borderTop: "1px solid #d5b968", borderBottom: "1px solid #d5b968",
-          }}>
-            <div style={{ padding: "10px 12px 10px 0" }}>
-              <div style={labelStyle}>Cliente</div>
-              <div style={{ marginTop: "6px", fontSize: "13px", fontWeight: 850, color: "#0f172a" }}>
-                {p.cliente?.nombre_completo || "Sin cliente registrado"}
-              </div>
-              <div style={{ marginTop: "4px", fontSize: "9.5px", lineHeight: 1.5, color: "#64748b" }}>
-                {p.cliente
-                  ? [p.cliente.dni && `DNI/CUIT ${p.cliente.dni}`, p.cliente.telefono, p.cliente.email].filter(Boolean).join(" · ") || "Sin datos de contacto"
-                  : "Sin datos de contacto"}
+        <main style={{ flex: 1, padding: "8mm 16mm 0" }}>
+          {/* ── Cliente, vehículo y total ── */}
+          <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.05fr", borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0" }}>
+            <div style={{ padding: "12px 14px 12px 0" }}>
+              <div style={etiqueta}>Para</div>
+              <div style={{ marginTop: "4px", fontSize: "13px", fontWeight: 700 }}>{p.cliente?.nombre_completo || "Sin cliente registrado"}</div>
+              <div style={{ marginTop: "3px", fontSize: "9.5px", lineHeight: 1.5, color: "#64748b" }}>
+                {p.cliente ? [p.cliente.telefono, p.cliente.email, p.cliente.dni && `DNI/CUIT ${p.cliente.dni}`].filter(Boolean).join(" · ") || "Sin datos de contacto" : "Sin datos de contacto"}
               </div>
             </div>
-            <div style={{ padding: "10px 12px", borderLeft: "1px solid #e2e8f0" }}>
-              <div style={labelStyle}>Vehículo</div>
-              <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: 800, color: "#1e293b" }}>
-                {p.vehiculo ? `${p.vehiculo.patente} · ${p.vehiculo.marca} ${p.vehiculo.modelo}` : "Sin vehículo registrado"}
+            <div style={{ padding: "12px 14px", borderLeft: "1px solid #e2e8f0" }}>
+              <div style={etiqueta}>Vehículo</div>
+              <div style={{ marginTop: "4px", fontSize: "13px", fontWeight: 700 }}>
+                {p.vehiculo ? `${p.vehiculo.marca} ${p.vehiculo.modelo}` : "Sin vehículo registrado"}
+                {p.vehiculo?.anio ? <span style={{ fontWeight: 400, color: "#64748b" }}> · {p.vehiculo.anio}</span> : null}
               </div>
-              <div style={{ marginTop: "4px", fontSize: "9.5px", color: "#64748b" }}>
-                {p.vehiculo ? [p.vehiculo.anio, p.vehiculo.color].filter(Boolean).join(" · ") || "Datos básicos del vehículo" : "Sin datos adicionales"}
-              </div>
-            </div>
-            <div style={{ padding: "10px 0 10px 12px", borderLeft: "1px solid #e2e8f0" }}>
-              <div style={labelStyle}>Kilometraje</div>
-              <div style={{ marginTop: "6px", fontFamily: "monospace", fontSize: "13px", fontWeight: 900, color: "#0f172a" }}>
-                {p.vehiculo ? `${p.vehiculo.kilometraje_actual.toLocaleString("es-AR")} km` : "—"}
-              </div>
-              <div style={{ marginTop: "4px", fontSize: "9.5px", color: "#64748b" }}>Validez: 15 días</div>
-            </div>
-          </section>
-
-          {p.resumen_corto && (
-            <section style={{ marginTop: "9mm", display: "grid", gridTemplateColumns: "128px 1fr", gap: "14px" }}>
-              <div>
-                <div style={{ ...labelStyle, color: "#a16207" }}>Trabajo cotizado</div>
-                <div style={{ marginTop: "5px", width: "32px", height: "2px", background: "#d5b968" }} />
-              </div>
-              <div style={{ fontSize: "12px", fontWeight: 650, lineHeight: 1.5, color: "#334155" }}>{p.resumen_corto}</div>
-            </section>
-          )}
-
-          <section style={{ marginTop: "6mm" }}>
-          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: "11px" }}>
-            <thead>
-              <tr style={{ background: "#faf8f1" }}>
-                <th style={{ width: "38px", padding: "7px 10px", textAlign: "center", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#94a3b8", fontSize: "8px" }}>#</th>
-                <th style={{ padding: "7px 10px", textAlign: "left", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#475569", fontSize: "8px", textTransform: "uppercase", letterSpacing: "1.2px" }}>Concepto</th>
-                <th style={{ width: "58px", padding: "7px 10px", textAlign: "center", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#475569", fontSize: "8px", textTransform: "uppercase" }}>Cant.</th>
-                <th style={{ width: "92px", padding: "7px 10px", textAlign: "right", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#475569", fontSize: "8px", textTransform: "uppercase" }}>P. unit.</th>
-                <th style={{ width: "96px", padding: "7px 10px", textAlign: "right", borderTop: "1px solid #d8dee7", borderBottom: "1px solid #d8dee7", color: "#475569", fontSize: "8px", textTransform: "uppercase" }}>Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grupos.map((grupo, groupIndex) => (
-                <Fragment key={grupo.label}>
-                  <tr>
-                    <td colSpan={5} style={{ padding: "6px 10px 3px", borderTop: groupIndex ? "1px solid #e2e8f0" : "none", color: "#64748b", fontSize: "8px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "1.3px" }}>
-                      {grupo.label}
-                    </td>
-                  </tr>
-                  {grupo.items.map((item, itemIndex) => (
-                    <tr key={item.id ?? `${groupIndex}-${itemIndex}`}>
-                      <td style={{ padding: "7px 10px", textAlign: "center", fontFamily: "monospace", fontSize: "9px", color: "#94a3b8" }}>{String(itemIndex + 1).padStart(2, "0")}</td>
-                      <td style={{ padding: "7px 10px", borderBottom: "1px solid #f1f5f9", fontWeight: 650, color: "#1e293b" }}>{item.descripcion}</td>
-                      <td style={{ padding: "7px 10px", textAlign: "center", fontFamily: "monospace", color: "#475569" }}>{Number(item.cantidad) % 1 === 0 ? Number(item.cantidad) : item.cantidad}</td>
-                      <td style={{ padding: "7px 10px", textAlign: "right", fontFamily: "monospace", fontSize: "10px", color: "#64748b" }}>{formatCurrency(item.precio_unitario)}</td>
-                      <td style={{ padding: "7px 10px", textAlign: "right", fontFamily: "monospace", fontWeight: 800, color: "#0f172a" }}>{formatCurrency(item.subtotal)}</td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-              {p.items.length === 0 && (
-                <tr>
-                  <td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#94a3b8", fontStyle: "italic" }}>
-                    Sin conceptos cargados en este presupuesto.
-                  </td>
-                </tr>
+              {p.vehiculo && (
+                <div style={{ marginTop: "3px", fontSize: "9.5px", color: "#64748b" }}>
+                  Patente <span style={{ fontWeight: 600, color: "#334155", letterSpacing: "0.5px" }}>{p.vehiculo.patente}</span> · {p.vehiculo.kilometraje_actual.toLocaleString("es-AR")} km
+                </div>
               )}
-            </tbody>
-          </table>
+            </div>
+            <div style={{ padding: "12px 0 12px 14px", borderLeft: "1px solid #e2e8f0", textAlign: "right", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              <div style={etiqueta}>Total</div>
+              <div style={{ ...ANGOSTA, fontSize: "30px", lineHeight: 1.05, color: "#0f172a" }}>{formatCurrency(p.total)}</div>
+              <div style={{ marginTop: "2px", fontSize: "9px", color: "#64748b" }}>Válido hasta el {fechaLarga(vence)}</div>
+            </div>
           </section>
 
-          <section style={{ marginTop: "8mm", display: "grid", gridTemplateColumns: "1fr 232px", gap: "18px", alignItems: "start" }}>
-            <div style={{ borderTop: "1px solid #d8dee7", paddingTop: "8px", fontSize: "9.5px", lineHeight: 1.55, color: "#64748b" }}>
-              Válido por 15 días desde la fecha de emisión. Los precios pueden variar según disponibilidad de repuestos.
+          {/* ── Qué incluye ── */}
+          <section style={{ marginTop: "8mm" }}>
+            <div style={etiqueta}>Qué incluye</div>
+            {p.resumen_corto && <div style={{ marginTop: "3px", fontSize: "17px", fontWeight: 700 }}>{p.resumen_corto}</div>}
+
+            <table style={{ marginTop: "5mm", width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+              <thead>
+                <tr style={{ color: "#64748b", fontSize: "9px" }}>
+                  <th style={{ padding: "0 0 6px", textAlign: "left", fontWeight: 500, borderBottom: "1px solid #e2e8f0" }}>Concepto</th>
+                  <th style={{ width: "54px", padding: "0 0 6px", textAlign: "center", fontWeight: 500, borderBottom: "1px solid #e2e8f0" }}>Cant.</th>
+                  <th style={{ width: "92px", padding: "0 0 6px", textAlign: "right", fontWeight: 500, borderBottom: "1px solid #e2e8f0" }}>Precio unit.</th>
+                  <th style={{ width: "100px", padding: "0 0 6px", textAlign: "right", fontWeight: 500, borderBottom: "1px solid #e2e8f0" }}>Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grupos.map(grupo => (
+                  <Fragment key={grupo.tipo}>
+                    <tr>
+                      <td colSpan={4} style={{ padding: "10px 0 4px" }}>
+                        <span style={{ color: grupo.color, fontSize: "9.5px", fontWeight: 700 }}>{grupo.label}</span>
+                      </td>
+                    </tr>
+                    {grupo.items.map((item, i) => (
+                      <tr key={item.id ?? `${grupo.tipo}-${i}`}>
+                        <td style={{ padding: "7px 0", borderBottom: "1px solid #f1f5f9", fontWeight: 500 }}>{item.descripcion}</td>
+                        <td style={{ padding: "7px 0", borderBottom: "1px solid #f1f5f9", textAlign: "center", color: "#475569" }}>{cantidad(item.cantidad)}</td>
+                        <td style={{ padding: "7px 0", borderBottom: "1px solid #f1f5f9", textAlign: "right", color: "#64748b" }}>{formatCurrency(item.precio_unitario)}</td>
+                        <td style={{ padding: "7px 0", borderBottom: "1px solid #f1f5f9", textAlign: "right", fontWeight: 600 }}>{formatCurrency(item.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+                {p.items.length === 0 && (
+                  <tr><td colSpan={4} style={{ padding: "24px", textAlign: "center", color: "#94a3b8" }}>Sin ítems cargados en este presupuesto.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </section>
+
+          {/* ── Condiciones y totales ── */}
+          <section style={{ marginTop: "7mm", display: "grid", gridTemplateColumns: "1fr 240px", gap: "24px", alignItems: "start" }}>
+            <div style={{ fontSize: "9.5px", lineHeight: 1.6, color: "#64748b" }}>
+              <div style={{ fontWeight: 600, color: "#334155" }}>Condiciones</div>
+              Válido hasta el {fechaLarga(vence)}. Los precios de repuestos pueden variar según disponibilidad.
+              Podés aprobarlo desde el link que te enviamos o respondiendo nuestro mensaje.
             </div>
-            <div style={{ borderTop: "1px solid #94a3b8" }}>
-              <div style={{ padding: "9px 0" }}>
-                {p.total_mano_obra > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", fontSize: "9.5px", color: "#64748b" }}>
-                    <span>Mano de obra</span><strong style={{ fontFamily: "monospace", color: "#334155" }}>{formatCurrency(p.total_mano_obra)}</strong>
-                  </div>
-                )}
-                {p.total_repuestos > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", fontSize: "9.5px", color: "#64748b" }}>
-                    <span>Repuestos e insumos</span><strong style={{ fontFamily: "monospace", color: "#334155" }}>{formatCurrency(p.total_repuestos)}</strong>
-                  </div>
-                )}
-                {p.descuento > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "9.5px", color: "#475569" }}>
-                    <span>Descuento</span><strong style={{ fontFamily: "monospace" }}>− {formatCurrency(p.descuento)}</strong>
-                  </div>
-                )}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "2px solid #475569", paddingTop: "10px" }}>
-                <span style={{ color: "#64748b", fontSize: "8px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "1.2px" }}>Total</span>
-                <strong style={{ color: "#0f172a", fontFamily: "monospace", fontSize: "19px", letterSpacing: "-.7px" }}>{formatCurrency(p.total)}</strong>
+            <div>
+              {p.total_mano_obra > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: "10px", color: "#64748b" }}><span>Mano de obra</span><span>{formatCurrency(p.total_mano_obra)}</span></div>
+              )}
+              {p.total_repuestos > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: "10px", color: "#64748b" }}><span>Repuestos e insumos</span><span>{formatCurrency(p.total_repuestos)}</span></div>
+              )}
+              {p.descuento > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: "10px", color: "#047857" }}><span>Descuento</span><span>− {formatCurrency(p.descuento)}</span></div>
+              )}
+              {ivaVisible(fiscal) && Number(p.total) > 0 && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px", paddingTop: "6px", borderTop: "1px solid #e2e8f0", fontSize: "10px", color: "#64748b" }}><span>Neto gravado</span><span>{formatCurrency(desgloseIva(p.total).neto)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: "10px", color: "#64748b" }}><span>IVA 21%</span><span>{formatCurrency(desgloseIva(p.total).iva)}</span></div>
+                </>
+              )}
+              <div style={{ marginTop: "6px", paddingTop: "8px", borderTop: "2px solid #0f172a", display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "11px", fontWeight: 600 }}>Total{ivaVisible(fiscal) ? " (IVA incluido)" : ""}</span>
+                <span style={{ ...ANGOSTA, fontSize: "24px" }}>{formatCurrency(p.total)}</span>
               </div>
             </div>
           </section>
         </main>
 
-        <footer style={{ marginTop: documentoCompacto ? "10mm" : "auto", padding: "0 16mm 9mm" }}>
-          <div style={{ height: "1px", background: "#d5b968" }} />
-          <div style={{ marginTop: "10px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "24px" }}>
-            <div style={{ maxWidth: "390px", fontSize: "8px", lineHeight: 1.55, color: "#94a3b8" }}>
-              Presupuesto {num} · Emitido el {fecha}.<br />
-              Documento de servicio sin valor fiscal.
+        <footer style={{ marginTop: documentoCompacto ? "12mm" : "auto", padding: "0 16mm 10mm" }}>
+          <div style={{ height: "1px", background: "#e2e8f0" }} />
+          <div style={{ marginTop: "8px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "24px", fontSize: "8.5px", color: "#94a3b8" }}>
+            <div>
+              {pieFiscal(fiscal) && <div style={{ marginBottom: "2px", color: "#64748b" }}>{pieFiscal(fiscal)}</div>}
+              Presupuesto {num} · Documento de servicio, no válido como factura.
             </div>
-            <div style={{ textAlign: "right", fontSize: "8px", color: "#94a3b8" }}>
-              <strong style={{ color: "#475569" }}>Tallerista</strong> · Desarrollado por <strong style={{ color: "#92400e" }}>FAM Desarrollos</strong>
+            <div style={{ textAlign: "right" }}>
+              <strong style={{ color: "#64748b" }}>Tallerista</strong> · La herramienta amiga de los talleres · Creado por <strong style={{ color: "#64748b" }}>FAM Desarrollos</strong>
             </div>
           </div>
         </footer>
@@ -378,12 +305,6 @@ function DocumentoA4({ p, tallerNombre, tallerCiudad, tallerCuit, tallerLogoUrl 
     </>
   );
 }
-
-const LINK_SVG = (
-  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-  </svg>
-);
 
 // ─── Página principal ────────────────────────────────────────────────────────
 export default function DetallePresupuesto({ params }: PageProps) {
@@ -402,7 +323,11 @@ export default function DetallePresupuesto({ params }: PageProps) {
   const [tallerNombre, setTallerNombre] = useState("");
   const [tallerCiudad, setTallerCiudad] = useState("");
   const [tallerCuit, setTallerCuit] = useState("");
+  const [fiscal, setFiscal] = useState<DatosFiscales>(FISCAL_VACIO);
   const [tallerLogoUrl, setTallerLogoUrl] = useState<string | null>(null);
+  const [tallerTel, setTallerTel] = useState("");
+  const [linkCopiado, setLinkCopiado] = useState(false);
+  const [linkParaCopiar, setLinkParaCopiar] = useState<string | null>(null);
   const [appOrigin, setAppOrigin] = useState("");
 
   useEffect(() => {
@@ -425,7 +350,9 @@ export default function DetallePresupuesto({ params }: PageProps) {
           setTallerNombre(perfil.taller_nombre);
           setTallerCiudad(perfil.taller_ciudad);
           setTallerCuit(perfil.taller_cuit);
+          setFiscal(datosFiscalesDe(perfil));
           setTallerLogoUrl(perfil.logo_url ?? null);
+          setTallerTel(perfil.taller_tel ?? "");
         }
       } catch {
         setError("No se encontró el presupuesto solicitado.");
@@ -467,10 +394,37 @@ export default function DetallePresupuesto({ params }: PageProps) {
     setTimeout(() => setNotificacion({ msg: "", isError: false }), 3000);
   }
 
+  // El link del portal viaja en el mensaje: se renueva al enviarlo, sin
+  // esperar la respuesta (ver renovarPortalPresupuesto).
+  function renovarLinkPortal() {
+    if (presupuesto?.token && presupuesto.portal_activo !== false) {
+      void renovarPortalPresupuesto(presupuesto.id).catch(() => {});
+    }
+  }
+
+  /** Al compartir el link ya está en manos del cliente: deja de ser borrador. */
+  function compartido() {
+    renovarLinkPortal();
+    if (presupuesto?.estado === "BORRADOR") void handleEstado("ENVIADO");
+  }
+
+  async function copiarLink() {
+    if (!portalUrl) return;
+    compartido();
+    if (await copiarAlPortapapeles(portalUrl)) {
+      setLinkCopiado(true);
+      window.setTimeout(() => setLinkCopiado(false), 2500);
+    } else {
+      // Último recurso: mostrar el link seleccionado para copiarlo a mano.
+      setLinkParaCopiar(portalUrl);
+    }
+  }
+
   async function descargarPDF() {
     if (!presupuesto) return;
+    renovarLinkPortal();
     setGenerandoPDF(true);
-    const fileName = `P-${String(presupuesto.id).padStart(4, "0")}.pdf`;
+    const fileName = `${numeroPresupuesto(presupuesto.id)}.pdf`;
     // En mobile, A4PreviewScaler achica el documento para que entre en
     // pantalla — pero el PDF tiene que salir siempre a resolución completa,
     // igual que en desktop. Lo neutralizamos acá y lo restauramos al final.
@@ -493,11 +447,15 @@ export default function DetallePresupuesto({ params }: PageProps) {
 
       await esperarRecursosDocumento(el);
 
+      // skipFonts evita que html-to-image lea todas las hojas de estilo (se
+      // colgaba); la letra Archivo se le pasa embebida aparte.
+      const fontEmbedCSS = await fuenteArchivoEmbebida();
       const opts = {
         quality: 0.93,
         backgroundColor: "#ffffff",
         pixelRatio: 2,
-        skipFonts: true,   // evita fetch de Inter (cuelga con next/font)
+        skipFonts: !fontEmbedCSS,
+        fontEmbedCSS,
         cacheBust: true,
       };
 
@@ -529,7 +487,7 @@ export default function DetallePresupuesto({ params }: PageProps) {
       // Móvil con Web Share API: abre el selector nativo (WA, Mail, Drive…)
       if (navigator.canShare?.({ files: [file] })) {
         try {
-          const portalUrl = presupuesto.token ? `${window.location.origin}/p/presupuesto/${encodeURIComponent(presupuesto.token)}` : undefined;
+          const portalUrl = presupuesto.token && presupuesto.portal_activo !== false ? `${window.location.origin}/p/presupuesto/${encodeURIComponent(presupuesto.token)}` : undefined;
           await navigator.share({ files: [file], text: buildWATexto(presupuesto, tallerNombre, portalUrl), title: fileName });
           return;
         } catch (e: unknown) {
@@ -556,9 +514,17 @@ export default function DetallePresupuesto({ params }: PageProps) {
     }
   }
 
-  const portalUrl = presupuesto?.token && appOrigin
+  const portalUrl = presupuesto?.token && appOrigin && presupuesto.portal_activo !== false
     ? `${appOrigin}/p/presupuesto/${encodeURIComponent(presupuesto.token)}`
     : undefined;
+
+  // Esc cierra la vista previa del documento.
+  useEffect(() => {
+    if (!modoPreview) return;
+    const tecla = (e: KeyboardEvent) => { if (e.key === "Escape") setModoPreview(false); };
+    document.addEventListener("keydown", tecla);
+    return () => document.removeEventListener("keydown", tecla);
+  }, [modoPreview]);
 
   // ── Loading ──
   if (loading) {
@@ -588,28 +554,57 @@ export default function DetallePresupuesto({ params }: PageProps) {
   // ── MODO PREVIEW A4 (pantalla completa, fondo gris tipo PDF viewer) ──
   if (modoPreview) {
     return (
-      <div className="min-h-screen bg-slate-400 dark:bg-slate-700">
-        {/* Barra de preview */}
-        <div className="sticky top-0 z-50 flex flex-col gap-3 bg-slate-800 px-4 py-3 shadow-xl print:hidden sm:flex-row sm:items-center sm:gap-3 sm:px-6">
-          <div className="flex items-center justify-between gap-3">
+      <div className="min-h-screen bg-slate-200/80 dark:bg-slate-900">
+        {/* Barra del visor: a la izquierda el documento, a la derecha
+            "papel" (imprimir, PDF) y "mandar" (link, WhatsApp). */}
+        <div className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur print:hidden dark:border-slate-800 dark:bg-slate-900/95">
+          <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
             <button
               onClick={() => setModoPreview(false)}
-              className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 sm:px-4"
+              title="Volver (Esc)"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
             >
-              <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-              <span className="hidden sm:inline">Salir del preview</span>
-              <span className="sm:hidden">Salir</span>
+              <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+              Volver
             </button>
-            <span className="truncate text-sm font-bold text-slate-300 sm:hidden">
-              P-{String(presupuesto.id).padStart(4, "0")}
-            </span>
-          </div>
-          <span className="hidden text-sm font-bold text-slate-300 sm:inline">
-            Vista previa A4 · P-{String(presupuesto.id).padStart(4, "0")}
-          </span>
-          <div className="flex items-center gap-2 sm:ml-auto">
-            <BtnWA texto={buildWATexto(presupuesto, tallerNombre, portalUrl)} telefono={presupuesto.cliente?.telefono} variante="oscuro" />
-            <BtnPDF onClick={descargarPDF} cargando={generandoPDF} variante="oscuro" />
+            <span className="hidden h-6 w-px bg-slate-200 dark:bg-slate-700 sm:block" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">Presupuesto {numeroPresupuesto(presupuesto.id)}</p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                {[presupuesto.resumen_corto, presupuesto.cliente?.nombre_completo].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Papel */}
+              <div className="inline-flex h-9 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800" role="group" aria-label="Papel">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-2 px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" /></svg>
+                  Imprimir
+                </button>
+                <button
+                  type="button"
+                  onClick={descargarPDF}
+                  disabled={generandoPDF}
+                  className="inline-flex items-center gap-2 border-l border-slate-200 px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  {generandoPDF
+                    ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+                    : PDF_SVG}
+                  {generandoPDF ? "Generando…" : "Descargar PDF"}
+                </button>
+              </div>
+
+              <span className="mx-1 hidden h-6 w-px bg-slate-200 dark:bg-slate-700 md:block" aria-hidden="true" />
+
+              {/* Mandar al cliente */}
+              <BtnCopiarLink disponible={Boolean(portalUrl)} copiado={linkCopiado} onClick={copiarLink} />
+              <BtnWA texto={buildWATexto(presupuesto, tallerNombre, portalUrl)} telefono={presupuesto.cliente?.telefono} variante="claro" onEnviar={compartido} />
+            </div>
           </div>
         </div>
 
@@ -617,7 +612,7 @@ export default function DetallePresupuesto({ params }: PageProps) {
         <div className="flex justify-center px-3 py-6 print:p-0 sm:py-10 print:block">
           <A4PreviewScaler>
             <div className="shadow-2xl ring-1 ring-slate-900/10 print:shadow-none print:ring-0">
-              <DocumentoA4 p={presupuesto} tallerNombre={tallerNombre} tallerCiudad={tallerCiudad} tallerCuit={tallerCuit} tallerLogoUrl={tallerLogoUrl} />
+              <DocumentoA4 p={presupuesto} tallerNombre={tallerNombre} tallerCiudad={tallerCiudad} tallerCuit={tallerCuit} tallerLogoUrl={tallerLogoUrl} tallerTel={tallerTel} fiscal={fiscal} />
             </div>
           </A4PreviewScaler>
         </div>
@@ -629,14 +624,60 @@ export default function DetallePresupuesto({ params }: PageProps) {
   return (
     <AppShell
       currentPath="/presupuestos"
-      badge={`Cotización ${`P-${String(presupuesto.id).padStart(4, "0")}`}`}
+      badge={`Cotización ${numeroPresupuesto(presupuesto.id)}`}
       title={presupuesto.resumen_corto || `Presupuesto #${presupuesto.id}`}
       description={`${presupuesto.cliente?.nombre_completo ?? "Sin cliente"} · Emitido el ${formatDate(presupuesto.fecha_creacion)}`}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/presupuestos/nuevo?id=${presupuesto.id}`} title="Cambiar ítems, precios, descuento o estado" className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M16.86 4.49l2.65 2.65M4 20l4.5-1 10.3-10.3a1.87 1.87 0 00-2.65-2.65L5.85 16.35 4 20z" /></svg>
+            Editar
+          </Link>
+          <button
+            type="button"
+            onClick={() => setModoPreview(true)}
+            title="Ver el documento A4 (desde ahí se descarga el PDF)"
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            {PDF_SVG}
+            Ver PDF
+          </button>
+          <BtnCopiarLink disponible={Boolean(portalUrl)} copiado={linkCopiado} onClick={copiarLink} />
+          <BtnWA texto={buildWATexto(presupuesto, tallerNombre, portalUrl)} telefono={presupuesto.cliente?.telefono} variante="claro" onEnviar={compartido} />
+          {presupuesto.estado !== "RECHAZADO" && (
+            <Link
+              href={`/trabajos/nuevo?presupuesto=${presupuesto.id}`}
+              title="Crea una orden de trabajo con este cliente, el auto y los mismos ítems"
+              className="inline-flex h-9 items-center rounded-xl bg-brand-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700"
+            >
+              Pasar a orden de trabajo →
+            </Link>
+          )}
+        </div>
+      }
     >
       {/* TOAST */}
       {notificacion.msg && (
         <div className={cn("fixed bottom-20 left-4 right-4 z-50 animate-in slide-in-from-bottom-5 fade-in rounded-lg px-5 py-3 text-sm font-bold text-white shadow-2xl sm:bottom-6 sm:left-auto sm:right-6 sm:w-auto", notificacion.isError ? "bg-red-600" : "bg-slate-900 dark:bg-sky-600")}>
           {notificacion.msg}
+        </div>
+      )}
+
+      {/* Link para copiar a mano (si el navegador no deja usar el portapapeles) */}
+      {linkParaCopiar && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => setLinkParaCopiar(null)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Link para el cliente</h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Este navegador no dejó copiarlo solo. Está seleccionado: copialo con Ctrl+C (o Cmd+C).</p>
+            <input
+              readOnly
+              value={linkParaCopiar}
+              autoFocus
+              onFocus={(e) => e.currentTarget.select()}
+              className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+            <button onClick={() => setLinkParaCopiar(null)} className="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-slate-900">Listo</button>
+          </div>
         </div>
       )}
 
@@ -649,7 +690,7 @@ export default function DetallePresupuesto({ params }: PageProps) {
             </div>
             <h3 className="text-xl font-black text-slate-900 dark:text-white">¿Eliminar este presupuesto?</h3>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              P-{presupuesto.id} irá a la papelera. Se puede recuperar desde la base de datos.
+              {numeroPresupuesto(presupuesto.id)} irá a la papelera. Se puede recuperar desde la base de datos.
             </p>
             <div className="mt-8 flex gap-3">
               <button onClick={() => setConfirmandoBorrado(false)} className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">Cancelar</button>
@@ -661,92 +702,29 @@ export default function DetallePresupuesto({ params }: PageProps) {
 
       <div className="space-y-6">
 
-        {/* ── BARRA DE ACCIONES ── */}
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-
-          <Link href="/presupuestos" className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 transition">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-          </Link>
-
-          {/* Estado */}
-          <select
-            value={presupuesto.estado}
-            onChange={e => handleEstado(e.target.value)}
-            disabled={cambiandoEstado}
-            className={cn("cursor-pointer appearance-none rounded-xl border px-4 py-2 text-xs font-bold uppercase tracking-wider outline-none transition focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50", BADGE[presupuesto.estado])}
-          >
-            {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
-          </select>
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-
-            <BtnWA texto={buildWATexto(presupuesto, tallerNombre, portalUrl)} telefono={presupuesto.cliente?.telefono} variante="claro" />
-            <BtnPDF onClick={descargarPDF} cargando={generandoPDF} variante="claro" />
-
-            {/* 👁 PREVIEW A4 */}
-            <button
-              onClick={() => setModoPreview(true)}
-              title="Vista previa A4 / Imprimir"
-              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+        {/* ── Estado (se cambia desde acá) ── */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/presupuestos" className="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">← Presupuestos</Link>
+          <span className="h-4 w-px bg-slate-300 dark:bg-slate-700" aria-hidden="true" />
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            Estado
+            <select
+              value={presupuesto.estado}
+              onChange={e => handleEstado(e.target.value)}
+              disabled={cambiandoEstado}
+              className={cn("cursor-pointer appearance-none rounded-lg border px-3 py-1.5 text-xs font-bold uppercase tracking-wider outline-none transition focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50", BADGE[presupuesto.estado])}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              <span className="hidden sm:inline">Ver A4</span>
-            </button>
-
-            {/* Portal: abre únicamente la URL pública, sin mezclarla con el mensaje */}
-            {presupuesto.token ? (
-              <Link
-                href={`/p/presupuesto/${encodeURIComponent(presupuesto.token)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Abrir portal del cliente"
-                className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700 transition hover:bg-violet-100 dark:border-violet-800/50 dark:bg-violet-900/20 dark:text-violet-400"
-              >
-                {LINK_SVG}
-                <span className="hidden sm:inline">Portal</span>
-              </Link>
-            ) : (
-              <button
-                type="button"
-                disabled
-                title="Este presupuesto todavía no tiene portal público"
-                className="flex cursor-not-allowed items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-400 opacity-70 dark:border-slate-700 dark:bg-slate-800"
-              >
-                {LINK_SVG}
-                <span className="hidden sm:inline">Sin portal</span>
-              </button>
+              {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+            </select>
+          </label>
+          <span className="text-xs text-slate-500 dark:text-slate-400">{numeroPresupuesto(presupuesto.id)}</span>
+          <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-semibold">
+            {portalUrl && (
+              <a href={portalUrl} target="_blank" rel="noopener noreferrer" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+                Ver cómo lo ve el cliente ↗
+              </a>
             )}
-
-            {/* Editar */}
-            <Link
-              href={`/presupuestos/nuevo?id=${presupuesto.id}`}
-              className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-700 transition hover:bg-sky-100 dark:border-sky-800/50 dark:bg-sky-900/20 dark:text-sky-400"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-              <span className="hidden sm:inline">Editar</span>
-            </Link>
-
-            {/* Convertir a OT */}
-            {presupuesto.estado !== "RECHAZADO" && (
-              <Link
-                href={`/trabajos/nuevo?presupuesto=${presupuesto.id}`}
-                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                <span className="hidden sm:inline">Convertir a OT</span>
-              </Link>
-            )}
-
-            {/* Eliminar */}
-            <button
-              onClick={() => setConfirmandoBorrado(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition hover:border-red-400 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-            </button>
+            <button type="button" onClick={() => setConfirmandoBorrado(true)} className="text-red-600 hover:text-red-700 dark:text-red-400">Eliminar</button>
           </div>
         </div>
 
@@ -756,19 +734,19 @@ export default function DetallePresupuesto({ params }: PageProps) {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/50">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Cliente</p>
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Cliente</p>
                   <p className="mt-2 font-bold text-slate-900 dark:text-white">{presupuesto.cliente?.nombre_completo || "Sin cliente"}</p>
                   <p className="mt-1 text-xs text-slate-500">{presupuesto.cliente?.telefono || presupuesto.cliente?.email || "Sin datos de contacto"}</p>
                   {presupuesto.cliente && <Link href={`/clientes/${presupuesto.cliente.id}`} className="mt-3 inline-flex text-xs font-bold text-sky-600 hover:underline dark:text-sky-400">Abrir ficha →</Link>}
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/50">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Vehículo</p>
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Vehículo</p>
                   <p className="mt-2 font-bold text-slate-900 dark:text-white">{presupuesto.vehiculo ? `${presupuesto.vehiculo.marca} ${presupuesto.vehiculo.modelo}` : "Sin vehículo"}</p>
-                  <p className="mt-1 font-mono text-xs font-bold text-slate-500">{presupuesto.vehiculo?.patente || "Sin patente"}{presupuesto.vehiculo ? ` · ${presupuesto.vehiculo.kilometraje_actual.toLocaleString("es-AR")} km` : ""}</p>
+                  <p className="mt-1 text-xs text-slate-500">{presupuesto.vehiculo?.patente || "Sin patente"}{presupuesto.vehiculo ? ` · ${presupuesto.vehiculo.kilometraje_actual.toLocaleString("es-AR")} km` : ""}</p>
                 </div>
               </div>
               <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Trabajo cotizado</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Trabajo cotizado</p>
                 <p className="mt-2 text-base font-bold text-slate-900 dark:text-white">{presupuesto.resumen_corto || "Sin descripción general"}</p>
               </div>
             </section>
@@ -776,21 +754,29 @@ export default function DetallePresupuesto({ params }: PageProps) {
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
                 <div>
-                  <h2 className="font-black text-slate-900 dark:text-white">Detalle de la cotización</h2>
+                  <h2 className="font-semibold text-slate-900 dark:text-white">Detalle de la cotización</h2>
                   <p className="mt-0.5 text-xs text-slate-500">{presupuesto.items.length} {presupuesto.items.length === 1 ? "concepto" : "conceptos"}</p>
                 </div>
-                <button onClick={() => setModoPreview(true)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Ver documento A4</button>
+                <div className="flex items-center gap-2">
+                  <Link href={`/presupuestos/nuevo?id=${presupuesto.id}`} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Editar ítems</Link>
+                  <button onClick={descargarPDF} disabled={generandoPDF} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">{generandoPDF ? "Generando…" : "Descargar PDF"}</button>
+                </div>
               </div>
+              {presupuesto.items.length === 0 && (
+                <p className="px-5 py-8 text-center text-sm text-slate-500">
+                  Este presupuesto no tiene ítems. <Link href={`/presupuestos/nuevo?id=${presupuesto.id}`} className="font-semibold text-brand-600">Agregar ítems →</Link>
+                </p>
+              )}
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {presupuesto.items.map((item, index) => (
                   <div key={item.id || index} className="grid gap-2 px-5 py-3 sm:grid-cols-[100px_minmax(0,1fr)_90px_130px] sm:items-center">
-                    <span className="w-fit rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-300">{item.tipo.replace("_", " ")}</span>
+                    <span className={cn("w-fit rounded-md px-2 py-0.5 text-xs font-medium", item.tipo === "MANO_OBRA" ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" : "bg-sky-50 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300")}>{({ MANO_OBRA: "Trabajo", REPUESTO: "Repuesto", INSUMO: "Insumo", OTRO: "Otro" } as Record<string, string>)[item.tipo] ?? item.tipo}</span>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">{item.descripcion}</p>
                       <p className="text-[11px] text-slate-400">{Number(item.cantidad)} × {Number(item.precio_unitario).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</p>
                     </div>
                     <span className="text-xs text-slate-500 sm:text-right">Cant. {Number(item.cantidad)}</span>
-                    <strong className="font-mono text-sm text-slate-900 dark:text-white sm:text-right">{Number(item.subtotal).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
+                    <strong className="font-display text-base font-extrabold tabular-nums text-slate-900 dark:text-white sm:text-right">{Number(item.subtotal).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
                   </div>
                 ))}
               </div>
@@ -799,29 +785,110 @@ export default function DetallePresupuesto({ params }: PageProps) {
 
           <aside className="h-fit space-y-4 xl:sticky xl:top-4">
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Resumen económico</p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Resumen económico</p>
               <div className="mt-4 space-y-2 border-b border-slate-100 pb-4 text-sm dark:border-slate-800">
-                <div className="flex justify-between gap-4 text-slate-500"><span>Mano de obra</span><strong className="font-mono text-slate-800 dark:text-slate-200">{Number(presupuesto.total_mano_obra).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong></div>
-                <div className="flex justify-between gap-4 text-slate-500"><span>Repuestos e insumos</span><strong className="font-mono text-slate-800 dark:text-slate-200">{Number(presupuesto.total_repuestos).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong></div>
-                {Number(presupuesto.descuento) > 0 && <div className="flex justify-between gap-4 text-emerald-600"><span>Descuento</span><strong className="font-mono">− {Number(presupuesto.descuento).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong></div>}
+                <div className="flex justify-between gap-4 text-slate-500"><span>Mano de obra</span><strong className="tabular-nums text-slate-800 dark:text-slate-200">{Number(presupuesto.total_mano_obra).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong></div>
+                <div className="flex justify-between gap-4 text-slate-500"><span>Repuestos e insumos</span><strong className="tabular-nums text-slate-800 dark:text-slate-200">{Number(presupuesto.total_repuestos).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong></div>
+                {Number(presupuesto.descuento) > 0 && <div className="flex justify-between gap-4 text-emerald-600"><span>Descuento</span><strong className="tabular-nums">− {Number(presupuesto.descuento).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong></div>}
               </div>
               <div className="mt-4 flex items-end justify-between gap-4">
-                <span className="text-xs font-black uppercase tracking-wider text-slate-400">Total</span>
-                <strong className="font-mono text-2xl text-slate-900 dark:text-white">{Number(presupuesto.total).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
+                <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Total</span>
+                <strong className="font-display text-4xl font-extrabold leading-none tabular-nums text-slate-900 dark:text-white">{Number(presupuesto.total).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
               </div>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Próxima acción</p>
-              {presupuesto.estado === "BORRADOR" && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Revisalo y compartilo con el cliente.</p>}
-              {presupuesto.estado === "ENVIADO" && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Esperando respuesta del cliente.</p>}
-              {presupuesto.estado === "APROBADO" && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Ya podés convertirlo en una orden de trabajo.</p>}
-              {presupuesto.estado === "RECHAZADO" && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Quedó cerrado como rechazado.</p>}
-              {presupuesto.estado !== "RECHAZADO" && <Link href={`/trabajos/nuevo?presupuesto=${presupuesto.id}`} className="mt-4 inline-flex w-full justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">Convertir en OT →</Link>}
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Próximo paso</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                {presupuesto.estado === "BORRADOR" && "Revisalo y mandáselo al cliente."}
+                {presupuesto.estado === "ENVIADO" && "Esperando la respuesta del cliente."}
+                {presupuesto.estado === "APROBADO" && "El cliente lo aprobó: ya podés empezar el trabajo."}
+                {presupuesto.estado === "RECHAZADO" && "El cliente lo rechazó; quedó cerrado."}
+              </p>
+
+              {/* Respuesta del cliente cuando llega por teléfono o en persona
+                  (si responde desde el link, el estado cambia solo). */}
+              {(presupuesto.estado === "BORRADOR" || presupuesto.estado === "ENVIADO") && (
+                <div className="mt-4">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">¿Te respondió por teléfono o en persona?</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleEstado("APROBADO")}
+                      disabled={cambiandoEstado}
+                      className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 text-sm font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition hover:bg-emerald-100 disabled:opacity-50 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900"
+                    >
+                      ✓ Lo aprobó
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleEstado("RECHAZADO")}
+                      disabled={cambiandoEstado}
+                      className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:bg-red-50 hover:text-red-700 hover:ring-red-200 disabled:opacity-50 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-red-950/30"
+                    >
+                      ✕ Lo rechazó
+                    </button>
+                  </div>
+                  {presupuesto.estado === "BORRADOR" && (
+                    <button type="button" onClick={() => handleEstado("ENVIADO")} disabled={cambiandoEstado} className="mt-2 w-full text-center text-xs font-semibold text-slate-500 hover:text-slate-800 disabled:opacity-50 dark:text-slate-400 dark:hover:text-white">
+                      Ya se lo mandé → marcar como esperando respuesta
+                    </button>
+                  )}
+                </div>
+              )}
+              {(presupuesto.estado === "APROBADO" || presupuesto.estado === "RECHAZADO") && (
+                <button type="button" onClick={() => handleEstado("ENVIADO")} disabled={cambiandoEstado} className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-800 disabled:opacity-50 dark:text-slate-400 dark:hover:text-white">
+                  ¿Fue un error? Volver a esperando respuesta
+                </button>
+              )}
+              {presupuesto.estado !== "RECHAZADO" && (
+                <>
+                  <div className="mt-4 rounded-xl bg-slate-50 p-3.5 text-xs leading-relaxed text-slate-600 dark:bg-slate-950/50 dark:text-slate-300">
+                    <p className="font-semibold text-slate-800 dark:text-slate-100">¿Qué hace “Pasar a orden de trabajo”?</p>
+                    <p className="mt-1">
+                      Abre una orden nueva con este cliente, el auto y los mismos ítems. Revisás el kilometraje y la guardás:
+                      el auto entra al tablero en <span className="font-semibold">Por revisar</span> y este presupuesto queda como <span className="font-semibold">aprobado</span>.
+                    </p>
+                  </div>
+                  <Link href={`/trabajos/nuevo?presupuesto=${presupuesto.id}`} className="mt-3 inline-flex w-full justify-center rounded-xl bg-brand-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-brand-700">
+                    Pasar a orden de trabajo →
+                  </Link>
+                </>
+              )}
             </section>
           </aside>
         </div>
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * Copia el link que recibe el cliente (ver y aprobar el presupuesto). Es la
+ * forma principal de mandarlo: se pega en WhatsApp, mail o donde sea.
+ */
+function BtnCopiarLink({ disponible, copiado, onClick, oscuro = false }: { disponible: boolean; copiado: boolean; onClick: () => void; oscuro?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!disponible}
+      title={disponible ? "Copiar el link para mandárselo al cliente" : "Este presupuesto no tiene link activo"}
+      className={cn(
+        "inline-flex h-9 items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+        copiado
+          ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+          : oscuro
+            ? "border-slate-500 text-white hover:bg-slate-700"
+            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700",
+      )}
+    >
+      {copiado ? (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+      ) : (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
+      )}
+      {copiado ? "Link copiado" : "Copiar link"}
+    </button>
   );
 }

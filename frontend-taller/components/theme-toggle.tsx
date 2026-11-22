@@ -34,8 +34,12 @@ export function ThemeToggle() {
   }
 
   return (
-    <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 p-1 shadow-inner dark:border-slate-700 dark:bg-slate-900">
-      
+    <div
+      role="group"
+      aria-label="Tema de la interfaz"
+      className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 p-1 shadow-inner dark:border-slate-700 dark:bg-slate-900"
+    >
+
       {/* Botón MODO CLARO */}
       <button
         onClick={() => toggleTheme(false)}
@@ -45,6 +49,7 @@ export function ThemeToggle() {
             : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
         }`}
         aria-label="Activar modo claro"
+        aria-pressed={!isDark}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -77,6 +82,7 @@ export function ThemeToggle() {
             : "text-slate-400 hover:text-slate-600"
         }`}
         aria-label="Activar modo oscuro"
+        aria-pressed={isDark}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

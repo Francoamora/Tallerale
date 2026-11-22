@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition, Suspense, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { CampoDescuento, montoDescuento, type ModoDescuento } from "@/components/campo-descuento";
 import { SectionCard } from "@/components/section-card";
 import { getClientes, getVehiculoById, getVehiculos, getTrabajoById, getPresupuestoById, crearTrabajo, editarTrabajo } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import type { Cliente, Vehiculo, TrabajoItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ESTADO_TRABAJO_LABEL, numeroPresupuesto } from "@/lib/documentos";
 
 // --- Tipos ---
 type TrabajoItemDraft = { id: number; tipo: "MANO_OBRA" | "REPUESTO" | "INSUMO" | "OTRO"; descripcion: string; cantidad: string; precio_unitario: string; };
@@ -16,7 +18,7 @@ type FeedbackState = { tone: "idle" | "success" | "error"; message: string; };
 type FormState = { clienteId: string; vehiculoId: string; kilometraje: string; estado: string; resumen_trabajos: string; observaciones_cliente: string; observaciones_internas: string; estado_general: string; fecha_egreso_estimado: string; estado_cubiertas_trabajo: string; recomendaciones_proximo_service: string; proximo_control_km: string; descuento: string; };
 type ExpressState = { clienteNombre: string; clienteTelefono: string; vehiculoPatente: string; vehiculoMarca: string; };
 
-const INITIAL_FORM: FormState = { clienteId: "", vehiculoId: "", kilometraje: "", estado: "INGRESADO", resumen_trabajos: "", observaciones_cliente: "", observaciones_internas: "", estado_general: "BUENO", fecha_egreso_estimado: "", estado_cubiertas_trabajo: "", recomendaciones_proximo_service: "", proximo_control_km: "", descuento: "0" };
+const INITIAL_FORM: FormState = { clienteId: "", vehiculoId: "", kilometraje: "", estado: "INGRESADO", resumen_trabajos: "", observaciones_cliente: "", observaciones_internas: "", estado_general: "BUENO", fecha_egreso_estimado: "", estado_cubiertas_trabajo: "", recomendaciones_proximo_service: "", proximo_control_km: "", descuento: "" };
 const INITIAL_EXPRESS: ExpressState = { clienteNombre: "", clienteTelefono: "", vehiculoPatente: "", vehiculoMarca: "" };
 
 function createItem(id: number, tipo: TrabajoItemDraft["tipo"] = "MANO_OBRA"): TrabajoItemDraft {
@@ -43,11 +45,15 @@ function FormularioTrabajo() {
   const editId = searchParams.get("id"); // Detectar si estamos editando
   const presupuestoOrigenId = searchParams.get("presupuesto");
   const vehiculoPreId = searchParams.get("vehiculo");
+  // Al abrir la orden desde un turno, el motivo pasa como resumen inicial.
+  const motivoPre = searchParams.get("motivo");
   
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   
-  const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  // Arranca en porcentaje; una orden guardada se reabre con su monto en pesos.
+  const [modoDescuento, setModoDescuento] = useState<ModoDescuento>("%");
+  const [form, setForm] = useState<FormState>(() => ({ ...INITIAL_FORM, resumen_trabajos: motivoPre ?? "" }));
   const [items, setItems] = useState<TrabajoItemDraft[]>([createItem(1)]);
   const [nextItemId, setNextItemId] = useState(2);
   
@@ -98,8 +104,9 @@ function FormularioTrabajo() {
             estado_cubiertas_trabajo: trabajo.estado_cubiertas_trabajo || "",
             recomendaciones_proximo_service: trabajo.recomendaciones_proximo_service,
             proximo_control_km: trabajo.proximo_control_km ? trabajo.proximo_control_km.toString() : "",
-            descuento: trabajo.descuento.toString()
+            descuento: trabajo.descuento ? trabajo.descuento.toString() : ""
           });
+          if (trabajo.descuento) setModoDescuento("$");
           // Pre-llenar el campo de búsqueda del combobox
           if (trabajo.cliente?.nombre_completo) {
             setClienteBusqueda(trabajo.cliente.nombre_completo);
@@ -140,8 +147,9 @@ function FormularioTrabajo() {
             vehiculoId: presupuesto.vehiculo!.id.toString(),
             kilometraje: presupuesto.vehiculo!.kilometraje_actual.toString(),
             resumen_trabajos: presupuesto.resumen_corto || "",
-            descuento: presupuesto.descuento.toString(),
+            descuento: presupuesto.descuento ? presupuesto.descuento.toString() : "",
           }));
+          if (presupuesto.descuento) setModoDescuento("$");
           setClienteBusqueda(presupuesto.cliente.nombre_completo);
           setItems(
             presupuesto.items.length
@@ -155,7 +163,7 @@ function FormularioTrabajo() {
               : [createItem(1)],
           );
           setNextItemId(Math.max(presupuesto.items.length + 1, 2));
-          setFeedback({ tone: "success", message: `Orden preparada desde el presupuesto P-${presupuesto.id}. Revisá el kilometraje y guardá para convertirlo.` });
+          setFeedback({ tone: "success", message: `Orden preparada desde el presupuesto ${numeroPresupuesto(presupuesto.id)}. Revisá el kilometraje y guardá para convertirlo.` });
         } else if (vehiculoPreId && active) {
           const vehiculo = await getVehiculoById(Number(vehiculoPreId));
           setForm((current) => ({
@@ -229,7 +237,7 @@ function FormularioTrabajo() {
   }
   const subtotalManoObra = items.reduce((acc, item) => item.tipo === "MANO_OBRA" ? acc + parseAmount(item.cantidad) * parseAmount(item.precio_unitario) : acc, 0);
   const subtotalOtros = items.reduce((acc, item) => item.tipo !== "MANO_OBRA" ? acc + parseAmount(item.cantidad) * parseAmount(item.precio_unitario) : acc, 0);
-  const descuento = parseAmount(form.descuento);
+  const descuento = montoDescuento(modoDescuento, form.descuento, subtotalManoObra + subtotalOtros);
   const total = Math.max(subtotalManoObra + subtotalOtros - descuento, 0);
 
   // 2. LÓGICA DE GUARDADO (Crear vs Editar)
@@ -285,292 +293,306 @@ function FormularioTrabajo() {
   }
 
   const modoCliente = isExpressCliente || isExpressVehiculo ? "EXPRESS" : "DIRECTORIO";
-  const checklistCompleto = (modoCliente === "EXPRESS" ? !!expressData.clienteNombre && !!expressData.vehiculoPatente : !!form.clienteId && !!form.vehiculoId) && !!form.kilometraje && items.every(i => i.descripcion.length > 2);
+  const clienteOk = isExpressCliente ? expressData.clienteNombre.trim().length > 0 : !!form.clienteId || !!editId;
+  const vehiculoOk = isExpressVehiculo ? !!expressData.vehiculoPatente.trim() && !!expressData.vehiculoMarca.trim() : !!form.vehiculoId;
+  const kilometrajeOk = form.kilometraje !== "" && Number(form.kilometraje) >= 0;
+  const itemsOk = items.length > 0 && items.every((i) => i.descripcion.trim().length > 2);
+  const subtotal = subtotalManoObra + subtotalOtros;
+  // Mismo criterio que el backend (total_con_descuento): un descuento mayor al
+  // subtotal se rechaza, así que se avisa acá antes de intentar guardar.
+  const descuentoExcedido = descuento > subtotal;
+  const faltantes = [
+    !clienteOk && "Elegí o cargá el cliente",
+    !vehiculoOk && "Elegí o cargá el vehículo",
+    !kilometrajeOk && "Indicá el kilometraje de ingreso",
+    !itemsOk && "Describí cada ítem (al menos 3 letras)",
+    descuentoExcedido && "El descuento supera el subtotal",
+  ].filter(Boolean) as string[];
+  const ocupado = isSaving || isRedirecting || isLoading;
 
   if (isLoading) return <div className="h-[60vh] animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800"></div>;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_320px] xl:grid-cols-[minmax(0,1.4fr)_380px]">
-      <form className="space-y-6" onSubmit={guardarTrabajo}>
-        
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
+      <form id="form-trabajo" className="min-w-0 space-y-5" onSubmit={guardarTrabajo}>
+
         {feedback.message && (
-          <div className={cn("rounded-xl border p-4 text-sm font-medium",
-            feedback.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-300" : 
-            feedback.tone === "error" ? "border-red-200 bg-red-50 text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-300" : 
-            "border-slate-200 bg-blue-50 text-blue-800"
+          <div role={feedback.tone === "error" ? "alert" : "status"} className={cn("rounded-xl border p-4 text-sm font-medium",
+            feedback.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-300" :
+            feedback.tone === "error" ? "border-red-200 bg-red-50 text-red-800 dark:bg-red-900/30 dark:border-red-800 dark:text-red-300" :
+            "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300"
           )}>
             {feedback.message}
           </div>
         )}
 
-        {/* 1. SECCIÓN: CLIENTE Y VEHÍCULO */}
-        <SectionCard title="Contexto Operativo">
-          <div className="grid gap-5 md:grid-cols-2">
-            
-            {/* Bloque Cliente */}
-            <div className={cn("rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900/40", editId ? "border-brand-200 bg-brand-50/20 dark:border-brand-900/30" : "border-slate-100 dark:border-slate-800")}>
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Datos del Cliente</span>
+        {/* 1. Cliente y vehículo */}
+        <SectionCard compact title="Cliente y vehículo">
+          <div className="grid gap-x-5 gap-y-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-1.5 md:col-span-1 xl:col-span-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Cliente</span>
                 {!editId && (
-                  <button type="button" onClick={() => setIsExpressCliente(!isExpressCliente)} className="text-xs font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400">
-                    {isExpressCliente ? "← Usar Existente" : "+ Alta Express"}
+                  <button type="button" onClick={() => setIsExpressCliente(!isExpressCliente)} className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400">
+                    {isExpressCliente ? "Buscar uno existente" : "+ Cliente nuevo"}
                   </button>
                 )}
               </div>
-              {isExpressCliente && !editId ? (
-                <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
-                  <input autoFocus required type="text" placeholder="Nombre completo" value={expressData.clienteNombre} onChange={(e) => updateExpress("clienteNombre", e.target.value)} className={inputBase} />
-                  <input type="text" placeholder="Teléfono (Opcional)" value={expressData.clienteTelefono} onChange={(e) => updateExpress("clienteTelefono", e.target.value)} className={inputBase} />
-                </div>
-              ) : editId ? (
-                /* En modo edición mostramos el cliente como texto (no editable) */
-                <div className={inputBase + " flex items-center gap-2 bg-slate-100 opacity-70 cursor-not-allowed"}>
-                  <svg className="h-4 w-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                  <span className="text-sm font-medium text-slate-700">{clienteActual?.nombre_completo || "Cliente seleccionado"}</span>
-                </div>
-              ) : (
-                /* COMBOBOX DE CLIENTE */
-                <div ref={clienteComboRef} className="relative">
-                  {clienteActual ? (
-                    /* Cliente ya seleccionado: chip */
-                    <div className="flex items-center gap-2 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2.5 dark:border-brand-700 dark:bg-brand-900/20">
-                      <svg className="h-4 w-4 flex-shrink-0 text-brand-600 dark:text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-bold text-brand-700 dark:text-brand-300 truncate">{clienteActual.nombre_completo}</span>
-                        {clienteActual.dni && <span className="text-[10px] font-medium text-brand-500">DNI: {clienteActual.dni}</span>}
-                      </div>
-                      <button type="button" onClick={limpiarCliente} className="ml-auto flex-shrink-0 rounded-full p-0.5 text-brand-500 hover:bg-brand-200 hover:text-brand-700 transition dark:hover:bg-brand-800" title="Cambiar cliente">
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-                      </button>
+            {isExpressCliente && !editId ? (
+              <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                <input autoFocus required type="text" placeholder="Nombre completo" value={expressData.clienteNombre} onChange={(e) => updateExpress("clienteNombre", e.target.value)} className={inputBase} />
+                <input type="text" placeholder="Teléfono (Opcional)" value={expressData.clienteTelefono} onChange={(e) => updateExpress("clienteTelefono", e.target.value)} className={inputBase} />
+              </div>
+            ) : editId ? (
+              /* En modo edición mostramos el cliente como texto (no editable) */
+              <div className={inputBase + " flex items-center gap-2 bg-slate-100 opacity-70 cursor-not-allowed"}>
+                <svg className="h-4 w-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                <span className="text-sm font-medium text-slate-700">{clienteActual?.nombre_completo || "Cliente seleccionado"}</span>
+              </div>
+            ) : (
+              /* COMBOBOX DE CLIENTE */
+              <div ref={clienteComboRef} className="relative">
+                {clienteActual ? (
+                  /* Cliente ya seleccionado: chip */
+                  <div className="flex items-center gap-2 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2.5 dark:border-brand-700 dark:bg-brand-900/20">
+                    <svg className="h-4 w-4 flex-shrink-0 text-brand-600 dark:text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-bold text-brand-700 dark:text-brand-300 truncate">{clienteActual.nombre_completo}</span>
+                      {clienteActual.dni && <span className="text-[10px] font-medium text-brand-500">DNI: {clienteActual.dni}</span>}
                     </div>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder="Buscar cliente por nombre, DNI o teléfono..."
-                      value={clienteBusqueda}
-                      onChange={(e) => { setClienteBusqueda(e.target.value); setClienteDropdown(true); }}
-                      onFocus={() => setClienteDropdown(true)}
-                      className={inputBase}
-                      autoComplete="off"
-                    />
-                  )}
-                  {clienteDropdown && !clienteActual && (
-                    <div className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800">
-                      {clientesFiltradosCombo.length > 0 ? clientesFiltradosCombo.map(c => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onMouseDown={(e) => { e.preventDefault(); seleccionarCliente(c); }}
-                          className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-brand-50 dark:hover:bg-slate-700"
-                        >
-                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                            {c.nombre_completo.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{c.nombre_completo}</span>
-                            <span className="text-[10px] text-slate-500">{c.dni ? `DNI: ${c.dni}` : ""}{c.telefono ? `  ·  ${c.telefono}` : ""}</span>
-                          </div>
-                          {Number(c.saldo_balance) > 0 && (
-                            <span className="ml-auto flex-shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase text-red-600 dark:bg-red-900/30 dark:text-red-400">
-                              Debe
-                            </span>
-                          )}
-                        </button>
-                      )) : (
-                        <div className="px-4 py-6 text-center text-sm text-slate-400">
-                          No se encontró ningún cliente.
+                    <button type="button" onClick={limpiarCliente} className="ml-auto flex-shrink-0 rounded-full p-0.5 text-brand-500 hover:bg-brand-200 hover:text-brand-700 transition dark:hover:bg-brand-800" title="Cambiar cliente">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="Buscar cliente por nombre, DNI o teléfono..."
+                    value={clienteBusqueda}
+                    onChange={(e) => { setClienteBusqueda(e.target.value); setClienteDropdown(true); }}
+                    onFocus={() => setClienteDropdown(true)}
+                    className={inputBase}
+                    autoComplete="off"
+                  />
+                )}
+                {clienteDropdown && !clienteActual && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+                    {clientesFiltradosCombo.length > 0 ? clientesFiltradosCombo.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); seleccionarCliente(c); }}
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-brand-50 dark:hover:bg-slate-700"
+                      >
+                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                          {c.nombre_completo.charAt(0).toUpperCase()}
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{c.nombre_completo}</span>
+                          <span className="text-[10px] text-slate-500">{c.dni ? `DNI: ${c.dni}` : ""}{c.telefono ? `  ·  ${c.telefono}` : ""}</span>
+                        </div>
+                        {Number(c.saldo_balance) > 0 && (
+                          <span className="ml-auto flex-shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase text-red-600 dark:bg-red-900/30 dark:text-red-400">
+                            Debe
+                          </span>
+                        )}
+                      </button>
+                    )) : (
+                      <div className="px-4 py-6 text-center text-sm text-slate-400">
+                        No se encontró ningún cliente.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             </div>
 
-            {/* Bloque Vehículo */}
-            <div className={cn("rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900/40", editId ? "border-brand-200 bg-brand-50/20 dark:border-brand-900/30" : "border-slate-100 dark:border-slate-800")}>
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Datos del Vehículo</span>
+            <div className="space-y-1.5 md:col-span-1 xl:col-span-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Vehículo</span>
                 {!editId && (
-                  <button type="button" onClick={() => setIsExpressVehiculo(!isExpressVehiculo)} className="text-xs font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400">
-                    {isExpressVehiculo ? "← Usar Existente" : "+ Alta Express"}
+                  <button type="button" onClick={() => setIsExpressVehiculo(!isExpressVehiculo)} className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400">
+                    {isExpressVehiculo ? "Elegir uno del cliente" : "+ Vehículo nuevo"}
                   </button>
                 )}
               </div>
-              {isExpressVehiculo && !editId ? (
-                <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
-                  <input autoFocus required type="text" placeholder="Patente (Ej. AB123CD)" value={expressData.vehiculoPatente} onChange={(e) => updateExpress("vehiculoPatente", e.target.value)} className={inputBase} />
-                  <input required type="text" placeholder="Marca y Modelo (Ej. Ford Focus)" value={expressData.vehiculoMarca} onChange={(e) => updateExpress("vehiculoMarca", e.target.value)} className={inputBase} />
-                </div>
-              ) : (
-                <select required value={form.vehiculoId} onChange={(e) => updateForm("vehiculoId", e.target.value)} disabled={(!form.clienteId && !isExpressCliente) || !!editId} className={inputBase}>
-                  <option value="">{form.clienteId ? "Seleccionar vehículo..." : "Primero elija un cliente"}</option>
-                  {(editId ? vehiculos : vehiculosDelCliente).map(v => <option key={v.id} value={v.id}>{v.patente} · {v.marca} {v.modelo}</option>)}
-                </select>
-              )}
+            {isExpressVehiculo && !editId ? (
+              <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                <input autoFocus required type="text" placeholder="Patente (Ej. AB123CD)" value={expressData.vehiculoPatente} onChange={(e) => updateExpress("vehiculoPatente", e.target.value)} className={inputBase} />
+                <input required type="text" placeholder="Marca y Modelo (Ej. Ford Focus)" value={expressData.vehiculoMarca} onChange={(e) => updateExpress("vehiculoMarca", e.target.value)} className={inputBase} />
+              </div>
+            ) : (
+              <select required value={form.vehiculoId} onChange={(e) => updateForm("vehiculoId", e.target.value)} disabled={(!form.clienteId && !isExpressCliente) || !!editId} className={inputBase}>
+                <option value="">{form.clienteId ? "Seleccionar vehículo..." : "Primero elija un cliente"}</option>
+                {(editId ? vehiculos : vehiculosDelCliente).map(v => <option key={v.id} value={v.id}>{v.patente} · {v.marca} {v.modelo}</option>)}
+              </select>
+            )}
             </div>
 
             <label className="space-y-1.5">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Kilometraje de Ingreso</span>
-              <input required min={0} type="number" placeholder="Ej. 85000" value={form.kilometraje} onChange={(e) => updateForm("kilometraje", e.target.value)} className={inputBase} />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Kilometraje de ingreso</span>
+              <input required min={0} type="number" inputMode="numeric" placeholder="Ej. 85000" value={form.kilometraje} onChange={(e) => updateForm("kilometraje", e.target.value)} className={inputBase} />
             </label>
 
             <label className="space-y-1.5">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Estado</span>
               <select value={form.estado} onChange={(e) => updateForm("estado", e.target.value)} className={inputBase}>
-                <option value="INGRESADO">Ingresado (En espera)</option>
-                <option value="EN_PROCESO">En proceso (Elevador)</option>
-                <option value="FINALIZADO">Finalizado (Listo para entregar)</option>
-                <option value="ENTREGADO">Entregado al Cliente</option>
+                <option value="INGRESADO">{ESTADO_TRABAJO_LABEL.INGRESADO}</option>
+                <option value="EN_PROCESO">{ESTADO_TRABAJO_LABEL.EN_PROCESO}</option>
+                <option value="FINALIZADO">{ESTADO_TRABAJO_LABEL.FINALIZADO}</option>
+                <option value="ENTREGADO">{ESTADO_TRABAJO_LABEL.ENTREGADO}</option>
               </select>
             </label>
-          </div>
-        </SectionCard>
 
-        {/* 2. PRESUPUESTO DINÁMICO */}
-        <SectionCard 
-          title="Detalle Económico y Repuestos" 
-          action={<button type="button" onClick={addItem} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-slate-800 shadow-sm dark:bg-brand-600 dark:hover:bg-brand-500">+ Agregar Ítem</button>}
-        >
-          <div className="space-y-3">
-            <div className="hidden grid-cols-[minmax(120px,1.2fr)_2fr_0.8fr_1fr_1fr_40px] gap-3 px-2 text-xs font-bold uppercase tracking-widest text-slate-400 sm:grid">
-              <span>Tipo</span><span>Descripción del trabajo/repuesto</span><span>Cant.</span><span>Precio U.</span><span>Subtotal</span><span></span>
-            </div>
-            
-            {items.map((item) => {
-              const subtotal = parseAmount(item.cantidad) * parseAmount(item.precio_unitario);
-              return (
-                <div key={item.id} className="relative flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:grid sm:grid-cols-[minmax(120px,1.2fr)_2fr_0.8fr_1fr_1fr_40px] sm:items-center sm:p-2 dark:border-slate-700 dark:bg-slate-900/50">
-                  <select value={item.tipo} onChange={(e) => updateItem(item.id, "tipo", e.target.value as TrabajoItemDraft["tipo"])} className={inputBase + " py-2 text-xs"}>
-                    <option value="MANO_OBRA">Mano de Obra</option>
-                    <option value="REPUESTO">Repuesto</option>
-                    <option value="INSUMO">Insumo</option>
-                  </select>
-                  <input required type="text" placeholder="Detalle..." value={item.descripcion} onChange={(e) => updateItem(item.id, "descripcion", e.target.value)} className={inputBase + " py-2 text-xs"} />
-                  <input required min="0.01" step="0.01" type="number" placeholder="Cant." value={item.cantidad} onChange={(e) => updateItem(item.id, "cantidad", e.target.value)} className={inputBase + " py-2 text-xs"} />
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
-                    <input
-                      required
-                      min="0"
-                      step="0.01"
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={item.precio_unitario}
-                      onFocus={(event) => event.currentTarget.select()}
-                      onChange={(e) => updateItem(item.id, "precio_unitario", e.target.value)}
-                      className={inputBase + " money-input py-2 pl-7 text-right font-mono text-xs font-bold tabular-nums"}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between px-2 sm:justify-start">
-                    <span className="text-xs font-bold sm:hidden text-slate-500">Subtotal:</span>
-                    <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 font-mono text-sm font-black tabular-nums text-slate-900 dark:bg-slate-800 dark:text-white">{formatCurrency(subtotal)}</span>
-                  </div>
-
-                  <div className="absolute right-2 top-2 sm:static sm:flex sm:justify-center">
-                    {items.length > 1 && (
-                      <button type="button" onClick={() => removeItem(item.id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 transition">
-                         ✕
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </SectionCard>
-
-        {/* 3. REPORTE TÉCNICO */}
-        <SectionCard title="Reporte Técnico">
-          <div className="grid gap-5">
             <label className="space-y-1.5">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Diagnóstico Principal (Para el Cliente)</span>
-              <textarea rows={2} placeholder="Resumen visible en el comprobante final." value={form.resumen_trabajos} onChange={(e) => updateForm("resumen_trabajos", e.target.value)} className={inputBase} />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Próximo service (km)</span>
+              <input type="number" inputMode="numeric" placeholder="Ej. 95000" value={form.proximo_control_km} onChange={(e) => updateForm("proximo_control_km", e.target.value)} className={inputBase} />
             </label>
-            <div className="grid gap-5 sm:grid-cols-2">
-               <label className="space-y-1.5">
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Próximo Service (Km)</span>
-                <input type="number" placeholder="Ej. 95000" value={form.proximo_control_km} onChange={(e) => updateForm("proximo_control_km", e.target.value)} className={inputBase} />
-              </label>
-              <label className="space-y-1.5">
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Anotaciones Internas (Privado)</span>
-                <input type="text" placeholder="Ej. Tuerca barrida en rueda delantera." value={form.observaciones_internas} onChange={(e) => updateForm("observaciones_internas", e.target.value)} className={inputBase} />
-              </label>
-            </div>
           </div>
         </SectionCard>
 
-        {/* BOTONERA */}
-        <div className="flex flex-col-reverse justify-end gap-3 pt-4 sm:flex-row">
-           <Link href="/trabajos" className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:dark:bg-slate-700">
+        {/* 2. Tareas y repuestos */}
+        <SectionCard
+          compact
+          title="Tareas y repuestos"
+          description="Cada ítem es una tarea del checklist del mecánico."
+          action={<button type="button" onClick={addItem} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700">+ Agregar ítem</button>}
+        >
+          <div className="mt-1">
+            <div className="hidden grid-cols-[160px_minmax(0,1fr)_84px_150px_130px_36px] gap-3 border-b border-slate-100 px-1 pb-2 text-xs font-medium text-slate-500 dark:border-slate-700 dark:text-slate-400 md:grid">
+              <span>Tipo</span><span>Descripción</span><span className="text-right">Cant.</span><span className="text-right">Precio unitario</span><span className="text-right">Subtotal</span><span />
+            </div>
+
+            <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
+              {items.map((item, index) => {
+                const subtotalItem = parseAmount(item.cantidad) * parseAmount(item.precio_unitario);
+                return (
+                  <div key={item.id} className="grid grid-cols-2 gap-2 py-3 md:grid-cols-[160px_minmax(0,1fr)_84px_150px_130px_36px] md:items-center md:gap-3 md:py-2">
+                    <select aria-label={`Tipo del ítem ${index + 1}`} value={item.tipo} onChange={(e) => updateItem(item.id, "tipo", e.target.value as TrabajoItemDraft["tipo"])} className={inputBase + " px-3 py-2"}>
+                      <option value="MANO_OBRA">Mano de obra</option>
+                      <option value="REPUESTO">Repuesto</option>
+                      <option value="INSUMO">Insumo</option>
+                    </select>
+                    <input aria-label={`Descripción del ítem ${index + 1}`} required type="text" placeholder="Ej. Cambio de pastillas delanteras" value={item.descripcion} onChange={(e) => updateItem(item.id, "descripcion", e.target.value)} className={inputBase + " col-span-2 py-2 md:col-span-1"} />
+                    <input aria-label={`Cantidad del ítem ${index + 1}`} required min="0.01" step="0.01" type="number" inputMode="decimal" placeholder="1" value={item.cantidad} onChange={(e) => updateItem(item.id, "cantidad", e.target.value)} className={inputBase + " money-input py-2 text-right"} />
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+                      <input
+                        aria-label={`Precio unitario del ítem ${index + 1}`}
+                        required
+                        min="0"
+                        step="0.01"
+                        type="number"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={item.precio_unitario}
+                        onFocus={(event) => event.currentTarget.select()}
+                        onChange={(e) => updateItem(item.id, "precio_unitario", e.target.value)}
+                        className={inputBase + " money-input py-2 pl-7 text-right tabular-nums"}
+                      />
+                    </div>
+                    <p className="flex items-center justify-between text-sm md:justify-end">
+                      <span className="text-xs text-slate-500 md:hidden">Subtotal</span>
+                      <span className="font-semibold tabular-nums text-slate-900 dark:text-white">{formatCurrency(subtotalItem)}</span>
+                    </p>
+                    <div className="flex justify-end">
+                      {items.length > 1 && (
+                        <button type="button" onClick={() => removeItem(item.id)} aria-label={`Quitar el ítem ${index + 1}`} className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button type="button" onClick={addItem} className="mt-2 w-full rounded-lg border border-dashed border-slate-300 py-2.5 text-sm font-medium text-slate-500 transition hover:border-slate-400 hover:text-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:text-slate-200">
+              + Agregar otro ítem
+            </button>
+          </div>
+        </SectionCard>
+
+        {/* 3. Diagnóstico y notas */}
+        <SectionCard compact title="Diagnóstico y notas">
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Diagnóstico para el cliente</span>
+              <textarea rows={3} placeholder="Lo que se ve en el comprobante y en el portal del cliente." value={form.resumen_trabajos} onChange={(e) => updateForm("resumen_trabajos", e.target.value)} className={inputBase} />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Notas internas <span className="font-normal text-slate-400">(no las ve el cliente)</span></span>
+              <textarea rows={3} placeholder="Ej. Tuerca barrida en rueda delantera." value={form.observaciones_internas} onChange={(e) => updateForm("observaciones_internas", e.target.value)} className={inputBase} />
+            </label>
+          </div>
+        </SectionCard>
+
+        {/* Acciones al pie (en pantallas grandes también están en el resumen) */}
+        <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row lg:hidden">
+          <Link href="/trabajos" className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
             Cancelar
           </Link>
-          <button type="submit" disabled={isSaving || isRedirecting || isLoading} className="inline-flex justify-center rounded-xl bg-brand-600 px-8 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-50">
-            {isSaving ? "Procesando..." : editId ? "Actualizar Trabajo" : "Confirmar y Guardar Trabajo"}
+          <button type="submit" disabled={ocupado || descuentoExcedido} className="inline-flex justify-center rounded-xl bg-brand-600 px-8 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50">
+            {isSaving ? "Guardando…" : editId ? "Guardar cambios" : "Guardar orden"}
           </button>
         </div>
       </form>
 
-      {/* COLUMNA LATERAL (RESUMEN EN VIVO) */}
-      <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+      {/* Resumen fijo: total, lo que falta y guardar */}
+      <aside className="space-y-4 lg:sticky lg:top-20">
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <div className="p-5 sm:p-6">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-300">Total a Cobrar</h3>
-            <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">Resumen</span>
-          </div>
-          
-          <div className="space-y-4 border-b border-slate-100 pb-5 dark:border-slate-700">
+          <div className="space-y-3 p-5">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Resumen</h3>
             <div className="flex justify-between text-sm">
-              <span className="font-medium text-slate-600 dark:text-slate-400">Mano de Obra</span>
-              <span className="font-mono font-bold tabular-nums text-slate-950 dark:text-white">{formatCurrency(subtotalManoObra)}</span>
+              <span className="text-slate-600 dark:text-slate-400">Mano de obra</span>
+              <span className="font-medium tabular-nums text-slate-900 dark:text-white">{formatCurrency(subtotalManoObra)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="font-medium text-slate-600 dark:text-slate-400">Repuestos/Insumos</span>
-              <span className="font-mono font-bold tabular-nums text-slate-950 dark:text-white">{formatCurrency(subtotalOtros)}</span>
+              <span className="text-slate-600 dark:text-slate-400">Repuestos e insumos</span>
+              <span className="font-medium tabular-nums text-slate-900 dark:text-white">{formatCurrency(subtotalOtros)}</span>
             </div>
-            <div className="flex items-center justify-between pt-2">
-              <span className="text-sm font-medium text-brand-600 dark:text-brand-400">Descuento</span>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-                <input type="number" inputMode="decimal" min="0" step="0.01" value={form.descuento} onFocus={(event) => event.currentTarget.select()} onChange={(e) => updateForm("descuento", e.target.value)} className="money-input w-28 rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-7 pr-3 text-right font-mono text-sm font-bold tabular-nums text-slate-900 outline-none transition focus:border-brand-500 focus:bg-white dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
-              </div>
+            <div className="flex items-start justify-between gap-3 text-sm">
+              <label htmlFor="descuento-trabajo" className="pt-2 text-slate-600 dark:text-slate-400">Descuento</label>
+              <CampoDescuento id="descuento-trabajo" modo={modoDescuento} valor={form.descuento} subtotal={subtotalManoObra + subtotalOtros} onModo={setModoDescuento} onValor={(v) => updateForm("descuento", v)} invalido={descuentoExcedido} />
             </div>
+            {descuentoExcedido && <p className="text-xs text-red-600 dark:text-red-400">El descuento no puede superar el subtotal ({formatCurrency(subtotal)}).</p>}
           </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-4 bg-slate-950 px-5 py-5 dark:bg-slate-950 sm:px-6">
-            <div>
-              <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Total final</span>
-              <span className="mt-1 block text-[10px] font-medium text-slate-500">Importe estimado</span>
-            </div>
-            <span className="whitespace-nowrap font-mono text-3xl font-black tracking-tight tabular-nums text-white sm:text-4xl">{formatCurrency(total)}</span>
+          <div className="flex items-baseline justify-between gap-4 border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-900/60">
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Total</span>
+            <span className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">{formatCurrency(total)}</span>
           </div>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-           <h3 className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Checklist Operativo</h3>
-           <ul className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
-              <ChecklistItem done={checklistCompleto}>Formulario Completo</ChecklistItem>
-              <ChecklistItem done={modoCliente === "EXPRESS" || !!editId}>Cliente Registrado</ChecklistItem>
-              <ChecklistItem done={total > 0}>Costos Valorizados</ChecklistItem>
-           </ul>
+          {faltantes.length > 0 ? (
+            <>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Para guardar falta</h3>
+              <ul className="mt-2 space-y-1.5">
+                {faltantes.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />{f}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              Lista para guardar
+            </p>
+          )}
+          <div className="mt-4 hidden gap-2 lg:flex">
+            <Link href="/trabajos" className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700">
+              Cancelar
+            </Link>
+            <button type="submit" form="form-trabajo" disabled={ocupado || descuentoExcedido} className="flex-[2] rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50">
+              {isSaving ? "Guardando…" : editId ? "Guardar cambios" : "Guardar orden"}
+            </button>
+          </div>
         </div>
       </aside>
     </div>
-  );
-}
-
-function ChecklistItem({ done, children }: { done: boolean; children: ReactNode }) {
-  return (
-    <li className="flex items-center gap-3">
-      <div className={cn("flex h-5 w-5 items-center justify-center rounded-full border transition-colors", done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-slate-50 text-transparent dark:border-slate-600 dark:bg-slate-800")}>
-        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-      </div>
-      <span className={done ? "font-semibold text-slate-900 dark:text-slate-200" : "font-medium text-slate-500 dark:text-slate-500"}>{children}</span>
-    </li>
   );
 }
 
@@ -578,8 +600,9 @@ export default function Page() {
   return (
     <AppShell
       currentPath="/trabajos"
-      title="Gestión de Orden de Trabajo"
-      description="Alta inteligente y modificación de operaciones. El presupuesto se calcula automáticamente."
+      compact
+      title="Orden de trabajo"
+      description="Cliente, vehículo, tareas y repuestos. El total se calcula solo."
     >
       <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800"></div>}>
         <FormularioTrabajo />

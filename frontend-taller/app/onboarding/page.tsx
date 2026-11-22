@@ -15,7 +15,6 @@ import { getSession, markOnboardingDone } from "@/lib/trial";
 // ─── Pasos del onboarding ─────────────────────────────────────────────────────
 const PASOS = [
   {
-    emoji: "👋",
     titulo: (nombre: string) => `¡Hola, ${nombre}!`,
     desc: "Te damos la bienvenida a Tallerista. En los próximos 30 segundos te mostramos cómo sacarle el máximo provecho desde el primer día.",
     cta: "Empezar →",
@@ -23,52 +22,46 @@ const PASOS = [
     color: "from-orange-500 to-orange-600",
   },
   {
-    emoji: "👤",
     titulo: () => "Primero, agregá un cliente",
     desc: "El taller gira en torno a los clientes. Registrá a tu primer cliente con su nombre, teléfono y DNI. Así después le podés asignar un vehículo y una orden de trabajo.",
     cta: "Ir a Clientes →",
     href: "/clientes",
     color: "from-emerald-500 to-emerald-600",
-    tip: "💡 Tip: podés buscar por nombre, DNI o teléfono desde cualquier pantalla.",
+    tip: "podés buscar por nombre, DNI o teléfono desde cualquier pantalla.",
   },
   {
-    emoji: "🚗",
     titulo: () => "Después, el vehículo",
     desc: "Cada cliente puede tener uno o más autos. Registrá la patente, marca, modelo, año y el kilometraje actual para controlar el próximo service.",
     cta: "Ir a Vehículos →",
     href: "/vehiculos",
     color: "from-sky-500 to-sky-600",
-    tip: "💡 Tip: el sistema avisa cuando un auto se acerca al km de service programado.",
+    tip: "el sistema avisa cuando un auto se acerca al km de service programado.",
   },
   {
-    emoji: "📋",
     titulo: () => "Creá tu primer presupuesto",
     desc: "Un presupuesto digital con tu logo. Lo mandás por WhatsApp y el cliente puede aprobarlo o rechazarlo desde su celular — sin apps, sin PDF.",
     cta: "Ir a Presupuestos →",
     href: "/presupuestos",
     color: "from-violet-500 to-violet-600",
-    tip: "💡 Tip: cuando el cliente aprueba, lo convertís a Orden de Trabajo con un solo click.",
+    tip: "cuando el cliente aprueba, lo convertís a Orden de Trabajo con un solo click.",
   },
   {
-    emoji: "🔧",
     titulo: () => "Las Órdenes de Trabajo",
     desc: "Una OT es el registro oficial del trabajo en el auto. Cargás los ítems, el mecánico que trabajó, y al finalizar el cliente recibe el comprobante por WhatsApp.",
     cta: "Ir a Trabajos →",
     href: "/trabajos",
     color: "from-amber-500 to-amber-600",
-    tip: "💡 Tip: desde el 'Estado del Taller' ves todos los autos en proceso de un vistazo.",
+    tip: "desde el 'Estado del Taller' ves todos los autos en proceso de un vistazo.",
   },
   {
-    emoji: "💰",
     titulo: () => "Controlá la caja",
     desc: "Registrá cada cobro y gasto del taller. El sistema lleva la cuenta corriente de cada cliente y te muestra la evolución de facturación mensual.",
     cta: "Ir a Caja →",
     href: "/caja",
     color: "from-rose-500 to-rose-600",
-    tip: "💡 Tip: usá el filtro 'Solo con deuda' en Clientes para ver quién te debe.",
+    tip: "usá el filtro 'Con deuda' en Clientes para ver quién te debe.",
   },
   {
-    emoji: "🚀",
     titulo: (nombre: string) => `¡Ya estás listo, ${nombre}!`,
     desc: "Eso es todo lo que necesitás saber para empezar. El sistema está diseñado para que sea intuitivo — si en algún momento te trabás, tenés el botón de ayuda o nos escribís por WhatsApp.",
     cta: "Ir al Panel Principal",
@@ -150,8 +143,10 @@ export default function OnboardingPage() {
           key={step}
           className="animate-in fade-in slide-in-from-bottom-4 rounded-3xl bg-white/[0.04] p-8 ring-1 ring-white/10 backdrop-blur-xl duration-300"
         >
-          {/* Emoji */}
-          <div className="mb-5 text-center text-5xl">{pasoActual.emoji}</div>
+          {/* Número de paso */}
+          <div className={`mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br ${pasoActual.color} text-xl font-black text-white`}>
+            {step + 1}
+          </div>
 
           {/* Título */}
           <h2 className="mb-3 text-center text-xl font-black text-white">
@@ -166,7 +161,7 @@ export default function OnboardingPage() {
           {/* Tip */}
           {"tip" in pasoActual && pasoActual.tip && (
             <div className="mt-5 rounded-2xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
-              <p className="text-xs leading-relaxed text-slate-400">{pasoActual.tip}</p>
+              <p className="text-xs leading-relaxed text-slate-400"><span className="font-bold text-slate-300">Tip:</span> {pasoActual.tip}</p>
             </div>
           )}
 

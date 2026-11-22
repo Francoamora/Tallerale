@@ -1,5 +1,4 @@
-// src/lib/api.ts
-import type { Cliente, DashboardStats, Gasto, MovimientoCuenta, Presupuesto, PresupuestoDetalle, Trabajo, TrabajoDetalle, Turno, Vehiculo, VehiculoHistorial } from "@/lib/types";
+import type { Cliente, DashboardStats, Gasto, MovimientoCuenta, Presupuesto, PresupuestoDetalle, Trabajo, TrabajoDetalle, TrabajoItem, Turno, Vehiculo, VehiculoHistorial } from "@/lib/types";
 import { clearSession } from "@/lib/trial";
 
 const FALLBACK_API_ROOT = "http://127.0.0.1:8000/api";
@@ -24,7 +23,7 @@ export function buildPublicApiUrl(path: string) {
 }
 
 // ==========================================
-// CLIENTE HTTP (FETCH WRAPPER SENIOR)
+// CLIENTE HTTP
 // ==========================================
 
 interface FetchOptions extends RequestInit {
@@ -83,14 +82,18 @@ async function apiRequest<T>(path: string, options: FetchOptions = {}): Promise<
       } catch {
         // Fallback silencioso si no es JSON válido
       }
-      throw new Error(errorMessage);
+      const fallo = new Error(errorMessage);
+      // Un 4xx es el servidor diciendo "no" por una regla del negocio: la
+      // pantalla lo muestra al usuario, no hace falta ensuciar la consola.
+      if (response.status < 500) Object.assign(fallo, { esperado: true });
+      throw fallo;
     }
 
     if (response.status === 204) return null as T;
 
     return (await response.json()) as Promise<T>;
   } catch (error) {
-    console.error(`[API Error] ${path}:`, error);
+    if (!(error instanceof Error && "esperado" in error)) console.error(`[API Error] ${path}:`, error);
     throw error;
   }
 }
@@ -107,6 +110,10 @@ export type MovimientoCaja = {
   concepto: string;
   monto: number;
   metodo: string;
+  cliente_id?: number | null;
+  cliente_nombre?: string;
+  detalle?: string;
+  categoria?: string;
 };
 
 export type CajaResumen = {
@@ -114,6 +121,18 @@ export type CajaResumen = {
   egresos: number;
   resultado: number;
   cantidad_movimientos: number;
+  cantidad_ingresos?: number;
+  cantidad_egresos?: number;
+  por_medio?: { metodo: string; ingresos: number; egresos: number }[];
+};
+
+export type FiltrosCaja = {
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  metodo?: string;
+  q?: string;
+  cliente_id?: number;
+  tipo?: "INGRESO" | "EGRESO";
 };
 
 export type GastosResumen = {
@@ -138,6 +157,12 @@ export type TrabajoKanban = {
   items_completados: number;
   responsable_nombre: string;
   iniciado_en: string | null;
+  /** Días en la etapa actual (desde que empezó, terminó o se entregó). */
+  dias_en_etapa: number;
+  items: { id: number; descripcion: string; completado: boolean }[];
+  cliente_id: number;
+  cliente_telefono: string;
+  responsable_id: number | null;
 };
 
 export type TableroData = {
@@ -223,10 +248,11 @@ export function generarEnlaceRecuperacionCeo(id: number) {
   return apiRequest<CeoEnlaceRecuperacion>(`/ceo/talleres/${id}/enlace-recuperacion/`, { method: "POST" });
 }
 
-export type MiembroEquipo = { id: number; user_id: number; nombre: string; email: string; rol: string; activo: boolean };
+export type MiembroEquipo = { id: number; user_id: number; nombre: string; email: string; usuario: string; rol: string; activo: boolean; es_dueno: boolean };
 export function getEquipo() { return apiRequest<MiembroEquipo[]>("/equipo/"); }
-export function crearMiembro(payload: { nombre: string; email: string; password: string; rol: string }) { return apiRequest<MiembroEquipo>("/equipo/", { method: "POST", body: JSON.stringify(payload) }); }
-export function actualizarMiembro(id: number, payload: { rol?: string; activo?: boolean }) { return apiRequest<MiembroEquipo>(`/equipo/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
+export function crearMiembro(payload: { nombre: string; usuario?: string; email?: string; password: string; rol: string }) { return apiRequest<MiembroEquipo>("/equipo/", { method: "POST", body: JSON.stringify(payload) }); }
+export function sugerirUsuario(nombre: string) { return apiRequest<{ usuario: string }>("/equipo/sugerir-usuario", { params: { nombre } }); }
+export function actualizarMiembro(id: number, payload: { rol?: string; activo?: boolean; password?: string }) { return apiRequest<MiembroEquipo>(`/equipo/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
 export function crearInvitacion(payload: { email: string; rol: string }) { return apiRequest<{ message: string }>("/equipo/invitaciones/", { method: "POST", body: JSON.stringify(payload) }); }
 
 /**
@@ -252,6 +278,20 @@ export async function loginDjango(email: string, password: string): Promise<Auth
     throw new Error(msg);
   }
   return response.json() as Promise<AuthResponse>;
+}
+
+/**
+ * Extiende la vigencia del link público al compartirlo (el token no cambia).
+ * Se dispara junto con el envío, sin esperarlo: navigator.share exige correr
+ * directo desde el toque del usuario y Safari lo bloquea si antes se espera
+ * un pedido al servidor. Para cuando el cliente abre el link ya está renovado.
+ */
+export function renovarPortalVehiculo(id: number) {
+  return apiRequest<{ portal_expires_at: string }>(`/vehiculos/${id}/portal/renovar`, { method: "POST" });
+}
+
+export function renovarPortalPresupuesto(id: number) {
+  return apiRequest<{ portal_expires_at: string }>(`/presupuestos/${id}/portal/renovar`, { method: "POST" });
 }
 
 export function getSesionDjango() {
@@ -320,6 +360,8 @@ export async function logoutDjango(): Promise<void> {
 // PERFIL DEL TALLER
 // ==========================================
 
+export type CondicionIva = "" | "MONOTRIBUTO" | "RESPONSABLE_INSCRIPTO" | "EXENTO";
+
 export interface PerfilTallerData {
   nombre: string;
   taller_nombre: string;
@@ -327,6 +369,35 @@ export interface PerfilTallerData {
   taller_tel: string;
   taller_cuit: string;
   logo_url?: string | null;
+  razon_social?: string;
+  condicion_iva?: CondicionIva;
+  domicilio_fiscal?: string;
+  ingresos_brutos?: string;
+  inicio_actividades?: string | null;
+  taller_email?: string;
+  email_contador?: string;
+  telefono_contador?: string;
+  mostrar_iva?: boolean;
+}
+
+/**
+ * Baja la planilla (.xlsx) del período para el contador: ventas, cobros y
+ * compras. Se pide con fetch porque es un archivo, no JSON.
+ */
+export async function descargarPlanillaContador(fechaDesde: string, fechaHasta: string): Promise<Blob> {
+  const url = `${buildUrl("/finanzas/exportar-contador")}?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    let mensaje = "No pudimos armar la planilla.";
+    try {
+      const data = await response.json();
+      mensaje = data.detail || data.message || mensaje;
+    } catch {
+      // respuesta sin JSON
+    }
+    throw new Error(mensaje);
+  }
+  return response.blob();
 }
 
 export async function getPerfilTaller(): Promise<PerfilTallerData> {
@@ -433,6 +504,19 @@ export function actualizarItemTrabajo(trabajoId: number, itemId: number, complet
     body: JSON.stringify({ completado }),
   });
 }
+/** Suma a la orden algo que se hizo, sin pasar por la edición completa. */
+export function agregarItemTrabajo(
+  trabajoId: number,
+  payload: { tipo: TrabajoItem["tipo"]; descripcion: string; cantidad?: number; precio_unitario?: number; completado?: boolean },
+) {
+  return apiRequest<TrabajoItem>(`/trabajos/${trabajoId}/items`, { method: "POST", body: JSON.stringify(payload) });
+}
+export function precioItemTrabajo(trabajoId: number, itemId: number, payload: { precio_unitario?: number; cantidad?: number }) {
+  return apiRequest<TrabajoItem>(`/trabajos/${trabajoId}/items/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export function quitarItemTrabajo(trabajoId: number, itemId: number) {
+  return apiRequest<{ message: string }>(`/trabajos/${trabajoId}/items/${itemId}`, { method: "DELETE" });
+}
 export function editarTrabajo(id: number, payload: unknown) {
   return apiRequest<TrabajoDetalle>(`/trabajos/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 }
@@ -441,18 +525,10 @@ export function eliminarTrabajo(id: number) {
 }
 
 // ─── Tesorería (Caja Diaria) ───
-export function getMovimientosCaja(params?: {
-  fecha_desde?: string;
-  fecha_hasta?: string;
-  metodo?: string;
-}) {
+export function getMovimientosCaja(params?: FiltrosCaja) {
   return apiRequest<MovimientoCaja[]>("/finanzas/caja", { params });
 }
-export function getResumenCaja(params?: {
-  fecha_desde?: string;
-  fecha_hasta?: string;
-  metodo?: string;
-}) {
+export function getResumenCaja(params?: FiltrosCaja) {
   return apiRequest<CajaResumen>("/finanzas/caja/resumen", { params });
 }
 export function getGastos(params?: {
@@ -467,8 +543,14 @@ export function getGastos(params?: {
 export function getResumenGastos(params?: {
   fecha_desde?: string;
   fecha_hasta?: string;
+  tipo?: string;
+  metodo?: string;
+  buscar?: string;
 }) {
   return apiRequest<GastosResumen>("/finanzas/gastos/resumen", { params });
+}
+export function eliminarGasto(id: number) {
+  return apiRequest<{ message: string }>(`/finanzas/gastos/${id}`, { method: "DELETE" });
 }
 export function crearGasto(payload: {
   tipo: string;
@@ -479,6 +561,15 @@ export function crearGasto(payload: {
   fecha: string;
 }) {
   return apiRequest("/compras/", { method: "POST", body: JSON.stringify(payload) });
+}
+/** Varias líneas de una misma compra (una factura): se guardan todas o ninguna. */
+export function crearCompraLote(payload: {
+  metodo_pago: string;
+  fecha?: string;
+  comprobante?: string;
+  lineas: { tipo: string; descripcion: string; monto: number }[];
+}) {
+  return apiRequest<{ message: string; cantidad: number; total: number }>("/compras/lote", { method: "POST", body: JSON.stringify(payload) });
 }
 export type RegistrarPagoPayload = {
   cliente_id?: number;

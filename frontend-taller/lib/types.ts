@@ -23,15 +23,24 @@ export interface Vehiculo {
   kilometraje_actual: number;
   proximo_service_km: number | null;
   token?: string;
+  /** false si un administrador desactivó el link público. */
+  portal_activo?: boolean;
+  portal_expires_at?: string;
 }
 
 export interface VehiculoHistorialTrabajo {
   id: number;
   fecha_ingreso: string;
+  /** Cuándo se terminó o entregó; null si sigue en el taller. */
+  fecha_realizado: string | null;
   estado: string;
   resumen: string;
   kilometraje: number;
   total: number;
+  items: { descripcion: string; tipo: "MANO_OBRA" | "REPUESTO" | "INSUMO" | "OTRO"; cantidad: number; completado: boolean }[];
+  responsable_nombre: string;
+  recomendaciones_proximo_service: string;
+  proximo_control_km: number | null;
 }
 
 export interface VehiculoHistorialPresupuesto {
@@ -113,6 +122,9 @@ export interface Turno {
   cliente_nombre: string;
   vehiculo_desc: string;
   patente: string;
+  cliente_id?: number | null;
+  vehiculo_id?: number | null;
+  cliente_telefono?: string;
 }
 
 // ─── Presupuestos ──────────────────────────────────────────
@@ -136,12 +148,17 @@ export interface Presupuesto {
   cliente_nombre: string;
   vehiculo: string;
   patente: string;
+  token?: string;
+  cliente_telefono?: string;
+  portal_activo?: boolean;
 }
 
 // Matches PresupuestoDetalleOut (detail endpoint)
 export interface PresupuestoDetalle {
   id: number;
   token?: string;
+  portal_activo?: boolean;
+  portal_expires_at?: string;
   fecha_creacion: string;
   estado: string;
   resumen_corto: string;

@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import { SITE_URL } from "@/lib/seo";
+import { GeistMono } from "geist/font/mono";
+// Archivo variable (peso y ancho) empaquetada: una sola familia para toda
+// la app. Angosta y pesada en títulos y números, normal en el resto.
+import "@fontsource-variable/archivo/wdth.css";
 import "./globals.css";
 
 const themeBootScript = `
@@ -35,7 +39,7 @@ export default function RootLayout({
 }>) {
   return (
     // El script aplica la preferencia antes del primer pintado del navegador.
-    <html lang="es" className="antialiased" suppressHydrationWarning>
+    <html lang="es" className={`${GeistMono.variable} antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>

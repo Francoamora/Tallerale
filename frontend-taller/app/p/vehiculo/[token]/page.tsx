@@ -9,6 +9,7 @@ import type { Metadata } from "next";
 import { getPublicVehiculo, PublicApiNotFoundError } from "@/lib/api-public";
 import type { PublicVehiculo } from "@/lib/api-public";
 import { VehiculoView } from "./VehiculoView";
+import { MarcoPortal } from "@/components/marco-portal";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -60,5 +61,5 @@ export default async function VehiculoPortalPage({ params }: PageProps) {
   const vehiculo = await fetchVehiculo(token);
   if (!vehiculo) notFound();
 
-  return <VehiculoView vehiculo={vehiculo} />;
+  return <MarcoPortal><VehiculoView vehiculo={vehiculo} /></MarcoPortal>;
 }

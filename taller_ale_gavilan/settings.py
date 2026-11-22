@@ -141,6 +141,31 @@ else:
         }
     }
 
+# =========================
+# CACHE
+# =========================
+# Acá vive el límite de intentos de login. LocMemCache guarda el contador en la
+# memoria de cada proceso: con un único worker alcanza, pero al escalar a varios
+# cada uno llevaría su propia cuenta y el límite real se multiplicaría por la
+# cantidad de workers. Con REDIS_URL el estado es compartido y además sobrevive
+# a los redeploys. Antes de subir WEB_CONCURRENCY hay que configurar Redis.
+REDIS_URL = env("REDIS_URL", "").strip()
+
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "tallerista-default",
+        }
+    }
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -157,7 +182,8 @@ USE_TZ = True
 # STATIC / MEDIA
 # =========================
 STATIC_URL = "/static/"
-STATICFILES_DIRS = [BASE_DIR / "static"]
+# El backend ya no sirve interfaz propia: los únicos estáticos que quedan son
+# los del panel de administración, que Django toma de su propia app.
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {
@@ -174,11 +200,17 @@ MEDIA_ROOT = Path(env("DJANGO_MEDIA_ROOT", str(BASE_DIR / "media")))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # =========================
-# AUTH
+# FRONTEND
 # =========================
-LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "taller:dashboard"
-LOGOUT_REDIRECT_URL = "login"
+# La interfaz vive en Next.js. Se usa para redirigir a quien entre por la URL
+# del backend con un enlace viejo guardado; si no se configura, la raíz del
+# backend simplemente no existe.
+FRONTEND_URL = env("DJANGO_FRONTEND_URL", "").strip()
+
+# El login por sesión se dio de baja junto con la app monolítica: la única
+# autenticación es la de la API por token (LOGIN_URL/LOGIN_REDIRECT_URL
+# apuntaban a vistas que ya no existen). El panel de administración usa su
+# propio formulario interno y no depende de estas constantes.
 
 # =========================
 # CORS & API CONFIGURATION

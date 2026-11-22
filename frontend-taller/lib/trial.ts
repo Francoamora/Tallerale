@@ -5,6 +5,8 @@
  * La credencial real vive únicamente en una cookie HttpOnly del servidor.
  */
 
+import type { SesionResponse } from "@/lib/api";
+
 export const TRIAL_DAYS = 7;
 export const WA_VENTAS = "5493482254317"; // Activación de cuenta
 export const WA_VENTAS_MSG = "Hola! Terminó mi prueba de Tallerista y quiero seguir usándolo. ¿Cómo activo mi cuenta?";
@@ -51,6 +53,39 @@ export function getSession(): SessionData | null {
 }
 
 // ─── Marcar onboarding completo ───────────────────────────────────────────────
+/** Mismo usuario que la copia local: decide si se conservan sus preferencias. */
+export function esMismoUsuario(prev: SessionData | null, auth: Pick<SesionResponse, "user_id" | "email">): boolean {
+  if (!prev) return false;
+  return prev.user_id === auth.user_id || prev.email.toLowerCase() === auth.email.toLowerCase();
+}
+
+/**
+ * Arma la copia local de la sesión con lo que devuelve Django.
+ *
+ * La sesión real es la cookie HttpOnly; esto es sólo un espejo para la
+ * interfaz. Se usa al iniciar sesión y para reconstruir el espejo cuando el
+ * navegador lo perdió (Safari borra el localStorage tras 7 días sin uso y
+ * conserva la cookie). `prev` sólo debe pasarse si es del mismo usuario.
+ */
+export function sesionDesdeDjango(auth: SesionResponse, prev: SessionData | null): SessionData {
+  return {
+    email:             auth.email,
+    owner_nombre:      auth.nombre,
+    taller_nombre:     auth.taller_nombre,
+    taller_ciudad:     auth.taller_ciudad   ?? prev?.taller_ciudad   ?? "",
+    taller_tel:        auth.taller_tel      ?? prev?.taller_tel      ?? "",
+    taller_cuit:       auth.taller_cuit     ?? prev?.taller_cuit     ?? "",
+    taller_logo_url:   auth.taller_logo_url ?? prev?.taller_logo_url ?? null,
+    trial_start:       auth.trial_start     ?? prev?.trial_start     ?? new Date().toISOString(),
+    plan_activo_hasta: auth.plan_activo_hasta ?? prev?.plan_activo_hasta ?? null,
+    onboarding_done:   prev?.onboarding_done ?? false,
+    taller_id:         auth.taller_id,
+    user_id:           auth.user_id,
+    rol:               auth.rol ?? "ADMIN",
+    es_superusuario:   auth.es_superusuario ?? false,
+  };
+}
+
 export function markOnboardingDone(): void {
   const session = getSession();
   if (!session) return;
