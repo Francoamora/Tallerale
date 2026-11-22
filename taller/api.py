@@ -2672,10 +2672,6 @@ def _slug(texto: str) -> str:
 def _usuario_libre(usuario: str) -> bool:
     return not User.objects.filter(Q(username__iexact=usuario) | Q(email__iexact=usuario)).exists()
 
-class InvitacionIn(Schema):
-    email: str
-    rol: str
-
 class AceptarInvitacionIn(Schema):
     nombre: str
     password: str = Field(..., min_length=8)
@@ -2747,15 +2743,6 @@ def sugerir_usuario(request, nombre: str):
         if _usuario_libre(candidato):
             return {"usuario": candidato}
     return {"usuario": f"{base}.{secrets.token_hex(3)}"}
-
-@api.post("/equipo/invitaciones/", response=MessageOut, tags=["Equipo"])
-def crear_invitacion(request, payload: InvitacionIn):
-    require_capability(request, "equipo")
-    if payload.rol not in dict(MembresiaTaller.ROL_CHOICES): raise HttpError(400, "Rol inválido.")
-    taller = getattr(getattr(request, "membership", None), "taller", None) or get_object_or_404(Taller, owner=request.user)
-    invitacion = InvitacionTaller.objects.create(taller=taller, email=payload.email.strip().lower(), rol=payload.rol, creada_por=getattr(request, "actor", request.user))
-    _auditar_equipo(request, taller, "EQUIPO_INVITACION_CREADA", f"Se invitó a {invitacion.email} como {invitacion.rol}.")
-    return {"message": f"Invitación creada: /invitacion/{invitacion.token}"}
 
 @api.post("/public/invitaciones/{token}/aceptar", auth=None, response=MessageOut, tags=["Equipo"])
 def aceptar_invitacion(request, token: str, payload: AceptarInvitacionIn):

@@ -38,6 +38,15 @@ const nextConfig: NextConfig = {
   // (APPEND_SLASH) — un POST sin barra termina en 500 en vez de procesarse.
   skipTrailingSlashRedirect: true,
 
+  // Rutas viejas que pueden seguir en favoritos o links guardados.
+  async redirects() {
+    return [
+      { source: "/vehiculos", destination: "/clientes", permanent: true },
+      { source: "/compras/nueva", destination: "/gastos?nuevo=1", permanent: true },
+      { source: "/pagos", destination: "/caja", permanent: true },
+    ];
+  },
+
   async headers() {
     return [
       {

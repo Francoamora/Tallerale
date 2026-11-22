@@ -33,7 +33,7 @@ const PASOS = [
     titulo: () => "Después, el vehículo",
     desc: "Cada cliente puede tener uno o más autos. Registrá la patente, marca, modelo, año y el kilometraje actual para controlar el próximo service.",
     cta: "Ir a Vehículos →",
-    href: "/vehiculos",
+    href: "/clientes",
     color: "from-sky-500 to-sky-600",
     tip: "el sistema avisa cuando un auto se acerca al km de service programado.",
   },

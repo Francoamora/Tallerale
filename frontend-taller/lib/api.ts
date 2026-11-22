@@ -253,7 +253,6 @@ export function getEquipo() { return apiRequest<MiembroEquipo[]>("/equipo/"); }
 export function crearMiembro(payload: { nombre: string; usuario?: string; email?: string; password: string; rol: string }) { return apiRequest<MiembroEquipo>("/equipo/", { method: "POST", body: JSON.stringify(payload) }); }
 export function sugerirUsuario(nombre: string) { return apiRequest<{ usuario: string }>("/equipo/sugerir-usuario", { params: { nombre } }); }
 export function actualizarMiembro(id: number, payload: { rol?: string; activo?: boolean; password?: string }) { return apiRequest<MiembroEquipo>(`/equipo/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
-export function crearInvitacion(payload: { email: string; rol: string }) { return apiRequest<{ message: string }>("/equipo/invitaciones/", { method: "POST", body: JSON.stringify(payload) }); }
 
 /**
  * Autentica contra Django y devuelve el token de sesión.
@@ -440,7 +439,8 @@ export function getClientes(query?: string) {
 export function getClienteById(id: number) {
   return apiRequest<Cliente>(`/clientes/${id}`);
 }
-export function crearCliente(payload: unknown) {
+/** Cliente sin vehículo todavía (se le agrega después desde su ficha). */
+export function crearCliente(payload: { nombre: string; apellido?: string; telefono?: string; email?: string; dni?: string }) {
   return apiRequest<Cliente>("/clientes/", { method: "POST", body: JSON.stringify(payload) });
 }
 export function crearClienteConVehiculo(payload: unknown) {
@@ -514,9 +514,6 @@ export function agregarItemTrabajo(
 export function precioItemTrabajo(trabajoId: number, itemId: number, payload: { precio_unitario?: number; cantidad?: number }) {
   return apiRequest<TrabajoItem>(`/trabajos/${trabajoId}/items/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
-export function quitarItemTrabajo(trabajoId: number, itemId: number) {
-  return apiRequest<{ message: string }>(`/trabajos/${trabajoId}/items/${itemId}`, { method: "DELETE" });
-}
 export function editarTrabajo(id: number, payload: unknown) {
   return apiRequest<TrabajoDetalle>(`/trabajos/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 }
@@ -551,16 +548,6 @@ export function getResumenGastos(params?: {
 }
 export function eliminarGasto(id: number) {
   return apiRequest<{ message: string }>(`/finanzas/gastos/${id}`, { method: "DELETE" });
-}
-export function crearGasto(payload: {
-  tipo: string;
-  descripcion: string;
-  monto: number;
-  comprobante: string;
-  metodo_pago: string;
-  fecha: string;
-}) {
-  return apiRequest("/compras/", { method: "POST", body: JSON.stringify(payload) });
 }
 /** Varias líneas de una misma compra (una factura): se guardan todas o ninguna. */
 export function crearCompraLote(payload: {

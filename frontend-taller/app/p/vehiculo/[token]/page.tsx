@@ -8,8 +8,7 @@ import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { getPublicVehiculo, PublicApiNotFoundError } from "@/lib/api-public";
 import type { PublicVehiculo } from "@/lib/api-public";
-import { VehiculoView } from "./VehiculoView";
-import { MarcoPortal } from "@/components/marco-portal";
+import { VehiculoFicha } from "./VehiculoFicha";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -61,5 +60,5 @@ export default async function VehiculoPortalPage({ params }: PageProps) {
   const vehiculo = await fetchVehiculo(token);
   if (!vehiculo) notFound();
 
-  return <MarcoPortal><VehiculoView vehiculo={vehiculo} /></MarcoPortal>;
+  return <VehiculoFicha vehiculo={vehiculo} />;
 }

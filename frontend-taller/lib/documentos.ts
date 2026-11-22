@@ -18,9 +18,6 @@ export const ESTADO_TRABAJO_LABEL: Record<EstadoTrabajo, string> = {
   ANULADO: "Anulado",
 };
 
-export function etiquetaEstadoTrabajo(estado: string): string {
-  return ESTADO_TRABAJO_LABEL[estado as EstadoTrabajo] ?? estado;
-}
 
 export function numeroOrden(id: number | string): string {
   return `OT-${String(id).padStart(5, "0")}`;

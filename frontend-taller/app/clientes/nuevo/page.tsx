@@ -1,178 +1,181 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { crearClienteConVehiculo } from "@/lib/api";
+import { Campo, campoClase, sinFlechas, Tarjeta } from "@/components/formulario";
+import { crearCliente, crearClienteConVehiculo } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { normalizeWhatsAppPhone } from "@/lib/whatsapp";
-
-const inputBase = "h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10 dark:border-slate-700 dark:bg-slate-950/50 dark:text-white dark:focus:border-brand-500";
 
 export default function NuevoClientePage() {
   const router = useRouter();
   const [cliente, setCliente] = useState({ nombre: "", apellido: "", telefono: "", dni: "", email: "" });
-  const [vehiculo, setVehiculo] = useState({ patente: "", marca: "", modelo: "", anio: "", color: "", kilometraje: "0", proximoService: "" });
-  const [isSaving, setIsSaving] = useState(false);
+  const [vehiculo, setVehiculo] = useState({ patente: "", marca: "", modelo: "", anio: "", color: "", kilometraje: "", proximoService: "" });
+  const [sinAuto, setSinAuto] = useState(false);
+  const [guardando, setGuardando] = useState<null | "guardar" | "orden">(null);
   const [error, setError] = useState("");
 
-  function updateCliente(field: keyof typeof cliente, value: string) {
-    setCliente((current) => ({ ...current, [field]: value }));
-  }
+  const cambiarCliente = (campo: keyof typeof cliente) => (e: React.ChangeEvent<HTMLInputElement>) => setCliente((c) => ({ ...c, [campo]: e.target.value }));
+  const cambiarVehiculo = (campo: keyof typeof vehiculo, valor: string) => setVehiculo((v) => ({ ...v, [campo]: valor }));
 
-  function updateVehiculo(field: keyof typeof vehiculo, value: string) {
-    setVehiculo((current) => ({ ...current, [field]: value }));
-  }
+  const digitos = cliente.telefono.replace(/\D/g, "");
+  const telefonoOk = Boolean(cliente.telefono.trim() && normalizeWhatsAppPhone(cliente.telefono));
+  const telefonoMal = digitos.length >= 8 && !telefonoOk;
+  const km = Number(vehiculo.kilometraje) || 0;
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!cliente.nombre.trim()) return setError("Ingresá el nombre del cliente.");
-    if (cliente.telefono.trim() && !normalizeWhatsAppPhone(cliente.telefono)) {
-      return setError("Revisá el celular: ingresá código de área + número, sin el 15. Ejemplo: 342 5551234.");
-    }
-    if (!vehiculo.patente.trim()) return setError("Ingresá la patente del vehículo.");
-    if (!vehiculo.marca.trim()) return setError("Ingresá la marca del vehículo.");
-
-    setIsSaving(true);
+  async function guardar(destino: "guardar" | "orden") {
     setError("");
+    if (!cliente.nombre.trim()) return setError("Escribí el nombre del cliente.");
+    if (cliente.telefono.trim() && !telefonoOk) return setError("Revisá el celular: código de área + número, sin el 15. Ej: 342 555 1234.");
+    if (!sinAuto && !vehiculo.patente.trim()) return setError("Falta la patente del auto.");
+    if (!sinAuto && !vehiculo.marca.trim()) return setError("Falta la marca del auto.");
+
+    setGuardando(destino);
+    const datosCliente = {
+      nombre: cliente.nombre.trim(),
+      apellido: cliente.apellido.trim(),
+      telefono: cliente.telefono.trim(),
+      email: cliente.email.trim(),
+      dni: cliente.dni.trim(),
+    };
     try {
+      if (sinAuto) {
+        const creado = await crearCliente(datosCliente);
+        router.push(`/clientes?id=${creado.id}`);
+        return;
+      }
       const creado = await crearClienteConVehiculo({
-        cliente: {
-          nombre: cliente.nombre.trim(),
-          apellido: cliente.apellido.trim(),
-          telefono: cliente.telefono.trim(),
-          email: cliente.email.trim(),
-          dni: cliente.dni.trim(),
-        },
+        cliente: datosCliente,
         vehiculo: {
           patente: vehiculo.patente.trim().toUpperCase(),
           marca: vehiculo.marca.trim(),
           modelo: vehiculo.modelo.trim() || "S/D",
           anio: vehiculo.anio ? Number(vehiculo.anio) : null,
           color: vehiculo.color.trim(),
-          kilometraje_actual: Number(vehiculo.kilometraje) || 0,
+          kilometraje_actual: km,
           proximo_service_km: vehiculo.proximoService ? Number(vehiculo.proximoService) : null,
         },
       });
-      router.push(`/clientes/${creado.cliente.id}`);
+      router.push(destino === "orden" ? `/trabajos/nuevo?vehiculo=${creado.vehiculo.id}` : `/clientes?id=${creado.cliente.id}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "No pudimos guardar el cliente y su vehículo.");
-      setIsSaving(false);
+      setError(caught instanceof Error ? caught.message : "No pudimos guardar el cliente.");
+      setGuardando(null);
     }
   }
 
-  return (
-    <AppShell
-      currentPath="/clientes"
-      badge="Alta completa"
-      title="Nuevo cliente y vehículo"
-      description="Un solo formulario, un solo guardado y todo queda vinculado desde el inicio."
-    >
-      <form onSubmit={handleSubmit} className="mx-auto max-w-6xl">
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-            {error}
-          </div>
-        )}
+  const nombreCompleto = [cliente.nombre, cliente.apellido].map((x) => x.trim()).filter(Boolean).join(" ");
 
-        <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/70 lg:grid-cols-2">
-          <section className="border-b border-slate-200 p-5 dark:border-slate-800 sm:p-6 lg:border-b-0 lg:border-r">
-            <SectionHeading number="1" title="Cliente" detail="Quién es y cómo contactarlo." />
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <Field label="Nombre" required>
-                <input required autoFocus value={cliente.nombre} onChange={(event) => updateCliente("nombre", event.target.value)} placeholder="Ej: Juan" className={inputBase} />
-              </Field>
-              <Field label="Apellido">
-                <input value={cliente.apellido} onChange={(event) => updateCliente("apellido", event.target.value)} placeholder="Ej: Pérez" className={inputBase} />
-              </Field>
-              <Field label="Teléfono">
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={cliente.telefono}
-                  onChange={(event) => updateCliente("telefono", event.target.value)}
-                  placeholder="Ej: 342 5551234"
-                  className={inputBase}
-                />
-              </Field>
-              <Field label="DNI / CUIT">
-                <input value={cliente.dni} onChange={(event) => updateCliente("dni", event.target.value)} placeholder="Ej: 30-12345678-9" className={inputBase} />
-              </Field>
-              <Field label="Email" wide>
-                <input type="email" value={cliente.email} onChange={(event) => updateCliente("email", event.target.value)} placeholder="Ej: juan@ejemplo.com" className={inputBase} />
-              </Field>
-              <div className="sm:col-span-2 flex items-start gap-2.5 rounded-xl bg-emerald-50 px-3.5 py-3 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
-                <svg className="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                </svg>
-                <p className="text-xs leading-5">
-                  <strong>Importante para WhatsApp:</strong> cargá el celular real con código de área y sin el 15. Los presupuestos y comprobantes se enviarán directamente a ese chat.
-                </p>
+  return (
+    <AppShell currentPath="/clientes" compact badge="Clientes" title="Nuevo cliente" description="Sus datos y su auto en un solo paso. Después le podés sumar más vehículos.">
+      <form onSubmit={(e) => { e.preventDefault(); void guardar("guardar"); }} className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-4">
+          {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">{error}</div>}
+
+          <Tarjeta titulo="Cliente" descripcion="Con el celular le llegan presupuestos, avisos y el link de su auto por WhatsApp.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Campo etiqueta="Nombre" obligatorio>
+                <input autoFocus value={cliente.nombre} onChange={cambiarCliente("nombre")} placeholder="Ej: Juan" autoComplete="off" className={campoClase} />
+              </Campo>
+              <Campo etiqueta="Apellido">
+                <input value={cliente.apellido} onChange={cambiarCliente("apellido")} placeholder="Ej: Pérez" autoComplete="off" className={campoClase} />
+              </Campo>
+              <Campo
+                etiqueta="Celular (WhatsApp)"
+                error={telefonoMal ? "Revisalo: código de área + número, sin el 15." : ""}
+                ok={telefonoOk ? "✓ Le van a llegar los WhatsApp" : ""}
+                ayuda="Código de área + número, sin el 15."
+              >
+                <input type="tel" inputMode="tel" value={cliente.telefono} onChange={cambiarCliente("telefono")} placeholder="Ej: 342 555 1234" className={cn(campoClase, telefonoMal && "border-red-400 focus:border-red-500")} />
+              </Campo>
+              <Campo etiqueta="DNI / CUIT" ayuda="Opcional. Lo usa el contador para facturar.">
+                <input value={cliente.dni} onChange={cambiarCliente("dni")} placeholder="Ej: 30123456" className={campoClase} />
+              </Campo>
+              <Campo etiqueta="Email" ayuda="Opcional." className="sm:col-span-2">
+                <input type="email" value={cliente.email} onChange={cambiarCliente("email")} placeholder="Ej: juan@gmail.com" className={campoClase} />
+              </Campo>
+            </div>
+          </Tarjeta>
+
+          <Tarjeta
+            titulo="Su auto"
+            descripcion={sinAuto ? "Se lo agregás después desde su ficha." : "El que trae ahora. Si tiene más, se suman desde su ficha."}
+            extra={
+              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <input type="checkbox" checked={sinAuto} onChange={(e) => setSinAuto(e.target.checked)} className="h-4 w-4 accent-brand-600" />
+                Todavía no
+              </label>
+            }
+          >
+            {!sinAuto && (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <Campo etiqueta="Patente" obligatorio>
+                  <input value={vehiculo.patente} onChange={(e) => cambiarVehiculo("patente", e.target.value.toUpperCase().replace(/\s/g, ""))} placeholder="Ej: AB123CD" maxLength={10} className={cn(campoClase, "font-semibold uppercase tracking-wider placeholder:normal-case placeholder:font-normal placeholder:tracking-normal")} />
+                </Campo>
+                <Campo etiqueta="Marca" obligatorio>
+                  <input value={vehiculo.marca} onChange={(e) => cambiarVehiculo("marca", e.target.value)} placeholder="Ej: Toyota" className={campoClase} />
+                </Campo>
+                <Campo etiqueta="Modelo">
+                  <input value={vehiculo.modelo} onChange={(e) => cambiarVehiculo("modelo", e.target.value)} placeholder="Ej: Hilux" className={campoClase} />
+                </Campo>
+                <Campo etiqueta="Año">
+                  <input type="number" inputMode="numeric" value={vehiculo.anio} onChange={(e) => cambiarVehiculo("anio", e.target.value)} placeholder="Ej: 2018" min={1950} max={2035} className={cn(campoClase, sinFlechas)} />
+                </Campo>
+                <Campo etiqueta="Color">
+                  <input value={vehiculo.color} onChange={(e) => cambiarVehiculo("color", e.target.value)} placeholder="Ej: Blanco" className={campoClase} />
+                </Campo>
+                <Campo etiqueta="Kilometraje">
+                  <input type="number" inputMode="numeric" value={vehiculo.kilometraje} onChange={(e) => cambiarVehiculo("kilometraje", e.target.value)} placeholder="Ej: 85000" min={0} className={cn(campoClase, sinFlechas)} />
+                </Campo>
+                <div className="sm:col-span-2 xl:col-span-3">
+                  <Campo etiqueta="Próximo service (km)" ayuda="Opcional. Con esto el cliente ve cuánto le falta en su link.">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input type="number" inputMode="numeric" value={vehiculo.proximoService} onChange={(e) => cambiarVehiculo("proximoService", e.target.value)} placeholder="Ej: 95000" min={0} className={cn(campoClase, sinFlechas, "max-w-[200px]")} />
+                      {km > 0 && [5_000, 10_000, 15_000].map((mas) => (
+                        <button key={mas} type="button" onClick={() => cambiarVehiculo("proximoService", String(km + mas))} className="h-9 rounded-full px-3 text-sm font-semibold text-slate-700 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700">
+                          +{(mas / 1000).toLocaleString("es-AR")} mil
+                        </button>
+                      ))}
+                    </div>
+                  </Campo>
+                </div>
+              </div>
+            )}
+          </Tarjeta>
+        </div>
+
+        <aside className="space-y-4 lg:sticky lg:top-24">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Así queda</p>
+            <div className="mt-3 flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700 dark:bg-brand-950/50 dark:text-brand-300">{(nombreCompleto || "?").charAt(0).toUpperCase()}</span>
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-900 dark:text-white">{nombreCompleto || "Nombre del cliente"}</p>
+                <p className="truncate text-sm text-slate-500 dark:text-slate-400">{cliente.telefono || "Sin celular"}</p>
               </div>
             </div>
-          </section>
-
-          <section className="p-5 sm:p-6">
-            <SectionHeading number="2" title="Primer vehículo" detail="Datos básicos y próximo mantenimiento." />
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <Field label="Patente" required>
-                <input required value={vehiculo.patente} onChange={(event) => updateVehiculo("patente", event.target.value.toUpperCase())} placeholder="Ej: AB123CD" maxLength={10} className={cn(inputBase, "font-mono font-black uppercase tracking-widest")} />
-              </Field>
-              <Field label="Marca" required>
-                <input required value={vehiculo.marca} onChange={(event) => updateVehiculo("marca", event.target.value)} placeholder="Ej: Toyota" className={inputBase} />
-              </Field>
-              <Field label="Modelo">
-                <input value={vehiculo.modelo} onChange={(event) => updateVehiculo("modelo", event.target.value)} placeholder="Ej: Corolla" className={inputBase} />
-              </Field>
-              <Field label="Año">
-                <input type="number" value={vehiculo.anio} onChange={(event) => updateVehiculo("anio", event.target.value)} placeholder="Ej: 2018" min={1950} max={2035} className={inputBase} />
-              </Field>
-              <Field label="Color">
-                <input value={vehiculo.color} onChange={(event) => updateVehiculo("color", event.target.value)} placeholder="Ej: Blanco" className={inputBase} />
-              </Field>
-              <Field label="Kilometraje actual">
-                <input type="number" value={vehiculo.kilometraje} onChange={(event) => updateVehiculo("kilometraje", event.target.value)} min={0} className={inputBase} />
-              </Field>
-              <Field label="Próximo service (km)" wide>
-                <input type="number" value={vehiculo.proximoService} onChange={(event) => updateVehiculo("proximoService", event.target.value)} placeholder="Se puede definir más adelante" min={0} className={inputBase} />
-              </Field>
+            {!sinAuto && (
+              <div className="mt-3 rounded-xl bg-slate-50 px-3.5 py-2.5 dark:bg-slate-900/50">
+                <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{[vehiculo.marca, vehiculo.modelo].filter(Boolean).join(" ") || "Su auto"}{vehiculo.anio ? ` ${vehiculo.anio}` : ""}</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">{vehiculo.patente || "Patente"}{km ? ` · ${km.toLocaleString("es-AR")} km` : ""}</p>
+              </div>
+            )}
+            <div className="mt-5 grid gap-2">
+              {!sinAuto && (
+                <button type="button" onClick={() => void guardar("orden")} disabled={guardando !== null} className="inline-flex h-11 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60">
+                  {guardando === "orden" ? "Guardando…" : "Guardar y abrir orden →"}
+                </button>
+              )}
+              <button type="submit" disabled={guardando !== null} className={cn("inline-flex h-11 items-center justify-center rounded-xl text-sm font-bold transition disabled:opacity-60", sinAuto ? "bg-brand-600 text-white shadow-sm hover:bg-brand-700" : "text-slate-800 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 dark:text-slate-100 dark:ring-slate-700 dark:hover:bg-slate-700")}>
+                {guardando === "guardar" ? "Guardando…" : "Guardar cliente"}
+              </button>
+              <Link href="/clientes" className="inline-flex h-10 items-center justify-center rounded-xl text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">Cancelar</Link>
             </div>
+            {!sinAuto && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">&quot;Abrir orden&quot; es para cuando el auto ya está en el taller.</p>}
           </section>
-        </div>
-
-        <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-slate-500">Ambos registros se guardan juntos. Si algo falla, no queda información incompleta.</p>
-          <div className="flex gap-2">
-            <Link href="/clientes" className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">Cancelar</Link>
-            <button type="submit" disabled={isSaving} className="inline-flex min-w-52 justify-center rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50 dark:bg-brand-600 dark:hover:bg-brand-500">
-              {isSaving ? "Guardando…" : "Crear cliente y vehículo →"}
-            </button>
-          </div>
-        </div>
+        </aside>
       </form>
     </AppShell>
-  );
-}
-
-function SectionHeading({ number, title, detail }: { number: string; title: string; detail: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-sm font-black text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">{number}</span>
-      <div>
-        <h2 className="text-lg font-black text-slate-900 dark:text-white">{title}</h2>
-        <p className="text-xs text-slate-500">{detail}</p>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, required = false, wide = false, children }: { label: string; required?: boolean; wide?: boolean; children: React.ReactNode }) {
-  return (
-    <label className={cn("space-y-1.5", wide && "sm:col-span-2")}>
-      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{label}{required && <span className="text-brand-600"> *</span>}</span>
-      {children}
-    </label>
   );
 }

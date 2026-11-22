@@ -1,184 +1,145 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { getClientes, crearVehiculo } from "@/lib/api";
+import { BuscadorCliente } from "@/components/buscador-cliente";
+import { Campo, campoClase, sinFlechas, Tarjeta } from "@/components/formulario";
+import { crearVehiculo, getClientes } from "@/lib/api";
 import type { Cliente } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const inputBase = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 transition-all focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-500/10 dark:border-slate-700 dark:bg-slate-900/50 dark:text-white dark:focus:border-brand-500 dark:focus:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed";
-
 function FormularioVehiculo() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const clientePreId = searchParams.get("cliente");
+  const clientePreId = useSearchParams().get("cliente");
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [clienteId, setClienteId] = useState(clientePreId || "");
-  const [clienteNombre, setClienteNombre] = useState("");
-  const [patente, setPatente] = useState("");
-  const [marca, setMarca] = useState("");
-  const [modelo, setModelo] = useState("");
-  const [anio, setAnio] = useState("");
-  const [color, setColor] = useState("");
-  const [kilometraje, setKilometraje] = useState("0");
-  const [proximoServiceKm, setProximoServiceKm] = useState("");
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [clienteId, setClienteId] = useState(clientePreId ?? "");
+  const [v, setV] = useState({ patente: "", marca: "", modelo: "", anio: "", color: "", kilometraje: "", proximoService: "" });
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState<null | "guardar" | "orden">(null);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    async function init() {
-      try {
-        setIsLoading(true);
-        const clientesData = await getClientes();
-        setClientes(clientesData);
+    getClientes()
+      .then(setClientes)
+      .catch(() => setError("No pudimos cargar los clientes. Recargá la página."))
+      .finally(() => setCargando(false));
+  }, []);
 
-        if (clientePreId) {
-          const c = clientesData.find(c => c.id === Number(clientePreId));
-          if (c) setClienteNombre(c.nombre_completo);
-        }
-      } catch {
-        setError("Error cargando datos. Recargá la página.");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    init();
-  }, [clientePreId]);
+  const cambiar = (campo: keyof typeof v, valor: string) => setV((x) => ({ ...x, [campo]: valor }));
+  const km = Number(v.kilometraje) || 0;
+  const titular = clientes.find((c) => String(c.id) === clienteId);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!clienteId) return setError("Seleccioná un cliente titular.");
-    if (!patente.trim()) return setError("La patente es obligatoria.");
-    if (!marca.trim()) return setError("La marca es obligatoria.");
-
-    setIsSaving(true);
+  async function guardar(destino: "guardar" | "orden") {
     setError("");
-
+    if (!clienteId) return setError("Elegí de quién es el auto.");
+    if (!v.patente.trim()) return setError("Falta la patente.");
+    if (!v.marca.trim()) return setError("Falta la marca.");
+    setGuardando(destino);
     try {
-      await crearVehiculo({
+      const creado = await crearVehiculo({
         cliente_id: Number(clienteId),
-        patente: patente.trim().toUpperCase(),
-        marca: marca.trim(),
-        modelo: modelo.trim() || "S/D",
-        anio: anio ? Number(anio) : null,
-        color: color.trim(),
-        kilometraje_actual: Number(kilometraje) || 0,
-        proximo_service_km: proximoServiceKm ? Number(proximoServiceKm) : null,
+        patente: v.patente.trim().toUpperCase(),
+        marca: v.marca.trim(),
+        modelo: v.modelo.trim() || "S/D",
+        anio: v.anio ? Number(v.anio) : null,
+        color: v.color.trim(),
+        kilometraje_actual: km,
+        proximo_service_km: v.proximoService ? Number(v.proximoService) : null,
       });
-
-      setSuccess("¡Vehículo registrado correctamente!");
-      setTimeout(() => {
-        router.push(clientePreId ? `/clientes/${clientePreId}` : "/clientes");
-      }, 1000);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Error al registrar el vehículo.");
-      setIsSaving(false);
+      router.push(destino === "orden" ? `/trabajos/nuevo?vehiculo=${creado.id}` : `/clientes?id=${clienteId}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "No pudimos guardar el vehículo.");
+      setGuardando(null);
     }
   }
 
-  if (isLoading) return <div className="h-64 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />;
+  if (cargando) {
+    return (
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="h-96 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />
+        <div className="h-56 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />
+      </div>
+    );
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-6xl">
-      {error && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
-          {success}
-        </div>
-      )}
+    <form onSubmit={(e) => { e.preventDefault(); void guardar("guardar"); }} className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="min-w-0 space-y-4">
+        {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">{error}</div>}
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand-600 dark:text-brand-400">Titular</p>
-            <h2 className="mt-1 text-lg font-black text-slate-900 dark:text-white">{clienteNombre || "Seleccioná un cliente"}</h2>
-          </div>
-          {clientePreId && clienteNombre ? (
-            <Link href="/vehiculos/nuevo" className="text-xs font-bold text-slate-500 hover:text-brand-600">Cambiar titular</Link>
-          ) : (
-            <select required value={clienteId} onChange={(e) => setClienteId(e.target.value)} className={cn(inputBase, "sm:max-w-md")}>
-              <option value="">Seleccionar cliente del directorio…</option>
-              {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_completo}</option>)}
-            </select>
-          )}
-        </div>
+        <Tarjeta titulo="¿De quién es?" descripcion="Buscá el cliente. Si no está, cargalo primero como cliente nuevo.">
+          <BuscadorCliente
+            clientes={clientes}
+            clienteId={clienteId}
+            onElegir={(c) => setClienteId(c ? String(c.id) : "")}
+            autoFocus={!clientePreId}
+            onNoEncontrado={() => router.push("/clientes/nuevo")}
+          />
+        </Tarjeta>
 
-        <div className="p-5 sm:p-6">
-          <div className="mb-5">
-            <h2 className="text-lg font-black text-slate-900 dark:text-white">Datos del vehículo</h2>
-            <p className="text-xs text-slate-500">Identificación, kilometraje y próximo mantenimiento en una sola vista.</p>
+        <Tarjeta titulo="El auto">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Campo etiqueta="Patente" obligatorio>
+              <input autoFocus={Boolean(clientePreId)} value={v.patente} onChange={(e) => cambiar("patente", e.target.value.toUpperCase().replace(/\s/g, ""))} placeholder="Ej: AB123CD" maxLength={10} className={cn(campoClase, "font-semibold uppercase tracking-wider placeholder:normal-case placeholder:font-normal placeholder:tracking-normal")} />
+            </Campo>
+            <Campo etiqueta="Marca" obligatorio>
+              <input value={v.marca} onChange={(e) => cambiar("marca", e.target.value)} placeholder="Ej: Toyota" className={campoClase} />
+            </Campo>
+            <Campo etiqueta="Modelo">
+              <input value={v.modelo} onChange={(e) => cambiar("modelo", e.target.value)} placeholder="Ej: Hilux" className={campoClase} />
+            </Campo>
+            <Campo etiqueta="Año">
+              <input type="number" inputMode="numeric" value={v.anio} onChange={(e) => cambiar("anio", e.target.value)} placeholder="Ej: 2018" min={1950} max={2035} className={cn(campoClase, sinFlechas)} />
+            </Campo>
+            <Campo etiqueta="Color">
+              <input value={v.color} onChange={(e) => cambiar("color", e.target.value)} placeholder="Ej: Blanco" className={campoClase} />
+            </Campo>
+            <Campo etiqueta="Kilometraje">
+              <input type="number" inputMode="numeric" value={v.kilometraje} onChange={(e) => cambiar("kilometraje", e.target.value)} placeholder="Ej: 85000" min={0} className={cn(campoClase, sinFlechas)} />
+            </Campo>
+            <div className="sm:col-span-2 xl:col-span-3">
+              <Campo etiqueta="Próximo service (km)" ayuda="Opcional. El cliente ve cuánto le falta en su link.">
+                <div className="flex flex-wrap items-center gap-2">
+                  <input type="number" inputMode="numeric" value={v.proximoService} onChange={(e) => cambiar("proximoService", e.target.value)} placeholder="Ej: 95000" min={0} className={cn(campoClase, sinFlechas, "max-w-[200px]")} />
+                  {km > 0 && [5_000, 10_000, 15_000].map((mas) => (
+                    <button key={mas} type="button" onClick={() => cambiar("proximoService", String(km + mas))} className="h-9 rounded-full px-3 text-sm font-semibold text-slate-700 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700">
+                      +{(mas / 1000).toLocaleString("es-AR")} mil
+                    </button>
+                  ))}
+                </div>
+              </Campo>
+            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Patente *</span>
-            <input
-              required
-              type="text"
-              placeholder="Ej: AB123CD"
-              value={patente}
-              onChange={(e) => setPatente(e.target.value.toUpperCase())}
-              className={cn(inputBase, "font-mono font-bold uppercase tracking-widest")}
-              maxLength={8}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Marca *</span>
-            <input required type="text" placeholder="Ej: Toyota" value={marca} onChange={(e) => setMarca(e.target.value)} className={inputBase} />
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Modelo</span>
-            <input type="text" placeholder="Ej: Corolla" value={modelo} onChange={(e) => setModelo(e.target.value)} className={inputBase} />
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Año</span>
-            <input type="number" placeholder="Ej: 2018" value={anio} onChange={(e) => setAnio(e.target.value)} min={1950} max={2030} className={inputBase} />
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Color</span>
-            <input type="text" placeholder="Ej: Blanco" value={color} onChange={(e) => setColor(e.target.value)} className={inputBase} />
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Kilometraje actual</span>
-            <input type="number" placeholder="Ej: 85000" value={kilometraje} onChange={(e) => setKilometraje(e.target.value)} min={0} className={inputBase} />
-          </div>
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Próximo service (km)</span>
-            <input type="number" placeholder="Ej: 90000" value={proximoServiceKm} onChange={(e) => setProximoServiceKm(e.target.value)} min={0} className={inputBase} />
-          </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        <Link href={clientePreId ? `/clientes/${clientePreId}` : "/vehiculos"} className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-          Cancelar
-        </Link>
-        <button type="submit" disabled={isSaving} className="inline-flex justify-center rounded-xl bg-slate-900 px-8 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50 dark:bg-brand-600 dark:hover:bg-brand-500">
-          {isSaving ? "Registrando..." : "Registrar Vehículo"}
-        </button>
+        </Tarjeta>
       </div>
+
+      <aside className="lg:sticky lg:top-24">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Así queda</p>
+          <p className="mt-2 font-display text-2xl font-extrabold leading-tight text-slate-900 dark:text-white">{[v.marca, v.modelo].filter(Boolean).join(" ") || "El auto"}</p>
+          <p className="text-sm uppercase tracking-wide text-slate-500">{v.patente || "Patente"}{v.anio ? ` · ${v.anio}` : ""}</p>
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{titular ? `De ${titular.nombre_completo}` : "Falta elegir el dueño"}</p>
+          <div className="mt-5 grid gap-2">
+            <button type="button" onClick={() => void guardar("orden")} disabled={guardando !== null} className="inline-flex h-11 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60">
+              {guardando === "orden" ? "Guardando…" : "Guardar y abrir orden →"}
+            </button>
+            <button type="submit" disabled={guardando !== null} className="inline-flex h-11 items-center justify-center rounded-xl text-sm font-bold text-slate-800 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50 disabled:opacity-60 dark:text-slate-100 dark:ring-slate-700 dark:hover:bg-slate-700">
+              {guardando === "guardar" ? "Guardando…" : "Guardar vehículo"}
+            </button>
+            <Link href={clienteId ? `/clientes?id=${clienteId}` : "/clientes"} className="inline-flex h-10 items-center justify-center rounded-xl text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">Cancelar</Link>
+          </div>
+        </section>
+      </aside>
     </form>
   );
 }
 
 export default function NuevoVehiculoPage() {
   return (
-    <AppShell
-      currentPath="/vehiculos"
-      badge="Alta de Vehículo"
-      title="Agregar vehículo"
-      description="Para un cliente existente, sin formularios apilados ni pasos intermedios."
-    >
+    <AppShell currentPath="/clientes" compact badge="Clientes" title="Nuevo vehículo" description="Sumale un auto a un cliente que ya tenés cargado.">
       <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />}>
         <FormularioVehiculo />
       </Suspense>
