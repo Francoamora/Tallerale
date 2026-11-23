@@ -127,11 +127,9 @@ export function HintBubble({
 
   // variant === "inline"
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-2 relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-orange-50/40 p-5 shadow-sm ring-1 ring-orange-200/60 dark:from-slate-800/60 dark:to-orange-900/10 dark:ring-orange-900/30">
-      {/* Acento lateral */}
-      <div className="absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-gradient-to-b from-orange-400 to-orange-500" />
-
-      <div className="flex items-start justify-between gap-3 pl-2">
+    // Misma tarjeta que el resto del panel: sin borde naranja ni franja de color.
+    <div className="animate-in fade-in slide-in-from-bottom-2 rounded-2xl bg-white p-5 shadow-sm dark:bg-slate-800/80">
+      <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300">{IconoAyuda}</span>
           <div>
@@ -143,7 +141,7 @@ export function HintBubble({
                   <Link
                     href={action.href}
                     onClick={handleDismiss}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2 text-xs font-black text-white shadow-sm transition hover:bg-orange-600 active:scale-95"
+                    className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-brand-700 active:scale-95"
                   >
                     {action.label}
                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -153,7 +151,7 @@ export function HintBubble({
                 ) : (
                   <button
                     onClick={() => { action.onClick?.(); handleDismiss(); }}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2 text-xs font-black text-white shadow-sm transition hover:bg-orange-600 active:scale-95"
+                    className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-brand-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-brand-700 active:scale-95"
                   >
                     {action.label}
                   </button>

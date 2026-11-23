@@ -3,9 +3,8 @@
 /**
  * components/trial-banner.tsx
  *
- * Banner de prueba gratuita — diseño premium.
- * - Gradiente sutil, tipografía limpia, pill de días restantes.
- * - Modal bloqueante al expirar.
+ * Franja de la prueba gratuita: cuántos días quedan (el color marca la
+ * urgencia) y el botón para activar por WhatsApp. Modal bloqueante al vencer.
  */
 
 import { useEffect, useState } from "react";
@@ -126,72 +125,40 @@ export function TrialBanner() {
     return <ModalVencida tallerNombre={info.tallerNombre} actualizando={actualizando} error={errorActualizacion} onActualizar={() => { void sincronizarEstado(); }} />;
   }
 
-  // Estilos por urgencia — un dot + una pill, no toda la barra pintada.
-  const themes = {
-    safe: {
-      dot:     "bg-emerald-500",
-      pill:    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20",
-      message: "text-slate-600 dark:text-slate-300",
-    },
-    warning: {
-      dot:     "bg-amber-500",
-      pill:    "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20",
-      message: "text-slate-700 dark:text-slate-200",
-    },
-    danger: {
-      dot:     "bg-red-500",
-      pill:    "bg-red-50 text-red-700 ring-1 ring-red-200 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/20",
-      message: "text-red-600 dark:text-red-400",
-    },
+  // El color sólo marca la urgencia en el número de días.
+  const color = {
+    safe: "text-emerald-600 dark:text-emerald-400",
+    warning: "text-amber-600 dark:text-amber-400",
+    danger: "text-red-600 dark:text-red-400",
   }[info.urgency];
 
-  const countdownLabel =
+  const cuanto =
     info.daysRemaining === 0
-      ? "Vence hoy"
+      ? "vence hoy"
       : info.daysRemaining === 1 && info.hoursRemaining > 0
-      ? `${info.hoursRemaining} hs`
-      : `${info.daysRemaining} días`;
-
-  const message =
-    info.daysRemaining === 0
-      ? "Tu prueba gratuita vence hoy"
-      : info.daysRemaining === 1 && info.hoursRemaining > 0
-      ? `Quedan ${info.hoursRemaining} horas de tu prueba gratuita`
-      : `Quedan ${info.daysRemaining} días de tu prueba gratuita`;
+      ? `te quedan ${info.hoursRemaining} horas`
+      : `te quedan ${info.daysRemaining} días`;
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900 sm:px-6">
+    <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
+        <p className="min-w-0 truncate text-sm text-slate-600 dark:text-slate-300">
+          <span className="font-semibold text-slate-900 dark:text-white">Prueba gratis:</span>{" "}
+          <span className={`font-semibold ${color}`}>{cuanto}</span>
+          <span className="hidden sm:inline">. Si te sirve, la activás por WhatsApp y seguís con todo lo cargado.</span>
+        </p>
 
-      {/* Izquierda: dot animado + texto + pill */}
-      <div className="flex items-center gap-2.5 min-w-0">
-        {/* Dot con pulso */}
-        <span className="relative flex h-2 w-2 shrink-0">
-          <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${themes.dot}`} />
-          <span className={`relative inline-flex h-2 w-2 rounded-full ${themes.dot}`} />
-        </span>
-
-        {/* Texto */}
-        <span className={`text-xs font-semibold truncate sm:text-sm ${themes.message}`}>
-          {message}
-        </span>
-
-        {/* Pill de cuenta regresiva */}
-        <span className={`hidden sm:inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[11px] font-black tracking-wide ${themes.pill}`}>
-          {countdownLabel}
-        </span>
+        <a
+          href={buildActivationWALink(info.tallerNombre)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-95"
+        >
+          <IconWA className="h-4 w-4" />
+          <span className="hidden sm:inline">Activar por WhatsApp</span>
+          <span className="sm:hidden">Activar</span>
+        </a>
       </div>
-
-      {/* Derecha: botón activar — siempre verde WhatsApp, no cambia con la urgencia */}
-      <a
-        href={buildActivationWALink(info.tallerNombre)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="shrink-0 flex items-center gap-1.5 rounded-lg bg-[#25D366] px-3 py-1.5 text-[11px] font-black text-white shadow-sm transition hover:bg-[#1ebe5d] active:scale-95"
-      >
-        <IconWA className="h-3 w-3" />
-        <span className="hidden sm:inline">Activar cuenta</span>
-        <span className="sm:hidden">Activar</span>
-      </a>
     </div>
   );
 }
