@@ -307,13 +307,13 @@ export function AppShell({ currentPath, badge, title, description, actions, lead
             <h1 className="truncate font-display text-3xl font-extrabold uppercase leading-none tracking-tight text-slate-900 dark:text-white sm:text-[2.2rem]">{title}</h1>
             <p className="mt-0.5 hidden h-5 truncate text-sm text-slate-600 dark:text-slate-400 sm:block">{description}</p>
           </div>
-          {actions && <div className={cn("flex shrink-0 flex-wrap items-center gap-2", Boolean(leading) && "lg:justify-end")}>{actions}</div>}
+          {actions && <div className={cn("acciones-cabecera flex shrink-0 flex-wrap items-center gap-2", Boolean(leading) && "lg:justify-end")}>{actions}</div>}
         </div>
       </div>
 
       {/* ── Contenido ── */}
       <main className="min-w-0 flex-1 overflow-x-clip">
-        <div className={cn(ancho, compact ? "py-5" : "py-6 sm:py-8", "pb-24 md:pb-10")}>{children}</div>
+        <div className={cn(ancho, compact ? "py-5" : "py-6 sm:py-8", "pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-10")}>{children}</div>
       </main>
 
       {/* ── Menú lateral (tablet y celular) ── */}
@@ -337,7 +337,7 @@ export function AppShell({ currentPath, badge, title, description, actions, lead
       )}
 
       {/* ── Pestañas inferiores (celular) ── */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:hidden" aria-label="Accesos rápidos">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-slate-800 dark:bg-slate-900 md:hidden" aria-label="Accesos rápidos">
         <div className="flex items-stretch">
           {[OPERACION[0], OPERACION[1], OPERACION[3], OPERACION[4], FINANZAS[0]]
             .filter((item) => operacion.includes(item) || finanzas.includes(item))
@@ -406,7 +406,7 @@ function GrupoLateral({ titulo, items, currentPath, onNavigate }: { titulo: stri
   if (!items.length) return null;
   return (
     <div>
-      <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{titulo}</p>
+      <p className="mb-1 px-3 text-xs font-semibold text-slate-400">{titulo}</p>
       {items.map((item) => {
         const activo = estaActivo(item.href, currentPath);
         return (

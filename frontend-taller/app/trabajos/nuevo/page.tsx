@@ -469,7 +469,7 @@ function FormularioTrabajo() {
                 const subtotalItem = parseAmount(item.cantidad) * parseAmount(item.precio_unitario);
                 return (
                   <div key={item.id} className="grid grid-cols-2 gap-2 py-3 md:grid-cols-[160px_minmax(0,1fr)_84px_150px_130px_36px] md:items-center md:gap-3 md:py-2">
-                    <select aria-label={`Tipo del ítem ${index + 1}`} value={item.tipo} onChange={(e) => updateItem(item.id, "tipo", e.target.value as TrabajoItemDraft["tipo"])} className={inputBase + " px-3 py-2"}>
+                    <select aria-label={`Tipo del ítem ${index + 1}`} value={item.tipo} onChange={(e) => updateItem(item.id, "tipo", e.target.value as TrabajoItemDraft["tipo"])} className={inputBase + " col-span-2 px-3 py-2 md:col-span-1"}>
                       <option value="MANO_OBRA">Mano de obra</option>
                       <option value="REPUESTO">Repuesto</option>
                       <option value="INSUMO">Insumo</option>

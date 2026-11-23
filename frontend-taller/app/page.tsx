@@ -1,5 +1,6 @@
 "use client";
 
+import { InstalarApp } from "@/components/instalar-app";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
@@ -285,6 +286,7 @@ export default function Home() {
         </>
       }
     >
+      <InstalarApp />
       {loadError ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-6 dark:border-red-900/50 dark:bg-red-950/20">
           <h3 className="text-sm font-bold text-red-800 dark:text-red-300">No pudimos cargar el panel</h3>
@@ -498,10 +500,14 @@ function AbanicoSvg({
         const a1 = inicio + ((i + 1) * Math.PI) / n - sep;
         const medio = (a0 + a1) / 2;
         const esActivo = p.id === activo;
-        const dx = esActivo ? 8 * letra * Math.cos(medio) : 0;
-        const dy = esActivo ? 8 * letra * Math.sin(medio) : 0;
+        const salto = chico ? 5 : 8;
+        const dx = esActivo ? salto * letra * Math.cos(medio) : 0;
+        const dy = esActivo ? salto * letra * Math.sin(medio) : 0;
         const [x0, y0] = punto(a0, Rx, Ry), [x1, y1] = punto(a1, Rx, Ry), [x2, y2] = punto(a1, rx, ry), [x3, y3] = punto(a0, rx, ry);
-        const [tx, ty] = punto(medio, (Rx + rx) / 2 + 4, (Ry + ry) / 2 + 4);
+        // En el celular los 6 pliegues son angostos: el texto va más hacia afuera,
+        // donde el pliegue es más ancho, y el detalle chico se omite (está en el
+        // aria-label) para que las palabras no se pisen con las del vecino.
+        const [tx, ty] = punto(medio, (Rx + rx) / 2 + (chico ? 14 : 4), (Ry + ry) / 2 + (chico ? 14 : 4));
         const sinValor = !p.valor;
         return (
           <g
@@ -532,9 +538,9 @@ function AbanicoSvg({
               </>
             ) : (
               <>
-                <text x={tx} y={ty - 20 * letra} textAnchor="middle" style={{ fontSize: f(12), fontStretch: "80%", letterSpacing: "0.08em" }} className={cn("font-bold uppercase", esActivo ? "fill-white/90" : TONO[p.id].texto)}>{p.nombre}</text>
-                <text x={tx} y={ty + 12 * letra} textAnchor="middle" style={{ fontSize: f(34), fontStretch: "72%", letterSpacing: "-0.01em" }} className={cn("font-extrabold tabular-nums", esActivo ? "fill-white" : "fill-slate-900 dark:fill-white")}>{loading ? "·" : p.valor}</text>
-                <text x={tx} y={ty + 28 * letra} textAnchor="middle" style={{ fontSize: f(10.5) }} className={cn("font-medium", esActivo ? "fill-white/85" : "fill-slate-500 dark:fill-slate-400")}>{p.detalle}</text>
+                <text x={tx} y={ty - (chico ? 16 : 20) * letra} textAnchor="middle" style={{ fontSize: f(12), fontStretch: "80%", letterSpacing: chico ? "0.02em" : "0.08em" }} className={cn("font-bold uppercase", esActivo ? "fill-white/90" : TONO[p.id].texto)}>{p.nombre}</text>
+                <text x={tx} y={ty + (chico ? 14 : 12) * letra} textAnchor="middle" style={{ fontSize: f(chico ? 32 : 34), fontStretch: "72%", letterSpacing: "-0.01em" }} className={cn("font-extrabold tabular-nums", esActivo ? "fill-white" : "fill-slate-900 dark:fill-white")}>{loading ? "·" : p.valor}</text>
+                {(!chico || esActivo) && <text x={tx} y={ty + 28 * letra} textAnchor="middle" style={{ fontSize: f(10.5) }} className={cn("font-medium", esActivo ? "fill-white/85" : "fill-slate-500 dark:fill-slate-400")}>{p.detalle}</text>}
               </>
             )}
           </g>

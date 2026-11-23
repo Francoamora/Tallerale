@@ -17,7 +17,7 @@ export const SEO = {
 };
 
 /** Archivos que lee un buscador: tienen que responder siempre, con o sin sesión. */
-export const SEO_FILES = ["/robots.txt", "/sitemap.xml", "/llms.txt", "/opengraph-image", "/twitter-image"];
+export const SEO_FILES = ["/robots.txt", "/sitemap.xml", "/llms.txt", "/opengraph-image", "/twitter-image", "/manifest.webmanifest", "/sw.js", "/apple-icon", "/icon.svg"];
 
 /** Páginas que tienen que estar en Google. La landing se sirve en la raíz. */
 export const PUBLIC_PAGES = [

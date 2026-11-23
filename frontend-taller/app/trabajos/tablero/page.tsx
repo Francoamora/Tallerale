@@ -397,11 +397,13 @@ export default function TableroTrabajos() {
             disabled={refreshing}
             title="Actualizar ahora"
             aria-label="Actualizar ahora"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
+            className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 sm:w-9 sm:px-0"
           >
             <svg className={cn("h-4 w-4", refreshing && "animate-spin")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8 8 0 004.582 9M20 20v-5h-.581m0 0A8 8 0 014.062 13" />
             </svg>
+            {/* En el celular el botón va a lo ancho: con el ícono solo quedaba un rectángulo vacío. */}
+            <span className="sm:hidden">Actualizar</span>
           </button>
           <button
             onClick={entrarEnPantalla}
