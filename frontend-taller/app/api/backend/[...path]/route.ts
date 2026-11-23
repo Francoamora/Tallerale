@@ -80,7 +80,10 @@ async function proxyToBackend(
       return response;
     }
 
-    const response = new NextResponse(await upstream.arrayBuffer(), {
+    // 204/205/304 no pueden llevar cuerpo: pasarle uno (aunque vacío) hacía
+    // tirar error al Response y el proxy devolvía 502.
+    const sinCuerpo = upstream.status === 204 || upstream.status === 205 || upstream.status === 304;
+    const response = new NextResponse(sinCuerpo ? null : await upstream.arrayBuffer(), {
       status: upstream.status,
       headers: {
         "Content-Type": responseContentType || "application/octet-stream",
