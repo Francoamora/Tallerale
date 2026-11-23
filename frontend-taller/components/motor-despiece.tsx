@@ -46,6 +46,7 @@ export function MotorDespiece() {
     let visible = false;
     let pedido = 0;
     let progreso = 0;
+    let ultimoScroll = 0;
     let limpiar = () => {};
     const quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -53,19 +54,40 @@ export function MotorDespiece() {
       if (!seccion) return;
       const r = seccion.getBoundingClientRect();
       progreso = limitar(-r.top / Math.max(1, r.height - window.innerHeight));
+      ultimoScroll = performance.now();
       const ex = limitar((progreso - ENTRADA) / (1 - ENTRADA - SALIDA));
       setAvance(ex);
       setEtapa(progreso < ENTRADA ? -1 : progreso > 1 - SALIDA ? PASOS.length : pasoDe(ex));
     }
 
-    (async () => {
+    // El 3D (three.js + armar el motor) recién se carga cuando la sección se
+    // acerca a la pantalla: la portada con el video carga primero y liviana.
+    const iniciar = async () => {
       try {
         const [THREE, { createV8Stage }] = await Promise.all([import("three"), import("./motor3d/stage.js")]);
         if (!vivo) return;
-        const st = createV8Stage({ canvas });
+        // Sombras "duras" (PCF): las suaves del repo (VSM 4096 con desenfoque)
+        // eran lo más caro de cada cuadro y en una página no se nota la diferencia.
+        const st = createV8Stage({ canvas, look: { shadow: "hard" } });
         const eng = st.eng;
         const angosto = () => window.innerWidth < 768;
-        if (angosto()) st.setQuality({ samples: 0, ao: false, shadow: 1024 });
+
+        // Niveles de calidad. Arranca en el que corresponde al equipo y, si los
+        // cuadros tardan, baja solo (nunca sube, para que no titile).
+        const NIVELES = [
+          { dpr: 1.5, samples: 4, ao: true, shadow: 2048 },
+          { dpr: 1.25, samples: 2, ao: false, shadow: 2048 },
+          { dpr: 1, samples: 0, ao: false, shadow: 1024 },
+          { dpr: 0.8, samples: 0, ao: false, shadow: 1024 },
+        ];
+        const nav = navigator as Navigator & { deviceMemory?: number };
+        const equipoModesto = (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4;
+        let nivel = angosto() ? 2 : equipoModesto ? 1 : 0;
+        const aplicarNivel = () => {
+          const n = NIVELES[nivel];
+          st.setQuality({ samples: n.samples, ao: n.ao, shadow: n.shadow });
+          medir();
+        };
 
         // La pieza de cada paso, en naranja.
         const naranja = new THREE.MeshPhysicalMaterial({ color: "#ea580c", roughness: 0.32, metalness: 0.25, clearcoat: 0.6, clearcoatRoughness: 0.2 });
@@ -85,17 +107,44 @@ export function MotorDespiece() {
           pintado = i;
         };
 
-        const medir = () => {
-          const r = canvas.getBoundingClientRect();
-          st.resize(r.width, r.height, Math.min(window.devicePixelRatio || 1, angosto() ? 1.25 : 1.5));
-        };
-        medir();
+        function medir() {
+          const r = canvas!.getBoundingClientRect();
+          st.resize(r.width, r.height, Math.min(window.devicePixelRatio || 1, NIVELES[nivel].dpr));
+        }
+        aplicarNivel();
         window.addEventListener("resize", medir);
+
+        // Medición de cuánto tarda cada cuadro (promedio móvil).
+        let previo = 0;
+        let promedio = 16;
+        let cuadros = 0;
+        let ultimoDibujo = 0;
 
         const t0 = performance.now();
         const cuadro = (ahora: number) => {
           pedido = 0;
           if (!vivo || !visible) return;
+          // Quieto (sin bajar), con 30 cuadros por segundo alcanza para que el
+          // cigüeñal se vea girar: la mitad de trabajo para la placa de video.
+          const bajando = ahora - ultimoScroll < 250;
+          if (!bajando && ahora - ultimoDibujo < 32) {
+            pedido = requestAnimationFrame(cuadro);
+            return;
+          }
+          if (previo) {
+            promedio = promedio * 0.9 + Math.min(100, ahora - previo) * 0.1;
+            cuadros++;
+            // Después de calentar, si anda por debajo de ~40 cuadros por segundo
+            // mientras se baja, se baja un nivel y se vuelve a medir.
+            if (bajando && cuadros > 30 && promedio > 25 && nivel < NIVELES.length - 1) {
+              nivel++;
+              aplicarNivel();
+              cuadros = 0;
+              promedio = 16;
+            }
+          }
+          previo = bajando ? ahora : 0;
+          ultimoDibujo = ahora;
           const ex = limitar((progreso - ENTRADA) / (1 - ENTRADA - SALIDA));
           const enPaso = progreso >= ENTRADA && progreso <= 1 - SALIDA;
           pintar(enPaso ? pasoDe(ex) : -1);
@@ -126,12 +175,19 @@ export function MotorDespiece() {
       } catch {
         if (vivo) setFallo(true);
       }
-    })();
+    };
+    const cerca = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      cerca.disconnect();
+      void iniciar();
+    }, { rootMargin: "900px 0px" });
+    cerca.observe(seccion);
 
     leerScroll();
     window.addEventListener("scroll", leerScroll, { passive: true });
     return () => {
       vivo = false;
+      cerca.disconnect();
       cancelAnimationFrame(pedido);
       window.removeEventListener("scroll", leerScroll);
       limpiar();
