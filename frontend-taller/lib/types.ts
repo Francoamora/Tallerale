@@ -8,6 +8,7 @@ export interface Cliente {
   telefono: string;
   email: string;
   dni?: string;
+  condicion_iva?: string;
   saldo_balance: number;
 }
 

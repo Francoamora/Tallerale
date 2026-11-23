@@ -38,6 +38,19 @@ class Cliente(models.Model):
     dni = models.CharField("DNI / CUIT", max_length=20, blank=True, db_index=True)
     direccion = models.CharField(max_length=255, blank=True)
 
+    # Con la condición del taller define qué factura le corresponde (A, B o C)
+    # en la planilla para el contador. La mayoría es consumidor final.
+    CONDICION_CONSUMIDOR_FINAL = "CONSUMIDOR_FINAL"
+    CONDICION_IVA_CHOICES = [
+        ("CONSUMIDOR_FINAL", "Consumidor final"),
+        ("RESPONSABLE_INSCRIPTO", "Responsable inscripto"),
+        ("MONOTRIBUTO", "Monotributo"),
+        ("EXENTO", "IVA exento"),
+    ]
+    condicion_iva = models.CharField(
+        "Condición frente al IVA", max_length=30, choices=CONDICION_IVA_CHOICES, default=CONDICION_CONSUMIDOR_FINAL
+    )
+
     saldo_balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), editable=False)
     notas = models.TextField(blank=True, help_text="Comentarios generales sobre el cliente.")
 
@@ -58,29 +71,6 @@ class Cliente(models.Model):
     @property
     def saldo_actual(self) -> Decimal:
         return self.saldo_balance
-
-# ========================
-#    INVENTARIO
-# ========================
-
-class Producto(models.Model):
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="productos")
-    codigo = models.CharField(max_length=50)
-    nombre = models.CharField(max_length=200)
-    stock_actual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    stock_minimo = models.DecimalField(max_digits=10, decimal_places=2, default=5)
-    precio_costo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    precio_venta = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
-    class Meta:
-        verbose_name = "Producto / Repuesto"
-        verbose_name_plural = "Productos y Repuestos"
-        constraints = [
-            models.UniqueConstraint(fields=["owner", "codigo"], name="uniq_producto_owner_codigo"),
-        ]
-
-    def __str__(self):
-        return f"[{self.codigo}] {self.nombre}"
 
 # ========================
 #    VEHÍCULOS

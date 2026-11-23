@@ -16,7 +16,7 @@ from PIL import Image
 
 from decimal import Decimal
 
-from taller.models import ApiToken, Cliente, Gasto, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, Producto, Taller, Trabajo, TrabajoItem, Turno, Vehiculo
+from taller.models import ApiToken, Cliente, Gasto, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, Taller, Trabajo, TrabajoItem, Turno, Vehiculo
 from taller.services import resolver_vehiculo_express_para_usuario
 
 
@@ -1012,21 +1012,6 @@ class SecurityBoundaryAttackTests(TestCase):
         self.assertEqual(trabajo.presupuesto_origen_id, presupuesto.id)
         self.assertEqual(presupuesto.estado, "APROBADO")
 
-    def test_inventario_es_privado_por_taller_y_permite_mismo_codigo(self):
-        Producto.objects.create(owner=self.owner_2, codigo="FILTRO-01", nombre="Filtro privado")
-        response = self.http.post(
-            "/api/productos/",
-            data=json.dumps({"codigo": "FILTRO-01", "nombre": "Filtro propio"}),
-            content_type="application/json",
-            **self.auth,
-        )
-        self.assertEqual(response.status_code, 201)
-
-        listado = self.http.get("/api/productos", **self.auth)
-        self.assertEqual(listado.status_code, 200)
-        self.assertEqual(len(listado.json()), 1)
-        self.assertEqual(listado.json()[0]["nombre"], "Filtro propio")
-
     def test_mecanico_no_accede_al_directorio_comercial(self):
         taller = Taller.objects.create(owner=self.owner_1, nombre="Taller Red")
         empleado = User.objects.create_user(username="mecanico@red.com", password="clave-empleado")
@@ -1076,18 +1061,6 @@ class SecurityBoundaryAttackTests(TestCase):
             self.assertEqual(self.http.delete(f"/api/turnos/{turno.id}", **auth).status_code, 403, rol)
 
         self.assertTrue(Turno.objects.filter(pk=turno.pk).exists())
-
-    def test_mecanico_no_puede_leer_el_precio_de_costo_del_inventario(self):
-        Producto.objects.create(
-            owner=self.owner_1, codigo="FILTRO-99", nombre="Filtro",
-            precio_costo=Decimal("8000.00"), precio_venta=Decimal("14000.00"),
-        )
-        token = self._token_de_empleado(MembresiaTaller.ROL_MECANICO, "mecanico-stock@red.com")
-
-        response = self.http.get("/api/productos", HTTP_AUTHORIZATION=f"Token {token}")
-
-        self.assertEqual(response.status_code, 403)
-        self.assertNotIn(b"8000", response.content)
 
     def test_recepcion_puede_cobrar_sin_acceder_a_reportes_financieros(self):
         taller = Taller.objects.create(owner=self.owner_1, nombre="Taller Red")

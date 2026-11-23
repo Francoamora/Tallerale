@@ -27,7 +27,7 @@ from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from PIL import Image, UnidentifiedImageError
 
-from .models import _portal_expiry_default, ApiToken, AuditoriaTaller, Cliente, Gasto, InvitacionTaller, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, Producto, RecuperacionContrasena, Taller, Trabajo, TrabajoItem, Turno, Vehiculo
+from .models import _portal_expiry_default, ApiToken, AuditoriaTaller, Cliente, Gasto, InvitacionTaller, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, RecuperacionContrasena, Taller, Trabajo, TrabajoItem, Turno, Vehiculo
 from .services import (
     crear_trabajo_completo,
     total_con_descuento,
@@ -184,7 +184,7 @@ class ClienteSchema(ModelSchema):
 
     class Meta:
         model = Cliente
-        fields = ["id", "nombre", "apellido", "telefono", "email", "dni"]
+        fields = ["id", "nombre", "apellido", "telefono", "email", "dni", "condicion_iva"]
 
 class VehiculoSchema(ModelSchema):
     cliente_id: int
@@ -194,11 +194,6 @@ class VehiculoSchema(ModelSchema):
         model = Vehiculo
         fields = ["id", "token", "portal_activo", "portal_expires_at", "patente", "marca", "modelo", "anio", "color", "kilometraje_actual", "proximo_service_km"]
 
-
-class ProductoOut(ModelSchema):
-    class Meta:
-        model = Producto
-        fields = ["id", "codigo", "nombre", "stock_actual", "stock_minimo", "precio_costo", "precio_venta"]
 
 class TrabajoItemOut(ModelSchema):
     class Meta:
@@ -489,6 +484,7 @@ class ClienteUpdateIn(Schema):
     telefono: str = ""
     email: str = ""
     dni: str = ""
+    condicion_iva: str = "CONSUMIDOR_FINAL"
 
 class VehiculoExpressIn(Schema):
     patente: str = Field(..., example="AB123CD")
@@ -510,6 +506,7 @@ class ClienteIn(Schema):
     telefono: str = ""
     email: str = ""
     dni: str = ""
+    condicion_iva: str = "CONSUMIDOR_FINAL"
 
 class VehiculoAltaCompletaIn(Schema):
     patente: str = Field(..., example="AB123CD")
@@ -530,14 +527,6 @@ class AltaDirectorioOut(Schema):
     cliente: ClienteSchema
     vehiculo: VehiculoSchema
 
-
-class ProductoIn(Schema):
-    codigo: str = Field(..., min_length=1, max_length=50)
-    nombre: str = Field(..., min_length=1, max_length=200)
-    stock_actual: float = Field(default=0, ge=0)
-    stock_minimo: float = Field(default=0, ge=0)
-    precio_costo: float = Field(default=0, ge=0)
-    precio_venta: float = Field(default=0, ge=0)
 
 class TrabajoItemIn(Schema):
     tipo: str = Field(..., example="REPUESTO")
@@ -1000,12 +989,36 @@ def obtener_cliente(request, cliente_id: int):
     require_capability(request, "directorio")
     return get_object_or_404(Cliente, id=cliente_id, owner=request.user)
 
+_CONDICIONES_CLIENTE = {c for c, _ in Cliente.CONDICION_IVA_CHOICES}
+
+
+def _condicion_cliente(valor: str) -> str:
+    valor = (valor or "").strip().upper()
+    if not valor:
+        return Cliente.CONDICION_CONSUMIDOR_FINAL
+    if valor not in _CONDICIONES_CLIENTE:
+        raise HttpError(400, "Condición frente al IVA inválida.")
+    return valor
+
+
+def tipo_factura(condicion_taller: str, condicion_cliente: str) -> str:
+    """Factura que corresponde según ARCA: el responsable inscripto hace A a otro
+    inscripto o a un monotributista (desde 2021) y B al resto; monotributo y
+    exento hacen siempre C. Sin la condición del taller no se puede saber."""
+    if condicion_taller == "RESPONSABLE_INSCRIPTO":
+        return "A" if condicion_cliente in ("RESPONSABLE_INSCRIPTO", "MONOTRIBUTO") else "B"
+    if condicion_taller in ("MONOTRIBUTO", "EXENTO"):
+        return "C"
+    return ""
+
+
 @api.post("/clientes/", response={201: ClienteSchema, 400: ErrorSchema}, tags=["Directorio"])
 def crear_cliente(request, payload: ClienteIn):
     require_capability(request, "gestionar_ordenes")
     nombre = payload.nombre.strip()
     if not nombre:
         return 400, {"message": "El nombre del cliente es obligatorio."}
+    condicion = _condicion_cliente(payload.condicion_iva)
     try:
         cliente = Cliente.objects.create(
             owner=request.user,
@@ -1014,6 +1027,7 @@ def crear_cliente(request, payload: ClienteIn):
             telefono=payload.telefono.strip(),
             email=payload.email.strip(),
             dni=payload.dni.strip(),
+            condicion_iva=condicion,
         )
         return 201, cliente
     except Exception as error:
@@ -1032,6 +1046,7 @@ def crear_cliente_con_vehiculo(request, payload: AltaDirectorioIn):
         return 400, {"message": "La patente es obligatoria."}
     if not marca:
         return 400, {"message": "La marca del vehículo es obligatoria."}
+    condicion = _condicion_cliente(payload.cliente.condicion_iva)
     if Vehiculo.objects.filter(owner=request.user, patente=patente).exists():
         return 400, {"message": f"La patente {patente} ya está registrada en tu taller."}
 
@@ -1044,6 +1059,7 @@ def crear_cliente_con_vehiculo(request, payload: AltaDirectorioIn):
                 telefono=payload.cliente.telefono.strip(),
                 email=payload.cliente.email.strip(),
                 dni=payload.cliente.dni.strip(),
+                condicion_iva=condicion,
             )
             vehiculo = Vehiculo.objects.create(
                 owner=request.user,
@@ -1066,6 +1082,7 @@ def actualizar_cliente(request, cliente_id: int, payload: ClienteUpdateIn):
     nombre = payload.nombre.strip()
     if not nombre:
         return 400, {"message": "El nombre del cliente es obligatorio."}
+    condicion = _condicion_cliente(payload.condicion_iva)
     try:
         cliente = get_object_or_404(Cliente, id=cliente_id, owner=request.user)
         cliente.nombre = nombre
@@ -1073,7 +1090,8 @@ def actualizar_cliente(request, cliente_id: int, payload: ClienteUpdateIn):
         cliente.telefono = payload.telefono.strip()
         cliente.email = payload.email.strip()
         cliente.dni = payload.dni.strip()
-        cliente.save(update_fields=['nombre', 'apellido', 'telefono', 'email', 'dni'])
+        cliente.condicion_iva = condicion
+        cliente.save(update_fields=['nombre', 'apellido', 'telefono', 'email', 'dni', 'condicion_iva'])
         return 200, cliente
     except Exception as error:
         return _internal_error("Error al actualizar cliente", error)
@@ -1094,34 +1112,6 @@ def listar_vehiculos(request, q: Optional[str] = None, cliente_id: Optional[int]
         )
     return qs
 
-
-@api.get("/productos", response=List[ProductoOut], tags=["Inventario"])
-def listar_productos(request, q: Optional[str] = None):
-    # El inventario expone precio_costo, que es justamente el dato que el
-    # taller no le muestra a mecánicos ni contadores en el resto del sistema.
-    require_capability(request, "gestionar_ordenes")
-    productos = Producto.objects.filter(owner=request.user)
-    if q:
-        productos = productos.filter(Q(codigo__icontains=q) | Q(nombre__icontains=q))
-    return productos.order_by("nombre")
-
-
-@api.post("/productos/", response={201: ProductoOut, 400: ErrorSchema}, tags=["Inventario"])
-def crear_producto(request, payload: ProductoIn):
-    require_capability(request, "gestionar_ordenes")
-    codigo = payload.codigo.strip().upper()
-    if Producto.objects.filter(owner=request.user, codigo=codigo).exists():
-        return 400, {"message": "Ya existe un producto con ese código en tu taller."}
-    producto = Producto.objects.create(
-        owner=request.user,
-        codigo=codigo,
-        nombre=payload.nombre.strip(),
-        stock_actual=Decimal(str(payload.stock_actual)),
-        stock_minimo=Decimal(str(payload.stock_minimo)),
-        precio_costo=Decimal(str(payload.precio_costo)),
-        precio_venta=Decimal(str(payload.precio_venta)),
-    )
-    return 201, producto
 
 @api.post("/vehiculos/", response={201: VehiculoSchema, 400: ErrorSchema}, tags=["Directorio"])
 def crear_vehiculo(request, payload: VehiculoIn):
@@ -2174,7 +2164,8 @@ def exportar_para_contador(request, fecha_desde: date, fecha_hasta: date):
         )
         .order_by("fecha_egreso_real", "id")
     )
-    encabezado_ventas = ["Fecha", "Comprobante interno", "Cliente", "DNI / CUIT", "Vehículo", "Detalle", "Mano de obra", "Repuestos", "Descuento", "Total"]
+    condiciones_cliente = dict(Cliente.CONDICION_IVA_CHOICES)
+    encabezado_ventas = ["Fecha", "Comprobante interno", "Cliente", "DNI / CUIT", "Condición IVA", "Factura sugerida", "Vehículo", "Detalle", "Mano de obra", "Repuestos", "Descuento", "Total"]
     if discrimina_iva:
         encabezado_ventas += ["Neto gravado", "IVA 21%"]
     filas_ventas = [encabezado_ventas]
@@ -2184,7 +2175,10 @@ def exportar_para_contador(request, fecha_desde: date, fecha_hasta: date):
         total_ventas += total
         fila = [
             t.fecha_egreso_real or t.finalizado_en or t.fecha_ingreso, f"OT-{t.id:05d}", t.cliente.nombre_completo if t.cliente else "",
-            doc(t.cliente), f"{t.vehiculo.marca} {t.vehiculo.modelo} ({t.vehiculo.patente})" if t.vehiculo else "",
+            doc(t.cliente),
+            condiciones_cliente.get(t.cliente.condicion_iva, "") if t.cliente else "",
+            tipo_factura(condicion, t.cliente.condicion_iva if t.cliente else Cliente.CONDICION_CONSUMIDOR_FINAL),
+            f"{t.vehiculo.marca} {t.vehiculo.modelo} ({t.vehiculo.patente})" if t.vehiculo else "",
             t.resumen_trabajos or "", t.total_mano_obra, t.total_repuestos, t.descuento, total,
         ]
         if discrimina_iva:
@@ -2232,13 +2226,15 @@ def exportar_para_contador(request, fecha_desde: date, fecha_hasta: date):
         [],
         ["Notas"],
         ["Las órdenes de trabajo (OT) son comprobantes internos del taller, no facturas."],
+        ["La columna \"Factura sugerida\" sale de la condición frente al IVA del taller y la del cliente."
+         + ("" if condicion else " Cargá la condición del taller en Configuración para que se complete.")],
         ["Los importes de las órdenes son precios finales (con IVA incluido)."
          + (" El neto y el IVA 21% están calculados a partir del total." if discrimina_iva else "")],
         ["Generado con Tallerista el " + timezone.localtime().strftime("%d/%m/%Y %H:%M") + "."],
     ]
     contenido = armar_xlsx([
         {"nombre": "Resumen", "filas": resumen, "anchos": [34, 30, 18], "encabezado": False},
-        {"nombre": "Ventas", "filas": filas_ventas, "anchos": [12, 18, 26, 16, 30, 36, 14, 14, 12, 14, 14, 12]},
+        {"nombre": "Ventas", "filas": filas_ventas, "anchos": [12, 18, 26, 16, 20, 10, 30, 36, 14, 14, 12, 14, 14, 12]},
         {"nombre": "Cobros", "filas": filas_cobros, "anchos": [12, 26, 16, 34, 16, 12, 14]},
         {"nombre": "Compras y gastos", "filas": filas_compras, "anchos": [12, 28, 40, 22, 16, 14]},
     ])

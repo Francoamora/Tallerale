@@ -1,5 +1,6 @@
 "use client";
 
+import { CONDICIONES_IVA_CLIENTE, etiquetaCondicionCliente } from "@/lib/fiscal";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SectionCard } from "@/components/section-card";
@@ -46,7 +47,7 @@ export function FichaCliente({
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState({ nombre: "", apellido: "", telefono: "", email: "", dni: "" });
+  const [formData, setFormData] = useState({ nombre: "", apellido: "", telefono: "", email: "", dni: "", condicion_iva: "CONSUMIDOR_FINAL" });
 
   useEffect(() => {
     async function cargarPerfil() {
@@ -67,6 +68,7 @@ export function FichaCliente({
           telefono: clienteData.telefono || "",
           email: clienteData.email || "",
           dni: clienteData.dni || "",
+          condicion_iva: clienteData.condicion_iva || "CONSUMIDOR_FINAL",
         });
         setVehiculos(vehiculosData);
         setTrabajos(trabajosData);
@@ -153,6 +155,7 @@ export function FichaCliente({
                   <DatoEnLinea etiqueta="Celular" valor={cliente.telefono} faltante="Cargar celular" onFaltante={() => setIsEditing(true)} />
                   <DatoEnLinea etiqueta="Email" valor={cliente.email} />
                   <DatoEnLinea etiqueta="DNI o CUIT" valor={cliente.dni} />
+                  <DatoEnLinea etiqueta="IVA" valor={etiquetaCondicionCliente(cliente.condicion_iva)} />
                   <div className="flex items-end">
                     <button onClick={() => setIsEditing(true)} className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400">Editar datos</button>
                   </div>
@@ -182,6 +185,11 @@ export function FichaCliente({
               </CampoEditable>
               <CampoEditable etiqueta="Email">
                 <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className={inputStyle} />
+              </CampoEditable>
+              <CampoEditable etiqueta="Condición frente al IVA" ayuda="Define si le corresponde Factura A o B.">
+                <select value={formData.condicion_iva} onChange={(e) => setFormData({ ...formData, condicion_iva: e.target.value })} className={inputStyle}>
+                  {CONDICIONES_IVA_CLIENTE.map((c) => <option key={c.valor} value={c.valor}>{c.etiqueta}</option>)}
+                </select>
               </CampoEditable>
               <div className="flex items-end gap-2">
                 <button onClick={() => setIsEditing(false)} className="flex-1 rounded-xl border border-slate-200 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700">Cancelar</button>

@@ -8,13 +8,13 @@ from django.utils import timezone
 
 from taller.models import (
     ApiToken, Cliente, Gasto, MovimientoCuenta, Presupuesto, PresupuestoItem,
-    Producto, Trabajo, TrabajoItem, Turno, Vehiculo,
+    Trabajo, TrabajoItem, Turno, Vehiculo,
 )
 
 
 GETS = [
     "/api/dashboard/stats", "/api/avisos", "/api/clientes", "/api/vehiculos",
-    "/api/productos", "/api/trabajos/", "/api/trabajos/tablero", "/api/turnos/",
+    "/api/trabajos/", "/api/trabajos/tablero", "/api/turnos/",
     "/api/presupuestos/", "/api/finanzas/gastos", "/api/finanzas/gastos/resumen",
     "/api/finanzas/caja", "/api/finanzas/caja/resumen", "/api/auth/session",
 ]
@@ -60,7 +60,6 @@ class SmokeConDatosTests(TestCase):
         Turno.objects.create(owner=self.owner, cliente=c, vehiculo=v, fecha_hora=timezone.now(), motivo="Revisión")
         MovimientoCuenta.objects.create(owner=self.owner, cliente=c, tipo="PAGO", monto=Decimal("1000"), metodo_pago="EFECTIVO")
         Gasto.objects.create(owner=self.owner, descripcion="Aceite", monto=Decimal("3000"))
-        Producto.objects.create(owner=self.owner, codigo="F1", nombre="Filtro")
         self.c, self.v, self.t, self.p = c, v, t, p
 
     def test_ningun_get_explota_con_datos(self):
@@ -84,7 +83,7 @@ class SmokeConDatosTests(TestCase):
     def test_busquedas_con_texto_raro_no_explotan(self):
         fallos = []
         for q in ["%", "_", "'", '"', "a" * 300, "ñ", "100%", "\\", "<script>"]:
-            for path in ("/api/clientes", "/api/vehiculos", "/api/trabajos/", "/api/presupuestos/", "/api/turnos/", "/api/productos"):
+            for path in ("/api/clientes", "/api/vehiculos", "/api/trabajos/", "/api/presupuestos/", "/api/turnos/"):
                 r = self.http.get(path, {"q": q}, **self.auth)
                 if r.status_code >= 500:
                     fallos.append(f"{path}?q={q!r} -> {r.status_code}")

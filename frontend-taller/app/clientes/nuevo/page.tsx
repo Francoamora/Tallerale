@@ -8,16 +8,17 @@ import { Campo, campoClase, sinFlechas, Tarjeta } from "@/components/formulario"
 import { crearCliente, crearClienteConVehiculo } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { normalizeWhatsAppPhone } from "@/lib/whatsapp";
+import { CONDICIONES_IVA_CLIENTE } from "@/lib/fiscal";
 
 export default function NuevoClientePage() {
   const router = useRouter();
-  const [cliente, setCliente] = useState({ nombre: "", apellido: "", telefono: "", dni: "", email: "" });
+  const [cliente, setCliente] = useState({ nombre: "", apellido: "", telefono: "", dni: "", email: "", condicion_iva: "CONSUMIDOR_FINAL" });
   const [vehiculo, setVehiculo] = useState({ patente: "", marca: "", modelo: "", anio: "", color: "", kilometraje: "", proximoService: "" });
   const [sinAuto, setSinAuto] = useState(false);
   const [guardando, setGuardando] = useState<null | "guardar" | "orden">(null);
   const [error, setError] = useState("");
 
-  const cambiarCliente = (campo: keyof typeof cliente) => (e: React.ChangeEvent<HTMLInputElement>) => setCliente((c) => ({ ...c, [campo]: e.target.value }));
+  const cambiarCliente = (campo: keyof typeof cliente) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setCliente((c) => ({ ...c, [campo]: e.target.value }));
   const cambiarVehiculo = (campo: keyof typeof vehiculo, valor: string) => setVehiculo((v) => ({ ...v, [campo]: valor }));
 
   const digitos = cliente.telefono.replace(/\D/g, "");
@@ -39,6 +40,7 @@ export default function NuevoClientePage() {
       telefono: cliente.telefono.trim(),
       email: cliente.email.trim(),
       dni: cliente.dni.trim(),
+      condicion_iva: cliente.condicion_iva,
     };
     try {
       if (sinAuto) {
@@ -92,8 +94,13 @@ export default function NuevoClientePage() {
               <Campo etiqueta="DNI / CUIT" ayuda="Opcional. Lo usa el contador para facturar.">
                 <input value={cliente.dni} onChange={cambiarCliente("dni")} placeholder="Ej: 30123456" className={campoClase} />
               </Campo>
-              <Campo etiqueta="Email" ayuda="Opcional." className="sm:col-span-2">
+              <Campo etiqueta="Email" ayuda="Opcional.">
                 <input type="email" value={cliente.email} onChange={cambiarCliente("email")} placeholder="Ej: juan@gmail.com" className={campoClase} />
+              </Campo>
+              <Campo etiqueta="Condición frente al IVA" ayuda="Si no sabés, dejalo en consumidor final.">
+                <select value={cliente.condicion_iva} onChange={cambiarCliente("condicion_iva")} className={campoClase}>
+                  {CONDICIONES_IVA_CLIENTE.map((c) => <option key={c.valor} value={c.valor}>{c.etiqueta}</option>)}
+                </select>
               </Campo>
             </div>
           </Tarjeta>

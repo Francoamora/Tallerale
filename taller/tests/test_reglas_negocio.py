@@ -471,6 +471,51 @@ class DatosFiscalesYContadorTests(TestCase):
         self.assertTrue(self._put(mostrar_iva=True).json()["mostrar_iva"])
         self.assertTrue(self._put().json()["mostrar_iva"])  # no mandarlo no lo apaga
 
+    def test_tipo_de_factura_segun_arca(self):
+        from taller.api import tipo_factura
+        casos = {
+            ("RESPONSABLE_INSCRIPTO", "RESPONSABLE_INSCRIPTO"): "A",
+            ("RESPONSABLE_INSCRIPTO", "MONOTRIBUTO"): "A",
+            ("RESPONSABLE_INSCRIPTO", "CONSUMIDOR_FINAL"): "B",
+            ("RESPONSABLE_INSCRIPTO", "EXENTO"): "B",
+            ("MONOTRIBUTO", "RESPONSABLE_INSCRIPTO"): "C",
+            ("EXENTO", "CONSUMIDOR_FINAL"): "C",
+            ("", "RESPONSABLE_INSCRIPTO"): "",
+        }
+        for (taller, cliente), esperado in casos.items():
+            self.assertEqual(tipo_factura(taller, cliente), esperado, (taller, cliente))
+
+    def test_condicion_iva_del_cliente(self):
+        nuevo = lambda **d: self.http.post("/api/clientes/", data=json.dumps({"nombre": "Luis", **d}), content_type="application/json", **self.auth)
+        r = nuevo()
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["condicion_iva"], "CONSUMIDOR_FINAL")  # por defecto
+        self.assertEqual(nuevo(condicion_iva="NO_EXISTE").status_code, 400)
+        cid = nuevo(condicion_iva="monotributo").json()["id"]
+        self.assertEqual(Cliente.objects.get(pk=cid).condicion_iva, "MONOTRIBUTO")
+        r = self.http.put(f"/api/clientes/{cid}", data=json.dumps({"nombre": "Luis", "condicion_iva": "RESPONSABLE_INSCRIPTO"}), content_type="application/json", **self.auth)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["condicion_iva"], "RESPONSABLE_INSCRIPTO")
+
+    def test_planilla_sugiere_la_factura(self):
+        import io
+        import zipfile
+
+        self._put(condicion_iva="RESPONSABLE_INSCRIPTO")
+        cliente = Cliente.objects.create(owner=self.owner, nombre="Mono", condicion_iva="MONOTRIBUTO")
+        vehiculo = Vehiculo.objects.create(owner=self.owner, cliente=cliente, patente="FAC111", marca="Fiat", modelo="Uno")
+        Trabajo.objects.create(
+            owner=self.owner, cliente=cliente, vehiculo=vehiculo, kilometraje=1, estado=Trabajo.ESTADO_ENTREGADO,
+            total=1000, total_mano_obra=1000, fecha_egreso_real=timezone.now(),
+        )
+        hoy = timezone.localdate().isoformat()
+        r = self.http.get(f"/api/finanzas/exportar-contador?fecha_desde={hoy}&fecha_hasta={hoy}", **self.auth)
+        with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+            ventas = z.read("xl/worksheets/sheet2.xml").decode()
+        self.assertIn("Factura sugerida", ventas)
+        self.assertIn("Monotributo", ventas)
+        self.assertIn(">A<", ventas)
+
     def test_planilla_requiere_rango_coherente(self):
         r = self.http.get("/api/finanzas/exportar-contador?fecha_desde=2026-02-01&fecha_hasta=2026-01-01", **self.auth)
         self.assertEqual(r.status_code, 400)

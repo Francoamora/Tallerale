@@ -44,3 +44,15 @@ export function desgloseIva(total: number) {
 export function ivaVisible(f: DatosFiscales) {
   return Boolean(f.mostrar_iva && f.condicion_iva === "RESPONSABLE_INSCRIPTO");
 }
+
+/** Condición frente al IVA del cliente: con la del taller define si va Factura A, B o C. */
+export const CONDICIONES_IVA_CLIENTE = [
+  { valor: "CONSUMIDOR_FINAL", etiqueta: "Consumidor final" },
+  { valor: "RESPONSABLE_INSCRIPTO", etiqueta: "Responsable inscripto" },
+  { valor: "MONOTRIBUTO", etiqueta: "Monotributo" },
+  { valor: "EXENTO", etiqueta: "IVA exento" },
+] as const;
+
+export function etiquetaCondicionCliente(valor?: string) {
+  return CONDICIONES_IVA_CLIENTE.find((c) => c.valor === valor)?.etiqueta ?? "Consumidor final";
+}

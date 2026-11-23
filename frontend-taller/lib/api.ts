@@ -440,7 +440,7 @@ export function getClienteById(id: number) {
   return apiRequest<Cliente>(`/clientes/${id}`);
 }
 /** Cliente sin vehículo todavía (se le agrega después desde su ficha). */
-export function crearCliente(payload: { nombre: string; apellido?: string; telefono?: string; email?: string; dni?: string }) {
+export function crearCliente(payload: { nombre: string; apellido?: string; telefono?: string; email?: string; dni?: string; condicion_iva?: string }) {
   return apiRequest<Cliente>("/clientes/", { method: "POST", body: JSON.stringify(payload) });
 }
 export function crearClienteConVehiculo(payload: unknown) {
