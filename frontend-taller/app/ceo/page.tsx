@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { CeoVisitas } from "@/components/ceo-visitas";
 import { actualizarPlanCeo, generarEnlaceRecuperacionCeo, getCeoResumen, type CeoResumen, type CeoTaller } from "@/lib/api";
 import { getSession } from "@/lib/trial";
 
@@ -201,6 +202,8 @@ export default function CentroCeoPage() {
           <KpiCard label="Por vencer" value={resumen?.por_vencer ?? 0} hint="en los próximos 3 días" tone="slate" />
           <KpiCard label="Vencidos" value={resumen?.vencidos ?? 0} hint="requieren seguimiento" tone="rose" />
         </section>
+
+        <CeoVisitas />
 
         <section className="rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="border-b border-slate-100 p-5 dark:border-slate-800 sm:p-6">

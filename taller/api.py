@@ -27,7 +27,7 @@ from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from PIL import Image, UnidentifiedImageError
 
-from .models import _portal_expiry_default, ApiToken, AuditoriaTaller, Cliente, Gasto, InvitacionTaller, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, RecuperacionContrasena, Taller, Trabajo, TrabajoItem, Turno, Vehiculo
+from .models import _portal_expiry_default, ApiToken, AuditoriaTaller, Cliente, Gasto, InvitacionTaller, MembresiaTaller, MovimientoCuenta, PerfilTaller, Presupuesto, PresupuestoItem, RecuperacionContrasena, Taller, Trabajo, TrabajoItem, Turno, Vehiculo, Visita
 from .services import (
     crear_trabajo_completo,
     total_con_descuento,
@@ -2975,6 +2975,157 @@ def sesion_api(request):
         rol=membresia.rol if membresia else MembresiaTaller.ROL_ADMIN,
         es_superusuario=actor.is_superuser,
     )
+
+
+# ==========================================
+# VISITAS A LAS PÁGINAS PÚBLICAS
+# ==========================================
+
+# Las únicas páginas que se cuentan. "/landing" se cuenta como "/": es la misma.
+RUTAS_CONTADAS = {"/": "/", "/landing": "/", "/login": "/login", "/registro": "/registro"}
+DISPOSITIVOS = {"celular", "tablet", "compu"}
+_VISITANTE_VALIDO = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+
+# Dominio del que vino → fuente que se muestra en el panel CEO.
+_FUENTES = (
+    (("google.",), "Google"),
+    (("bing.", "duckduckgo.", "yahoo."), "Otros buscadores"),
+    (("whatsapp.", "wa.me", "l.wl.co"), "WhatsApp"),
+    (("instagram.",), "Instagram"),
+    (("facebook.", "fb.com", "fb.me", "messenger."), "Facebook"),
+    (("t.co", "twitter.", "x.com"), "X / Twitter"),
+    (("linkedin.", "lnkd.in"), "LinkedIn"),
+    (("chatgpt.", "openai.", "perplexity.", "claude.ai", "gemini.google"), "Asistentes de IA"),
+    (("famdesarrollos.com.ar",), "FAM Desarrollos"),
+)
+
+
+class VisitaIn(Schema):
+    ruta: str = Field(..., max_length=200)
+    visitante: str = Field(..., max_length=64)
+    referente: str = Field(default="", max_length=500)
+    utm: str = Field(default="", max_length=60)
+    dispositivo: str = Field(default="", max_length=10)
+    # Dominio de la página (el pedido llega por el proxy de Next, así que el
+    # Host no sirve para reconocer las visitas que vienen de adentro del sitio).
+    sitio: str = Field(default="", max_length=100)
+
+
+def _fuente_de(referente: str, utm: str, propio: str) -> tuple[str, str]:
+    """Devuelve (fuente, dominio). La campaña (utm_source) manda sobre el dominio."""
+    from urllib.parse import urlparse
+
+    dominio = ""
+    if referente:
+        try:
+            dominio = (urlparse(referente).hostname or "").lower().removeprefix("www.")[:100]
+        except ValueError:
+            dominio = ""
+    if utm:
+        return utm.strip().lower()[:40], dominio
+    if not dominio:
+        return "Directo", ""
+    if propio and (dominio == propio or dominio.endswith("." + propio)):
+        return "Dentro del sitio", dominio
+    for claves, nombre in _FUENTES:
+        if any(dominio.startswith(c) or f".{c}" in f".{dominio}" for c in claves):
+            # "gemini.google" va antes que "google." para que no la tape.
+            if nombre == "Google" and "gemini" in dominio:
+                return "Asistentes de IA", dominio
+            return nombre, dominio
+    return dominio, dominio
+
+
+@api.post("/visitas/", response={204: None}, auth=None, tags=["Visitas"])
+def registrar_visita(request, payload: VisitaIn):
+    """Cuenta una visita a una página pública. Siempre responde 204: si algo
+    no cierra (ruta no contada, robot, demasiadas seguidas) simplemente no se
+    guarda, sin darle pistas a nadie."""
+    ruta = RUTAS_CONTADAS.get(payload.ruta.split("?")[0].rstrip("/") or "/")
+    if not ruta or not _VISITANTE_VALIDO.match(payload.visitante):
+        return 204, None
+    visitante = hashlib.sha256(f"{settings.SECRET_KEY}:{payload.visitante}".encode()).hexdigest()[:16]
+    # Tope por visitante: una recarga de más no infla los números.
+    clave = f"visitas:{visitante}:{ruta}"
+    if not cache.add(clave, 1, timeout=30 * 60):
+        return 204, None
+    propio = (payload.sitio or request.get_host() or "").split(":")[0].lower().removeprefix("www.")
+    fuente, dominio = _fuente_de(payload.referente.strip(), payload.utm, propio)
+    dispositivo = payload.dispositivo if payload.dispositivo in DISPOSITIVOS else ""
+    Visita.objects.create(ruta=ruta, fuente=fuente, referente=dominio, dispositivo=dispositivo, visitante=visitante)
+    return 204, None
+
+
+class CeoConteoOut(Schema):
+    nombre: str
+    visitas: int
+
+
+class CeoDiaOut(Schema):
+    fecha: date
+    visitas: int
+    visitantes: int
+
+
+class CeoVisitasOut(Schema):
+    dias: int
+    visitas: int
+    visitantes: int
+    visitas_periodo_anterior: int
+    registros: int
+    conversion: float
+    hoy: int
+    por_dia: List[CeoDiaOut]
+    paginas: List[CeoConteoOut]
+    fuentes: List[CeoConteoOut]
+    dispositivos: List[CeoConteoOut]
+
+
+_NOMBRE_PAGINA = {"/": "Landing", "/login": "Login", "/registro": "Registro"}
+_NOMBRE_DISPOSITIVO = {"celular": "Celular", "tablet": "Tablet", "compu": "Compu", "": "Sin dato"}
+
+
+@api.get("/ceo/visitas/", response=CeoVisitasOut, tags=["CEO"])
+def ceo_visitas(request, dias: int = 30):
+    """Visitas a las páginas públicas y cuántas terminaron en un registro."""
+    from django.db.models.functions import TruncDate
+
+    require_platform_admin(request)
+    dias = max(1, min(dias, 365))
+    hoy = timezone.localdate()
+    desde = hoy - timedelta(days=dias - 1)
+    qs = Visita.objects.filter(creada__date__gte=desde)
+    anterior = Visita.objects.filter(creada__date__gte=desde - timedelta(days=dias), creada__date__lt=desde).count()
+
+    filas = {
+        f["dia"]: f
+        for f in qs.annotate(dia=TruncDate("creada")).values("dia").annotate(visitas=Count("id"), visitantes=Count("visitante", distinct=True))
+    }
+    por_dia = []
+    for i in range(dias):
+        d = desde + timedelta(days=i)
+        f = filas.get(d)
+        por_dia.append({"fecha": d, "visitas": f["visitas"] if f else 0, "visitantes": f["visitantes"] if f else 0})
+
+    def conteo(campo, nombres=None, tope=8):
+        filas = qs.values(campo).annotate(visitas=Count("id")).order_by("-visitas")[:tope]
+        return [{"nombre": (nombres or {}).get(f[campo], f[campo] or "Sin dato"), "visitas": f["visitas"]} for f in filas]
+
+    visitantes = qs.values("visitante").distinct().count()
+    registros = PerfilTaller.objects.filter(trial_start__date__gte=desde, user__is_superuser=False).count()
+    return {
+        "dias": dias,
+        "visitas": qs.count(),
+        "visitantes": visitantes,
+        "visitas_periodo_anterior": anterior,
+        "registros": registros,
+        "conversion": round(registros * 100 / visitantes, 1) if visitantes else 0.0,
+        "hoy": qs.filter(creada__date=hoy).count(),
+        "por_dia": por_dia,
+        "paginas": conteo("ruta", _NOMBRE_PAGINA),
+        "fuentes": conteo("fuente"),
+        "dispositivos": conteo("dispositivo", _NOMBRE_DISPOSITIVO),
+    }
 
 
 @api.get("/ceo/resumen/", response=CeoResumenOut, tags=["CEO"])

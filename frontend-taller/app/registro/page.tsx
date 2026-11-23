@@ -9,6 +9,7 @@
  * Paso 3: ¡Listo! — inicia prueba de 7 días → redirect onboarding
  */
 
+import { ContadorVisitas } from "@/components/contador-visitas";
 import { LogoTallerista } from "@/components/marca-tallerista";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -169,6 +170,7 @@ export default function RegistroPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4 py-12">
+      <ContadorVisitas />
 
       {/* Fondo decorativo */}
       <div className="pointer-events-none absolute inset-0">

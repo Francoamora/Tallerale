@@ -6,6 +6,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AbanicoRepuestos } from "@/components/abanico-repuestos";
+import { ContadorVisitas } from "@/components/contador-visitas";
 import { DisenoCapturas } from "@/components/celular-cliente";
 import { MotorDespiece } from "@/components/motor-despiece";
 import { LandingNav } from "@/components/landing-nav";
@@ -78,6 +79,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen antialiased" style={{ background: OSCURO }}>
       <LandingNav />
+      <ContadorVisitas />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c") }} />
 
       {/* ══ Portada: el taller de fondo, el mensaje encima ══ */}

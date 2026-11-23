@@ -577,3 +577,23 @@ class RecuperacionContrasena(models.Model):
     @property
     def vigente(self):
         return self.usada_en is None and self.expires_at > timezone.now()
+
+
+class Visita(models.Model):
+    """Una visita a las páginas públicas (landing, login, registro).
+
+    Sin cookies ni datos personales: ``visitante`` es el hash de un número al
+    azar que guarda el navegador, sólo para contar visitantes únicos. No se
+    guarda la IP.
+    """
+    creada = models.DateTimeField(auto_now_add=True, db_index=True)
+    ruta = models.CharField(max_length=60)
+    fuente = models.CharField(max_length=40, blank=True)
+    referente = models.CharField(max_length=100, blank=True)
+    dispositivo = models.CharField(max_length=10, blank=True)
+    visitante = models.CharField(max_length=16, db_index=True)
+
+    class Meta:
+        verbose_name = "Visita"
+        verbose_name_plural = "Visitas"
+        ordering = ["-creada"]

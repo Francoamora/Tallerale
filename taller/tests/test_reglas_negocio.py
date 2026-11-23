@@ -594,3 +594,64 @@ class HistorialVehiculoTests(TestCase):
         self.assertIsNotNone(orden["fecha_realizado"])
         self.assertEqual(orden["recomendaciones_proximo_service"], "Cambiar pastillas")
         self.assertEqual(orden["proximo_control_km"], 60_000)
+
+
+class VisitasTests(TestCase):
+    """Contador propio de visitas de las páginas públicas y su resumen en el panel CEO."""
+
+    def setUp(self):
+        cache.clear()
+        self.http = Client()
+
+    def _visita(self, **datos):
+        payload = {"ruta": "/", "visitante": "abc12345-visitante", **datos}
+        return self.http.post("/api/visitas/", data=json.dumps(payload), content_type="application/json")
+
+    def test_cuenta_sin_login_y_sin_guardar_el_id_crudo(self):
+        from taller.models import Visita
+        r = self._visita(referente="https://www.google.com/search?q=taller", dispositivo="celular")
+        self.assertEqual(r.status_code, 204)
+        v = Visita.objects.get()
+        self.assertEqual((v.ruta, v.fuente, v.referente, v.dispositivo), ("/", "Google", "google.com", "celular"))
+        self.assertNotIn("abc12345", v.visitante)
+
+    def test_recargar_no_suma_y_rutas_ajenas_no_cuentan(self):
+        from taller.models import Visita
+        self._visita()
+        self._visita()  # recarga
+        self._visita(ruta="/landing")  # es la misma página
+        self._visita(ruta="/caja")  # no es pública
+        self._visita(visitante="x")  # id inválido
+        self.assertEqual(Visita.objects.count(), 1)
+        self._visita(ruta="/registro")
+        self.assertEqual(Visita.objects.count(), 2)
+
+    def test_fuentes(self):
+        from taller.api import _fuente_de
+        self.assertEqual(_fuente_de("", "", "tallerista.com")[0], "Directo")
+        self.assertEqual(_fuente_de("https://l.instagram.com/?u=x", "", "tallerista.com")[0], "Instagram")
+        self.assertEqual(_fuente_de("https://wa.me/123", "", "tallerista.com")[0], "WhatsApp")
+        self.assertEqual(_fuente_de("https://gemini.google.com/app", "", "tallerista.com")[0], "Asistentes de IA")
+        self.assertEqual(_fuente_de("https://tallerista.com/landing", "", "tallerista.com")[0], "Dentro del sitio")
+        self.assertEqual(_fuente_de("https://google.com", "Volante", "tallerista.com")[0], "volante")
+
+    def test_panel_ceo_solo_superusuario(self):
+        comun = User.objects.create_user(username="comun@example.com", password="x-clave-1")
+        r = self.http.get("/api/ceo/visitas/", HTTP_AUTHORIZATION=f"Token {ApiToken.objects.create(user=comun).key}")
+        self.assertEqual(r.status_code, 403)
+
+    def test_resumen_para_el_ceo(self):
+        self._visita(visitante="visitante-uno-1")
+        self._visita(visitante="visitante-dos-2", dispositivo="compu")
+        self._visita(visitante="visitante-dos-2", ruta="/registro")
+        dueno = User.objects.create_user(username="nuevo@example.com", password="x-clave-1")
+        PerfilTaller.objects.create(user=dueno, nombre="Nuevo", taller_nombre="Nuevo")
+        ceo = User.objects.create_superuser(username="ceo@example.com", password="x-clave-1")
+        r = self.http.get("/api/ceo/visitas/?dias=7", HTTP_AUTHORIZATION=f"Token {ApiToken.objects.create(user=ceo).key}")
+        self.assertEqual(r.status_code, 200, r.content)
+        d = r.json()
+        self.assertEqual((d["visitas"], d["visitantes"], d["registros"], d["hoy"]), (3, 2, 1, 3))
+        self.assertEqual(d["conversion"], 50.0)
+        self.assertEqual(len(d["por_dia"]), 7)
+        self.assertEqual(d["por_dia"][-1]["visitas"], 3)
+        self.assertEqual(d["paginas"][0], {"nombre": "Landing", "visitas": 2})

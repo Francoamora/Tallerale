@@ -7,6 +7,7 @@
  * gris de estudio de la portada. Sin mockups ni distracciones: entrar y listo.
  */
 
+import { ContadorVisitas } from "@/components/contador-visitas";
 import { MarcaTallerista } from "@/components/marca-tallerista";
 import { useState, useEffect, type FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -226,6 +227,8 @@ function LoginForm() {
 // ─── Page export con Suspense boundary ────────────────────────────────────────
 export default function LoginPage() {
   return (
+    <>
+    <ContadorVisitas />
     <Suspense fallback={
       <div className="flex min-h-screen items-center justify-center bg-[#e9eaec]">
         <div className="flex flex-col items-center gap-4">
@@ -235,5 +238,6 @@ export default function LoginPage() {
     }>
       <LoginForm />
     </Suspense>
+    </>
   );
 }

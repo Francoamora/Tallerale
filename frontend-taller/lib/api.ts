@@ -241,6 +241,22 @@ export type CeoEnlaceRecuperacion = {
 };
 
 export function getCeoResumen() { return apiRequest<CeoResumen>("/ceo/resumen/"); }
+
+export type CeoConteo = { nombre: string; visitas: number };
+export type CeoVisitas = {
+  dias: number;
+  visitas: number;
+  visitantes: number;
+  visitas_periodo_anterior: number;
+  registros: number;
+  conversion: number;
+  hoy: number;
+  por_dia: { fecha: string; visitas: number; visitantes: number }[];
+  paginas: CeoConteo[];
+  fuentes: CeoConteo[];
+  dispositivos: CeoConteo[];
+};
+export function getCeoVisitas(dias: number) { return apiRequest<CeoVisitas>("/ceo/visitas/", { params: { dias } }); }
 export function actualizarPlanCeo(id: number, payload: { accion: "ACTIVAR_30_DIAS" | "EXTENDER_30_DIAS" | "FIJAR_FECHA" | "QUITAR_PLAN"; hasta?: string }) {
   return apiRequest<CeoTaller>(`/ceo/talleres/${id}/plan/`, { method: "PATCH", body: JSON.stringify(payload) });
 }
