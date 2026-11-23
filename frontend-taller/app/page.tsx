@@ -234,7 +234,7 @@ export default function Home() {
             <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
               {clientesSinActividad.map((cliente) => (
                 <li key={cliente.id}>
-                  <Link href={`/clientes/${cliente.id}`} className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                  <Link href={`/clientes?id=${cliente.id}`} className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-700/40">
                     <span className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{cliente.nombre}</span>
                     <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{cliente.ultimo_trabajo ? `Última visita ${formatDate(cliente.ultimo_trabajo)}` : "Sin visitas"}</span>
                   </Link>

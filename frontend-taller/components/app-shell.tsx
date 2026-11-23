@@ -224,7 +224,9 @@ export function AppShell({ currentPath, badge, title, description, actions, lead
 
           <Link href="/" className="mr-2 flex min-w-0 items-center gap-2.5 justify-self-start rounded-lg py-1">
             <MarcaTallerista className="h-9 w-9 shrink-0 drop-shadow-[0_4px_12px_rgba(234,88,12,0.35)]" />
-            <span className="min-w-0 leading-tight">
+            {/* Entre 1024 y 1280 px la barra de secciones ocupa casi todo el ancho:
+                ahí va solo el logo, si no el nombre se encimaba con "Panel". */}
+            <span className="min-w-0 leading-tight lg:hidden xl:block">
               <span className="block max-w-[11rem] truncate text-sm font-bold text-white">{nombreTaller || " "}</span>
               <span className="block text-[11px] font-medium text-white/55">con <span className="font-semibold text-brand-400">Tallerista</span></span>
             </span>

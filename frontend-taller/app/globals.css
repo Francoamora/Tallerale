@@ -162,3 +162,15 @@ main .animate-spin {
     inset: -10px -6px;
   }
 }
+
+/* Desplegables: la flecha del navegador quedaba pegada al borde y distinta en
+   cada sistema. Va una propia, con aire a la derecha, igual en todos lados. */
+select:not([multiple]):not([size]) {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  background-size: 1.1rem;
+  padding-right: 2.5rem !important;
+}

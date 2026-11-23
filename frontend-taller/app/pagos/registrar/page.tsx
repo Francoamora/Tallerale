@@ -247,7 +247,7 @@ function RegistroPagoForm() {
           </div>
           <div className="flex flex-col gap-2">
             {resultado.clienteId && (
-              <button type="button" onClick={() => router.push(`/clientes/${resultado.clienteId}`)} className="flex-1 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-brand-500">
+              <button type="button" onClick={() => router.push(`/clientes?id=${resultado.clienteId}`)} className="flex-1 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-brand-500">
                 Ver cuenta del cliente
               </button>
             )}

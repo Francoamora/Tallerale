@@ -15,9 +15,9 @@ import { Patente } from "@/components/patente";
 
 /**
  * Ficha del cliente. La misma se usa en dos lugares:
- * - "pagina": /clientes/[id], con el encabezado y los botones en la cabecera.
- * - "panel": a la derecha de la lista de Clientes; trae su propio encabezado
- *   y se acomoda a un ancho menor (todo en una columna).
+ * - "panel": a la derecha de la lista de Clientes (/clientes?id=N), con un clic.
+ * - "pagina": /clientes/N, la página propia del cliente (doble clic en la lista
+ *   o "Ver a pantalla completa"), con el encabezado y los botones arriba.
  */
 export function FichaCliente({
   clienteId,
@@ -158,6 +158,11 @@ export function FichaCliente({
                   <DatoEnLinea etiqueta="IVA" valor={etiquetaCondicionCliente(cliente.condicion_iva)} />
                   <div className="flex items-end">
                     <button onClick={() => setIsEditing(true)} className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400">Editar datos</button>
+                    {enPanel && (
+                      <Link href={`/clientes/${cliente.id}`} className="ml-4 hidden text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white lg:inline">
+                        Ver a pantalla completa ↗
+                      </Link>
+                    )}
                   </div>
                 </dl>
               )}

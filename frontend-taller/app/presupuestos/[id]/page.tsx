@@ -737,7 +737,7 @@ export default function DetallePresupuesto({ params }: PageProps) {
                   <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Cliente</p>
                   <p className="mt-2 font-bold text-slate-900 dark:text-white">{presupuesto.cliente?.nombre_completo || "Sin cliente"}</p>
                   <p className="mt-1 text-xs text-slate-500">{presupuesto.cliente?.telefono || presupuesto.cliente?.email || "Sin datos de contacto"}</p>
-                  {presupuesto.cliente && <Link href={`/clientes/${presupuesto.cliente.id}`} className="mt-3 inline-flex text-xs font-bold text-sky-600 hover:underline dark:text-sky-400">Abrir ficha →</Link>}
+                  {presupuesto.cliente && <Link href={`/clientes?id=${presupuesto.cliente.id}`} className="mt-3 inline-flex text-xs font-bold text-sky-600 hover:underline dark:text-sky-400">Abrir ficha →</Link>}
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/50">
                   <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Vehículo</p>

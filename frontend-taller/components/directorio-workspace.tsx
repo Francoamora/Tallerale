@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { FichaCliente } from "@/components/ficha-cliente";
@@ -267,6 +268,7 @@ export function DirectorioWorkspace() {
 }
 
 function FilaCliente({ cliente, autos, activo, porDefecto, onElegir }: { cliente: Cliente; autos: Vehiculo[]; activo: boolean; porDefecto: boolean; onElegir: () => void }) {
+  const router = useRouter();
   // Sin elección, el primero sólo se resalta en pantallas anchas (es el que
   // se ve a la derecha); en el celular todavía no hay ficha abierta.
   const fondo = "bg-brand-100 dark:bg-brand-900/40";
@@ -275,9 +277,17 @@ function FilaCliente({ cliente, autos, activo, porDefecto, onElegir }: { cliente
   const punto = PUNTO_SERVICE[peorService(autos)];
   return (
     <li>
-      <button
-        type="button"
-        onClick={onElegir}
+      {/* Un clic: la ficha a la derecha. Doble clic: la página del cliente a
+          pantalla completa. Es un link de verdad, así que Cmd/Ctrl + clic o la
+          ruedita la abren en otra pestaña. */}
+      <a
+        href={`/clientes/${cliente.id}`}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          e.preventDefault();
+          onElegir();
+        }}
+        onDoubleClick={() => router.push(`/clientes/${cliente.id}`)}
         aria-current={activo ? "true" : undefined}
         className={cn(
           "relative block w-full px-4 py-3 text-left transition",
@@ -309,7 +319,7 @@ function FilaCliente({ cliente, autos, activo, porDefecto, onElegir }: { cliente
             </>
           )}
         </span>
-      </button>
+      </a>
     </li>
   );
 }

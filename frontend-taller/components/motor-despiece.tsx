@@ -48,6 +48,8 @@ export function MotorDespiece() {
     let progreso = 0;
     let ultimoScroll = 0;
     let limpiar = () => {};
+    // Lo pone el 3D cuando ya está armado: vuelve a dibujar si estaba en pausa.
+    let despertar = () => {};
     const quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     function leerScroll() {
@@ -55,6 +57,7 @@ export function MotorDespiece() {
       const r = seccion.getBoundingClientRect();
       progreso = limitar(-r.top / Math.max(1, r.height - window.innerHeight));
       ultimoScroll = performance.now();
+      despertar();
       const ex = limitar((progreso - ENTRADA) / (1 - ENTRADA - SALIDA));
       setAvance(ex);
       setEtapa(progreso < ENTRADA ? -1 : progreso > 1 - SALIDA ? PASOS.length : pasoDe(ex));
@@ -74,11 +77,13 @@ export function MotorDespiece() {
 
         // Niveles de calidad. Arranca en el que corresponde al equipo y, si los
         // cuadros tardan, baja solo (nunca sube, para que no titile).
+        // Sin sombreado de ambiente (GTAO): es una pasada extra sobre toda la
+        // pantalla en cada cuadro y en una página casi no se nota.
         const NIVELES = [
-          { dpr: 1.5, samples: 4, ao: true, shadow: 2048 },
-          { dpr: 1.25, samples: 2, ao: false, shadow: 2048 },
+          { dpr: 1.25, samples: 4, ao: false, shadow: 2048 },
+          { dpr: 1, samples: 2, ao: false, shadow: 1024 },
           { dpr: 1, samples: 0, ao: false, shadow: 1024 },
-          { dpr: 0.8, samples: 0, ao: false, shadow: 1024 },
+          { dpr: 0.75, samples: 0, ao: false, shadow: 1024 },
         ];
         const nav = navigator as Navigator & { deviceMemory?: number };
         const equipoModesto = (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4;
@@ -120,13 +125,16 @@ export function MotorDespiece() {
         let cuadros = 0;
         let ultimoDibujo = 0;
 
-        const t0 = performance.now();
+        let giro = 0;
         const cuadro = (ahora: number) => {
           pedido = 0;
           if (!vivo || !visible) return;
-          // Quieto (sin bajar), con 30 cuadros por segundo alcanza para que el
-          // cigüeñal se vea girar: la mitad de trabajo para la placa de video.
+          // Mientras bajás: a todo lo que dé. Al soltar, el cigüeñal sigue
+          // girando un ratito a 30 cuadros por segundo y después el dibujo se
+          // pausa del todo (la placa de video descansa mientras leés). Al volver
+          // a bajar, arranca de nuevo.
           const bajando = ahora - ultimoScroll < 250;
+          if (!bajando && ahora - ultimoScroll > 1800 && ultimoDibujo) return;
           if (!bajando && ahora - ultimoDibujo < 32) {
             pedido = requestAnimationFrame(cuadro);
             return;
@@ -136,7 +144,7 @@ export function MotorDespiece() {
             cuadros++;
             // Después de calentar, si anda por debajo de ~40 cuadros por segundo
             // mientras se baja, se baja un nivel y se vuelve a medir.
-            if (bajando && cuadros > 30 && promedio > 25 && nivel < NIVELES.length - 1) {
+            if (bajando && cuadros > 30 && promedio > 22 && nivel < NIVELES.length - 1) {
               nivel++;
               aplicarNivel();
               cuadros = 0;
@@ -144,12 +152,14 @@ export function MotorDespiece() {
             }
           }
           previo = bajando ? ahora : 0;
+          // El giro avanza sólo con el tiempo dibujado: al despertar no pega un salto.
+          if (ultimoDibujo) giro += Math.min(100, ahora - ultimoDibujo);
           ultimoDibujo = ahora;
           const ex = limitar((progreso - ENTRADA) / (1 - ENTRADA - SALIDA));
           const enPaso = progreso >= ENTRADA && progreso <= 1 - SALIDA;
           pintar(enPaso ? pasoDe(ex) : -1);
           // El cigüeñal gira despacio: el motor está vivo mientras se desarma.
-          const th = quieto ? 30 : (((ahora - t0) / 1000) * 90) % 720;
+          const th = quieto ? 30 : ((giro / 1000) * 90) % 720;
           const { w, h } = st.size;
           const celu = w < 768;
           st.frame(th, {
@@ -162,14 +172,22 @@ export function MotorDespiece() {
           }, { explode: ex, charge: 0, arrows: 0 });
           pedido = requestAnimationFrame(cuadro);
         };
+        despertar = () => {
+          if (visible && !pedido) pedido = requestAnimationFrame(cuadro);
+        };
+        // Al cambiar el tamaño de la ventana el lienzo se borra: se dibuja de nuevo
+        // aunque esté en pausa.
+        const redibujar = () => { ultimoDibujo = 0; despertar(); };
+        window.addEventListener("resize", redibujar);
         const obs = new IntersectionObserver(([e]) => {
           visible = e.isIntersecting;
-          if (visible && !pedido) pedido = requestAnimationFrame(cuadro);
+          despertar();
         });
         obs.observe(seccion);
         limpiar = () => {
           obs.disconnect();
           window.removeEventListener("resize", medir);
+          window.removeEventListener("resize", redibujar);
           st.renderer.dispose();
         };
       } catch {
