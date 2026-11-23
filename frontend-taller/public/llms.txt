@@ -1,25 +1,54 @@
 # Tallerista
 
-> Sistema de gestión para talleres mecánicos de Argentina, hecho por FAM Desarrollos.
-> Presupuestos digitales, órdenes de trabajo, estado del taller, portal del cliente y control
-> de caja, desde el celular o la PC. Prueba gratis de 7 días, sin tarjeta y sin contrato.
+> Tallerista es un sistema de gestión para talleres mecánicos de Argentina, hecho por FAM Desarrollos.
+> Ordena órdenes de trabajo, presupuestos, turnos, clientes con sus vehículos y la caja, y le avisa a
+> cada cliente por WhatsApp. Se usa desde el celular, la tablet o la compu, sin instalar nada.
+> Prueba gratis de 7 días con todas las funciones, sin tarjeta y sin contrato.
+
+Sitio: https://tallerista.famdesarrollos.com.ar
+
+## Para quién es
+
+Talleres mecánicos y de servicio automotor de Argentina (chicos y medianos): el dueño, la recepción,
+los mecánicos y el contador del taller. Todo en español rioplatense y en pesos argentinos.
 
 ## Funciones
 
-- Presupuestos digitales que el cliente aprueba desde el celular.
-- Órdenes de trabajo que avanzan por estado.
-- Estado del taller: qué auto está en qué etapa.
-- Directorio de clientes y vehículos, con el historial de cada uno.
-- Portal del cliente para seguir su trabajo.
-- Control de caja.
-- Funciona en el celular o la PC, sin instalar nada.
+- Órdenes de trabajo: se abren en un toque (también desde un turno o un presupuesto aprobado). El mecánico tilda cada tarea y suma lo que apareció. PDF de la orden y firma de retiro.
+- Tablero del taller: cada auto en su etapa (por revisar, en trabajo, listo para retirar, entregado).
+- Presupuestos digitales: el cliente recibe un link por WhatsApp desde el número del taller, ve cada repuesto con su precio y lo aprueba, rechaza o consulta con un botón. Descuento en porcentaje o en pesos.
+- Agenda de turnos: lista y calendario, confirmación y recordatorio por WhatsApp.
+- Clientes y vehículos: historial de cada auto año por año, kilometraje, próximo service y cuenta corriente de cada cliente.
+- Portal del cliente: una ficha del auto con todo lo que se le hizo, cuánto falta para el próximo service y un botón para pedir turno.
+- Avisos por WhatsApp: auto listo, presupuesto, turno y service, con el link para que el cliente vea el detalle.
+- Caja y gastos: lo que entra y lo que sale por día, cliente y medio de pago; compras con varios repuestos de una vez.
+- Planilla para el contador: Excel mensual con ventas, cobros y compras, CUIT y condición de IVA del taller, condición de IVA de cada cliente y la factura sugerida (A, B o C) para facturar en ARCA. Se manda por WhatsApp al contador.
+- Datos fiscales del taller: razón social, CUIT validado, condición de IVA, domicilio fiscal; IVA discriminado opcional en los comprobantes.
+- Equipo: el dueño crea el usuario de cada persona (sin necesidad de email) con su rol: administración, recepción, mecánico o contador. El mecánico no ve la plata.
+- App instalable: se agrega a la pantalla de inicio del celular y se abre como una app.
+
+## Lo que no hace
+
+- No emite facturas electrónicas de ARCA: las órdenes son comprobantes internos y la planilla le deja todo listo al contador.
+- No maneja stock de repuestos.
 
 ## Precio
 
-Se prueba 7 días gratis. Después, la continuidad se acuerda en pesos argentinos por WhatsApp.
+7 días gratis con todas las funciones, sin tarjeta. Después, el precio para seguir se acuerda en pesos
+argentinos por WhatsApp con FAM Desarrollos. No hay cobros automáticos.
+
+## Preguntas frecuentes
+
+- ¿Hay que instalar algo? No, funciona en el navegador; opcionalmente se instala como app en el celular.
+- ¿El cliente necesita una app o una cuenta? No, recibe un link por WhatsApp y lo abre como cualquier página.
+- ¿Funciona en el celular? Sí, en celular, tablet y compu, con los mismos datos.
+- ¿Sirve para el contador? Sí, con la planilla mensual para ARCA descrita arriba.
+- ¿Puedo sumar a mis empleados? Sí, con usuarios y roles.
 
 ## Enlaces
 
-- https://tallerista.famdesarrollos.com.ar — landing y registro
+- https://tallerista.famdesarrollos.com.ar — landing, funciones y preguntas frecuentes
+- https://tallerista.famdesarrollos.com.ar/registro — crear una cuenta y empezar la prueba de 7 días
+- https://famdesarrollos.com.ar/soluciones/programa-para-taller-mecanico — la solución en el sitio de FAM Desarrollos
 - https://famdesarrollos.com.ar — FAM Desarrollos, la empresa que lo desarrolla
 - WhatsApp: +54 9 3482 254317

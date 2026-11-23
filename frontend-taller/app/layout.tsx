@@ -52,7 +52,7 @@ export default function RootLayout({
 }>) {
   return (
     // El script aplica la preferencia antes del primer pintado del navegador.
-    <html lang="es" className={`${GeistMono.variable} antialiased`} suppressHydrationWarning>
+    <html lang="es-AR" className={`${GeistMono.variable} antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>

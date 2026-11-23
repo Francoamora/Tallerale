@@ -13,6 +13,7 @@ import { LandingNav } from "@/components/landing-nav";
 import { MarcaTallerista } from "@/components/marca-tallerista";
 import { WA_SOPORTE } from "@/lib/trial";
 import { SEO, SITE_URL } from "@/lib/seo";
+import { PREGUNTAS } from "@/lib/faq";
 
 // absolute: sin el sufijo "| Tallerista" del layout, que duplicaba la marca.
 // canonical "/": la landing se sirve en la raíz; /landing apunta ahí.
@@ -50,8 +51,23 @@ const JSON_LD = {
         "Portal del vehículo para el cliente",
         "Caja, gastos y planilla para el contador",
         "Usuarios y permisos para el equipo",
+        "Planilla mensual para el contador con la factura sugerida (A, B o C) para ARCA",
+        "Se instala en el celular como una app",
       ],
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "ARS",
+        description: "Prueba gratis de 7 días con todas las funciones, sin tarjeta. Después, el precio se acuerda en pesos.",
+      },
+      availableLanguage: "es-AR",
+      areaServed: { "@type": "Country", name: "Argentina" },
       publisher: { "@id": "https://famdesarrollos.com.ar/#organization" },
+    },
+    {
+      "@type": "FAQPage",
+      "@id": `${SITE_URL}/#preguntas`,
+      mainEntity: PREGUNTAS.map((p) => ({ "@type": "Question", name: p.pregunta, acceptedAnswer: { "@type": "Answer", text: p.respuesta } })),
     },
     { "@type": "Organization", "@id": "https://famdesarrollos.com.ar/#organization", name: "FAM Desarrollos", url: "https://famdesarrollos.com.ar", sameAs: ["https://www.instagram.com/famdesarrollos/"] },
   ],
@@ -85,7 +101,7 @@ export default function LandingPage() {
       {/* ══ Portada: el taller de fondo, el mensaje encima ══ */}
       <section className="relative isolate flex min-h-dvh flex-col justify-center overflow-hidden" style={{ background: OSCURO }}>
         {/* En la compu el video se corre a la derecha: el mecánico queda al costado del texto, no detrás. */}
-        <video className="absolute inset-0 h-full w-full object-cover object-[30%_28%] lg:left-[22%] lg:w-[78%] lg:object-[50%_30%]" poster="/images/taller-hero-poster.jpg" autoPlay muted loop playsInline preload="auto">
+        <video className="absolute inset-0 h-full w-full object-cover object-[30%_28%] lg:left-[22%] lg:w-[78%] lg:object-[50%_30%]" poster="/images/taller-hero-poster.jpg" autoPlay muted loop playsInline preload="metadata">
           <source src="/videos/taller-hero.mp4" type="video/mp4" />
         </video>
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(15,17,19,.97)_0%,rgba(15,17,19,.88)_45%,rgba(15,17,19,.55)_75%,rgba(15,17,19,.35)_100%)] lg:bg-[linear-gradient(90deg,rgba(15,17,19,1)_0%,rgba(15,17,19,1)_22%,rgba(15,17,19,.82)_40%,rgba(15,17,19,.25)_68%,rgba(15,17,19,.1)_100%)]" />
@@ -95,6 +111,8 @@ export default function LandingPage() {
         <div className="relative mx-auto w-full max-w-7xl px-4 pb-24 pt-32 sm:px-8">
           <span className="block h-1.5 w-14 rounded-full bg-brand-500" aria-hidden="true" />
           <h1 className="mt-7 font-display text-[3.4rem] font-extrabold leading-[0.88] tracking-tight text-white sm:text-8xl xl:text-[7.5rem]">
+            {/* Lo que se busca en Google; en pantalla manda la frase. */}
+            <span className="sr-only">Tallerista, el sistema para talleres mecánicos: </span>
             Tu taller,
             <span className="block">ordenado.</span>
             <span className="block text-brand-500">Tus clientes,</span>
@@ -126,6 +144,28 @@ export default function LandingPage() {
 
       {/* ══ Lo que ve tu cliente: capturas que cambian al bajar ══ */}
       <DisenoCapturas />
+
+      {/* ══ Preguntas frecuentes ══ */}
+      <section id="preguntas" className="scroll-mt-16 bg-white px-4 py-24 sm:py-28">
+        <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
+          <div>
+            <h2 className="font-display text-4xl font-extrabold leading-[0.95] tracking-tight text-slate-900 sm:text-6xl">Preguntas frecuentes</h2>
+            <p className="mt-4 max-w-sm text-lg text-slate-600">Lo que más nos preguntan los talleres antes de arrancar. ¿Te queda otra? Escribinos.</p>
+            <a href={waLink("Hola! Tengo una pregunta sobre Tallerista")} className="mt-6 inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700">{WA_ICONO} Preguntar por WhatsApp</a>
+          </div>
+          <div className="divide-y divide-slate-200 border-y border-slate-200">
+            {PREGUNTAS.map((p, i) => (
+              <details key={p.pregunta} className="group py-1" open={i === 0}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-left text-lg font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+                  <h3>{p.pregunta}</h3>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition group-open:rotate-45" aria-hidden="true">+</span>
+                </summary>
+                <p className="pb-5 pr-12 text-base leading-relaxed text-slate-600">{p.respuesta}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ══ 7 días gratis ══ */}
       <section id="contacto" className="relative scroll-mt-16 overflow-hidden px-4 py-24 sm:py-32" style={{ background: OSCURO }}>
@@ -172,7 +212,7 @@ export default function LandingPage() {
             <a href={waLink("Hola! Quiero saber más sobre Tallerista")} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/10 transition hover:bg-white/10">{WA_ICONO} Escribinos</a>
           </div>
           {[
-            { titulo: "Producto", links: [["Cómo funciona", "#como-funciona"], ["Funciones", "#features"], ["Tu cliente", "#cliente"], ["Probar 7 días gratis", "/registro"]] },
+            { titulo: "Producto", links: [["Cómo funciona", "#como-funciona"], ["Funciones", "#features"], ["Tu cliente", "#cliente"], ["Preguntas frecuentes", "#preguntas"], ["Probar 7 días gratis", "/registro"]] },
             { titulo: "Tu cuenta", links: [["Entrar", "/login"], ["Crear cuenta", "/registro"]] },
             { titulo: "FAM Desarrollos", links: [["famdesarrollos.com.ar", "https://famdesarrollos.com.ar"], ["Programa para taller mecánico", "https://famdesarrollos.com.ar/soluciones/programa-para-taller-mecanico"], ["Instagram", "https://www.instagram.com/famdesarrollos/"]] },
           ].map((col) => (

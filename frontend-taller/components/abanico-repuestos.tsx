@@ -102,10 +102,16 @@ export function AbanicoRepuestos() {
           </div>
         </div>
 
+        {/* Las 8 funciones completas, para lectores de pantalla y para que
+            Google y las IAs las lean todas (en pantalla se ve una por vez). */}
+        <ul className="sr-only">
+          {REPUESTOS.map((x) => <li key={x.titulo}><h3>{x.titulo}</h3><p>{x.texto}</p></li>)}
+        </ul>
+
         {/* Lo que hace el elegido */}
-        <div className="mx-auto mt-2 max-w-xl" aria-live="polite">
+        <div className="mx-auto mt-2 max-w-xl" aria-hidden="true">
           <p className="text-sm font-semibold text-brand-400">{r.nombre}</p>
-          <h3 key={r.titulo} className="mt-1 animate-in fade-in slide-in-from-bottom-2 font-display text-3xl font-extrabold text-white duration-500 sm:text-5xl">{r.titulo}</h3>
+          <p key={r.titulo} className="mt-1 animate-in fade-in slide-in-from-bottom-2 font-display text-3xl font-extrabold text-white duration-500 sm:text-5xl">{r.titulo}</p>
           <p key={r.texto} className="mt-3 animate-in fade-in text-base leading-relaxed text-zinc-300 duration-700 sm:text-lg">{r.texto}</p>
           <div className="mt-6 flex items-center justify-center gap-3">
             <button type="button" onClick={() => elegir(elegido - 1)} aria-label="Anterior" className="flex h-11 w-11 items-center justify-center rounded-full text-white ring-1 ring-white/20 transition hover:bg-white/10">‹</button>
